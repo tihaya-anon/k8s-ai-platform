@@ -1,0 +1,17 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-platform
+nodes:
+  - role: control-plane
+    # Pinned so the lab boots from an image that is already on the machine.
+    image: kindest/node:v1.34.8
+    # The shared artifact volume is a host directory, so datasets, checkpoints, model artifacts,
+    # evaluation reports, and the control-plane state file are all inspectable from the laptop.
+    extraMounts:
+      - hostPath: ./.local/artifacts
+        containerPath: /artifacts
+    extraPortMappings:
+      - containerPort: 30080 # control plane API
+        hostPort: 8080
+      - containerPort: 30081 # inference gateway
+        hostPort: 8081
