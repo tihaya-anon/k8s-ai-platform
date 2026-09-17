@@ -1,0 +1,59 @@
+# Development sandbox for AI coding agents.
+#
+# This is intentionally separate from the product Dockerfile. The product image stays scratch and
+# offline; this image is only for editing, building, and testing this repository in a bounded
+# workspace.
+FROM node:24-bookworm AS node
+
+FROM golang:1.25-bookworm
+
+ARG USERNAME=agent
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG PI_VERSION=0.85.1
+ARG CODEX_VERSION=0.154.0
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    GOPATH=/home/agent/go \
+    GOCACHE=/home/agent/.cache/go-build \
+    GOMODCACHE=/home/agent/go/pkg/mod
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        jq \
+        less \
+        make \
+        procps \
+        ripgrep \
+        tree \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=node /usr/local/ /usr/local/
+
+RUN npm install -g \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}" \
+        "@openai/codex@${CODEX_VERSION}" \
+    && npm cache clean --force
+
+RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
+    && useradd \
+        --uid "${USER_UID}" \
+        --gid "${USER_GID}" \
+        --create-home \
+        --shell /bin/bash \
+        "${USERNAME}" \
+    && mkdir -p \
+        /workspace/k8s-ai-platform \
+        "${GOPATH}/pkg/mod" \
+        "${GOCACHE}" \
+        /home/agent/.pi/agent \
+        /home/agent/.codex \
+    && chown -R "${USERNAME}:${USERNAME}" /workspace /home/agent
+
+USER ${USERNAME}
+WORKDIR /workspace/k8s-ai-platform
+
+CMD ["/bin/bash"]

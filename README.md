@@ -80,6 +80,8 @@ Run `make test` for the unit tests and `make help` for every target.
   the platform owes each of them. This is the source of truth.
 - [docs/mvp.md](docs/mvp.md) — what is built, how it works, and what is intentionally missing.
 - [docs/runbook.md](docs/runbook.md) — operating the platform: deploy, inspect, break, recover.
+- [docs/agent-container.md](docs/agent-container.md) — a bounded Docker workspace for AI coding
+  agents.
 - [docs/training-tasks.md](docs/training-tasks.md) — your exercises, in order, with acceptance
   criteria.
 - [docs/progress.md](docs/progress.md) — your own log of what you finished and what you learned.
