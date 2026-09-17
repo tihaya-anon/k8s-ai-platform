@@ -24,13 +24,14 @@ incidents, and run deployments against a real cluster.
 | Evaluation worker | `platform eval`          | Scores a model version against a golden dataset and writes the report the gates read                                        |
 | CLI               | `platform ctl ...`       | Thin client over the control-plane API                                                                                      |
 
-Everything is one static Go binary with **no third-party dependencies**, and the image has no base
-layer, so the whole lab builds and runs offline. See [docs/mvp.md](docs/mvp.md) for the design and
-its deliberate limits.
+Everything is one static Go binary and the image has no base layer, so the whole lab builds and runs
+offline. The only third-party dependency is Gin, which serves the control-plane API; the rest of the
+platform — including the Kubernetes client — is standard library. See [docs/mvp.md](docs/mvp.md) for
+the design and its deliberate limits.
 
 ## Quickstart
 
-Requirements: Go 1.22+, Docker, kind, kubectl.
+Requirements: Go 1.25+, Docker, kind, kubectl.
 
 ```bash
 make up      # create the kind cluster, build and load the image, deploy the platform
@@ -39,8 +40,14 @@ make status  # the one page an operator opens first
 ```
 
 The control-plane API is on `localhost:8080` and the inference gateway on `localhost:8081`.
-Datasets, checkpoints, model artifacts, evaluation reports, and the control-plane state file are all
-under `.local/artifacts/`, so you can read exactly what the platform read.
+
+**Try the API from a browser: <http://localhost:8080/docs>.** It is a self-hosted Swagger UI served
+by the control plane itself, with the OpenAPI spec at `/openapi.yaml`. Every endpoint has "Try it
+out", so the whole release path — register a dataset, submit a job, evaluate, canary, promote, roll
+back — can be driven without the CLI. The assets are vendored into the binary, so the page works
+with no internet connection. Datasets, checkpoints, model artifacts, evaluation reports, and the
+control-plane state file are all under `.local/artifacts/`, so you can read exactly what the
+platform read.
 
 Call the platform like an application developer would:
 

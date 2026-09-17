@@ -28,9 +28,16 @@ produce code.
 
 ## Conventions
 
-- **Go standard library only.** No third-party modules, including for Kubernetes access
-  (`internal/k8s` is a small REST client) and metrics. This keeps the lab buildable offline and the
-  mechanics visible. Ask before adding a dependency.
+- **Standard library everywhere except the control-plane API surface.** Kubernetes access
+  (`internal/k8s`), the gateway, the workers, and metrics stay dependency-free so the mechanics
+  remain visible and the lab builds offline. The exception is `internal/api`, which uses Gin for
+  routing and request binding, and a vendored Swagger UI for the docs page. Ask before adding any
+  further dependency.
+- **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro's Go on PATH.
+  `go.mod` declares `go 1.25.0`; keep the tree buildable with the toolchain that is actually
+  installed rather than relying on `GOTOOLCHAIN` to fetch another one mid-build.
+- **`internal/api/openapi.yaml` is hand written and part of the change.** A new or changed endpoint
+  is not done until the spec matches; `TestEveryRouteIsDocumented` fails otherwise.
 - One binary, `cmd/platform`, with a role as the first argument: `control-plane`, `gateway`,
   `serve`, `train`, `eval`, `ctl`.
 - Every platform object has an owner, a status, timestamps, and a failure reason. Anything new must

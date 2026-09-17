@@ -1,0 +1,750 @@
+openapi: 3.0.3
+info:
+  title: AI Platform control plane
+  version: "1.0.0"
+  description: |
+    The control plane for an internal AI model operations platform. Every platform object is
+    created, inspected, and released through this API; nothing in the product loop requires
+    kubectl.
+
+    The loop is: register a dataset version, submit a training job, let it produce a model
+    artifact, evaluate that artifact against a golden dataset, and only then route traffic to it.
+
+    **The release path is gated.** A model version moves
+    `Registered -> Evaluating -> PromotionReady -> Canary -> Stable`, and `POST /v1/routes/{model}/canary`
+    refuses any version that is not `PromotionReady`. That refusal is the difference between a
+    platform and a deployment script, so it is worth trying on purpose.
+servers:
+  - url: http://localhost:8080
+    description: kind cluster, via the NodePort mapped by deploy/kind-cluster.yaml
+tags:
+  - name: datasets
+    description: Versioned, immutable inputs to training, evaluation, and batch work.
+  - name: training
+    description: Jobs that produce model artifacts.
+  - name: models
+    description: Registered model versions and their gate results.
+  - name: evaluation
+    description: Scoring a model version against a golden dataset.
+  - name: release
+    description: Routes, canaries, promotion, rollback, and replica counts.
+  - name: observability
+    description: Status, events, deployments, and metrics.
+
+paths:
+  /healthz:
+    get:
+      tags: [observability]
+      summary: Liveness probe
+      responses:
+        "200":
+          description: The control plane is serving.
+          content:
+            text/plain:
+              schema: { type: string, example: "ok" }
+
+  /metrics:
+    get:
+      tags: [observability]
+      summary: Prometheus metrics
+      description: API counters plus gauges for training job phases and model version statuses.
+      responses:
+        "200":
+          description: Metrics in the Prometheus text exposition format.
+          content:
+            text/plain:
+              schema: { type: string }
+
+  /v1/datasets:
+    get:
+      tags: [datasets]
+      summary: List dataset versions
+      responses:
+        "200":
+          description: Every registered dataset version.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Dataset" }
+    post:
+      tags: [datasets]
+      summary: Register a dataset version
+      description: |
+        Datasets are immutable and addressed as `name:version`. With `generate: true` the platform
+        materialises synthetic rows on the shared artifact volume, so the loop runs on real bytes
+        with real lineage without shipping a corpus in the repository.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DatasetRequest" }
+            examples:
+              training:
+                summary: A training dataset
+                value:
+                  { name: docs, version: v12, owner: ml-team, rows: 400, generate: true }
+              golden:
+                summary: A golden evaluation dataset
+                value:
+                  {
+                    name: golden-support,
+                    version: v12,
+                    owner: eval-team,
+                    rows: 200,
+                    golden: true,
+                    generate: true,
+                  }
+      responses:
+        "201":
+          description: Registered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dataset" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/training-jobs:
+    get:
+      tags: [training]
+      summary: List training jobs
+      responses:
+        "200":
+          description: Jobs in submission order, with phase and failure reason.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrainingJob" }
+    post:
+      tags: [training]
+      summary: Submit a training job
+      description: |
+        The job is accepted as `Pending`; the controller allocates the next model version, creates
+        a Kubernetes Job, and reports back through phases. A killed or preempted attempt resumes
+        from its latest checkpoint rather than restarting from step zero.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrainingJobRequest" }
+            examples:
+              finetune:
+                value:
+                  {
+                    name: ft-support-v7,
+                    owner: ml-team,
+                    modelName: support-assistant,
+                    datasetRef: "docs:v12",
+                    baseModel: base-small,
+                    steps: 12,
+                    checkpointEvery: 4,
+                    gpus: 1,
+                  }
+      responses:
+        "201":
+          description: Accepted and queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingJob" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/training-jobs/{name}:
+    get:
+      tags: [training]
+      summary: Get one training job
+      parameters:
+        - $ref: "#/components/parameters/JobName"
+      responses:
+        "200":
+          description: The job, including the model version it produces.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingJob" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/models:
+    get:
+      tags: [models]
+      summary: List model versions
+      responses:
+        "200":
+          description: Versions with their status, metrics, and gate reasons.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ModelVersion" }
+
+  /v1/models/{ref}:
+    get:
+      tags: [models]
+      summary: Get one model version
+      parameters:
+        - name: ref
+          in: path
+          required: true
+          description: Model reference in `name:version` form.
+          schema: { type: string }
+          example: "support-assistant:v1"
+      responses:
+        "200":
+          description: The model version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelVersion" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/evaluations:
+    get:
+      tags: [evaluation]
+      summary: List evaluations
+      responses:
+        "200":
+          description: Evaluations with metrics and whether the gates passed.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EvaluationJob" }
+    post:
+      tags: [evaluation]
+      summary: Run an evaluation
+      description: |
+        Scores a model version against a **golden** dataset and applies the gates. Passing moves
+        the version to `PromotionReady`; failing moves it to `PromotionBlocked` with the reason.
+        A non-golden dataset is rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EvaluationRequest" }
+            examples:
+              standard:
+                value:
+                  {
+                    name: eval-support-v7,
+                    owner: eval-team,
+                    modelRef: "support-assistant:v1",
+                    datasetRef: "golden-support:v12",
+                    gates: { minAccuracy: 0.8, maxP95LatencyMs: 250, maxCostPerKReq: 5 },
+                  }
+              strict:
+                summary: Gates that will fail, to see promotion blocked
+                value:
+                  {
+                    name: eval-strict,
+                    owner: eval-team,
+                    modelRef: "support-assistant:v1",
+                    datasetRef: "golden-support:v12",
+                    gates: { minAccuracy: 0.99 },
+                  }
+      responses:
+        "201":
+          description: Accepted and queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationJob" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /v1/evaluations/{name}:
+    get:
+      tags: [evaluation]
+      summary: Get one evaluation
+      parameters:
+        - $ref: "#/components/parameters/JobName"
+      responses:
+        "200":
+          description: The evaluation, with its report once it finishes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EvaluationJob" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/routes:
+    get:
+      tags: [release]
+      summary: List routes
+      description: |
+        This is what the gateway polls. Each route carries the weights **and** how many replicas
+        each lane has ready: a canary has a Service before it has endpoints, and the gateway holds
+        traffic on stable until the canary can actually answer.
+      responses:
+        "200":
+          description: Routes with per-lane readiness.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RouteView" }
+
+  /v1/routes/{model}:
+    get:
+      tags: [release]
+      summary: Get one route
+      parameters:
+        - $ref: "#/components/parameters/ModelName"
+      responses:
+        "200":
+          description: The route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Route" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/routes/{model}/canary:
+    post:
+      tags: [release]
+      summary: Start or adjust a canary
+      description: |
+        The gate lives here. A version that has not passed evaluation is refused with `409`, and no
+        sequence of calls can work around it. Creating a canary also creates the route if the model
+        has never served traffic.
+      parameters:
+        - $ref: "#/components/parameters/ModelName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CanaryRequest" }
+            examples:
+              tenPercent:
+                value: { version: v2, percent: 10 }
+      responses:
+        "200":
+          description: The updated route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Route" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The version has not passed its evaluation gates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: "model support-assistant:v2 is PromotionBlocked: promotion requires passing evaluation gates" }
+
+  /v1/routes/{model}/promote:
+    post:
+      tags: [release]
+      summary: Promote the canary to stable
+      description: The canary becomes stable and the version it replaced is retired.
+      parameters:
+        - $ref: "#/components/parameters/ModelName"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { type: object }
+            example: {}
+      responses:
+        "200":
+          description: The updated route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Route" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: There is no canary to promote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/routes/{model}/rollback:
+    post:
+      tags: [release]
+      summary: Roll back the canary
+      description: |
+        Drops the canary lane immediately and blocks that version with the reason. Application code
+        never changes; only the route does.
+      parameters:
+        - $ref: "#/components/parameters/ModelName"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RollbackRequest" }
+            example: { reason: "error rate above budget" }
+      responses:
+        "200":
+          description: The updated route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Route" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: There is no canary to roll back.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /v1/routes/{model}/scale:
+    post:
+      tags: [release]
+      summary: Set replicas per served version
+      parameters:
+        - $ref: "#/components/parameters/ModelName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScaleRequest" }
+            example: { replicas: 3 }
+      responses:
+        "200":
+          description: The updated route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Route" }
+        "400":
+          description: Replicas below the floor of 1; online inference keeps a floor.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/deployments:
+    get:
+      tags: [observability]
+      summary: List model servers
+      responses:
+        "200":
+          description: One entry per served model version, with ready and desired replicas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deployment" }
+
+  /v1/events:
+    get:
+      tags: [observability]
+      summary: Read the event log
+      description: The audit trail, oldest first. This is the incident timeline.
+      parameters:
+        - name: name
+          in: query
+          description: Filter to one object's history.
+          schema: { type: string }
+          example: ft-support-v7
+        - name: limit
+          in: query
+          description: How many events to return, newest kept.
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Event" }
+
+  /v1/status:
+    get:
+      tags: [observability]
+      summary: The whole platform on one page
+      description: What the `platform ctl status` command renders.
+      responses:
+        "200":
+          description: Every object plus the most recent events.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+
+components:
+  parameters:
+    JobName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      example: ft-support-v7
+    ModelName:
+      name: model
+      in: path
+      required: true
+      description: The logical model name applications call, without a version.
+      schema: { type: string }
+      example: support-assistant
+
+  responses:
+    BadRequest:
+      description: The request is invalid or references something that is not registered.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such object.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: An object with that identity already exists.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Phase:
+      type: string
+      enum: [Pending, Queued, Running, Succeeded, Failed]
+
+    ModelStatus:
+      type: string
+      enum:
+        [Registered, Evaluating, PromotionBlocked, PromotionReady, Canary, Stable, Retired]
+
+    DatasetRequest:
+      type: object
+      required: [name, version, owner]
+      properties:
+        name: { type: string, example: docs }
+        version: { type: string, example: v12 }
+        owner:
+          type: string
+          description: Every platform object has an owner; requests without one are rejected.
+          example: ml-team
+        rows: { type: integer, default: 200 }
+        golden:
+          type: boolean
+          default: false
+          description: Only a golden dataset may be used for evaluation.
+        uri:
+          type: string
+          description: Where the rows live. Defaults to a path on the shared artifact volume.
+        generate:
+          type: boolean
+          default: false
+          description: Materialise synthetic rows at `uri`.
+
+    Dataset:
+      type: object
+      properties:
+        name: { type: string }
+        version: { type: string }
+        owner: { type: string }
+        uri: { type: string }
+        rows: { type: integer }
+        golden: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    TrainingJobRequest:
+      type: object
+      required: [name, owner, modelName, datasetRef]
+      properties:
+        name: { type: string, example: ft-support-v7 }
+        owner: { type: string, example: ml-team }
+        baseModel: { type: string, example: base-small }
+        datasetRef:
+          type: string
+          description: Training dataset, `name:version`. Must already be registered.
+          example: "docs:v12"
+        modelName:
+          type: string
+          description: The logical model this job produces a version of.
+          example: support-assistant
+        steps: { type: integer, default: 20 }
+        gpus: { type: integer, default: 1 }
+        priority: { type: integer, default: 0 }
+        checkpointEvery:
+          type: integer
+          default: 5
+          description: Checkpoint interval in steps; this is what a resumed attempt starts from.
+
+    TrainingJob:
+      type: object
+      properties:
+        name: { type: string }
+        owner: { type: string }
+        baseModel: { type: string }
+        datasetRef: { type: string }
+        modelName: { type: string }
+        steps: { type: integer }
+        gpus: { type: integer }
+        priority: { type: integer }
+        checkpointEvery: { type: integer }
+        phase: { $ref: "#/components/schemas/Phase" }
+        reason:
+          type: string
+          description: Why the job failed, in terms an on-call engineer can act on.
+        k8sJob: { type: string }
+        artifactUri: { type: string }
+        modelRef: { type: string }
+        attempt: { type: integer }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+
+    Metrics:
+      type: object
+      properties:
+        accuracy: { type: number, format: double }
+        p95LatencyMs: { type: number, format: double }
+        costPerKReq: { type: number, format: double }
+        samples: { type: integer }
+
+    Gates:
+      type: object
+      description: Thresholds a model version must clear before it can take traffic.
+      properties:
+        minAccuracy: { type: number, format: double, default: 0.8 }
+        maxP95LatencyMs: { type: number, format: double, default: 250 }
+        maxCostPerKReq: { type: number, format: double, default: 5 }
+
+    ModelVersion:
+      type: object
+      properties:
+        name: { type: string }
+        version: { type: string }
+        owner: { type: string }
+        artifactUri: { type: string }
+        sourceJob: { type: string }
+        datasetRef: { type: string }
+        status: { $ref: "#/components/schemas/ModelStatus" }
+        reason: { type: string }
+        metrics: { $ref: "#/components/schemas/Metrics" }
+        createdAt: { type: string, format: date-time }
+
+    EvaluationRequest:
+      type: object
+      required: [name, modelRef, datasetRef]
+      properties:
+        name: { type: string, example: eval-support-v7 }
+        owner: { type: string, example: eval-team }
+        modelRef: { type: string, example: "support-assistant:v1" }
+        datasetRef:
+          type: string
+          description: "Must be a dataset registered with `golden: true`."
+          example: "golden-support:v12"
+        gates: { $ref: "#/components/schemas/Gates" }
+
+    EvaluationJob:
+      type: object
+      properties:
+        name: { type: string }
+        owner: { type: string }
+        modelRef: { type: string }
+        datasetRef: { type: string }
+        gates: { $ref: "#/components/schemas/Gates" }
+        phase: { $ref: "#/components/schemas/Phase" }
+        reason: { type: string }
+        k8sJob: { type: string }
+        metrics: { $ref: "#/components/schemas/Metrics" }
+        passed: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+
+    Route:
+      type: object
+      properties:
+        model: { type: string }
+        stableVersion: { type: string }
+        canaryVersion: { type: string }
+        canaryPercent: { type: integer }
+        replicas: { type: integer }
+        updatedAt: { type: string, format: date-time }
+
+    RouteView:
+      allOf:
+        - $ref: "#/components/schemas/Route"
+        - type: object
+          properties:
+            stableReady:
+              type: integer
+              description: Ready replicas behind the stable lane.
+            canaryReady:
+              type: integer
+              description: Ready replicas behind the canary lane.
+
+    CanaryRequest:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: string
+          description: The version to canary. Must be `PromotionReady`.
+          example: v2
+        percent: { type: integer, default: 10, minimum: 1, maximum: 100 }
+        replicas:
+          type: integer
+          description: Replicas per served version; 0 keeps the current value.
+          default: 0
+
+    RollbackRequest:
+      type: object
+      properties:
+        reason: { type: string, example: "error rate above budget" }
+
+    ScaleRequest:
+      type: object
+      required: [replicas]
+      properties:
+        replicas: { type: integer, minimum: 1, example: 3 }
+
+    Deployment:
+      type: object
+      properties:
+        modelRef: { type: string }
+        name: { type: string }
+        replicas: { type: integer }
+        ready: { type: integer }
+        service: { type: string }
+        updatedAt: { type: string, format: date-time }
+
+    Event:
+      type: object
+      properties:
+        time: { type: string, format: date-time }
+        kind: { type: string, example: ModelVersion }
+        name: { type: string, example: "support-assistant:v1" }
+        type: { type: string, example: PromotionReady }
+        message: { type: string }
+
+    Status:
+      type: object
+      properties:
+        datasets:
+          type: array
+          items: { $ref: "#/components/schemas/Dataset" }
+        trainingJobs:
+          type: array
+          items: { $ref: "#/components/schemas/TrainingJob" }
+        models:
+          type: array
+          items: { $ref: "#/components/schemas/ModelVersion" }
+        evaluations:
+          type: array
+          items: { $ref: "#/components/schemas/EvaluationJob" }
+        routes:
+          type: array
+          items: { $ref: "#/components/schemas/Route" }
+        deployments:
+          type: array
+          items: { $ref: "#/components/schemas/Deployment" }
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }

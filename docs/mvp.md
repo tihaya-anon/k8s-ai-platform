@@ -47,6 +47,22 @@ flowchart LR
 One binary runs every role, selected by the first argument. The image is `FROM scratch` over a
 statically linked binary, so there is nothing to pull and nothing to patch.
 
+### Why Gin only on the control plane
+
+The control-plane API uses Gin; everything else — the Kubernetes client, the gateway, the workers,
+the metrics endpoints — is standard library. The split is deliberate:
+
+- The **control plane** is the surface people drive by hand. Route groups, request binding, and a
+  browsable OpenAPI page are worth a dependency there.
+- The **gateway** is the data path. Every request an application makes passes through it, so it
+  stays dependency-free and small. Moving it to Gin would buy ergonomics on a surface with three
+  routes and cost a dependency on the hot path.
+
+`internal/api/openapi.yaml` is hand written rather than generated from annotations, and served from
+the binary at `/openapi.yaml` with a vendored Swagger UI at `/docs`. Hand writing it keeps the
+document reviewable in a pull request; `TestEveryRouteIsDocumented` fails the build if a route is
+added without documenting it. Vendoring the UI keeps the page working on a disconnected machine.
+
 ### Control plane
 
 `internal/api` is the REST surface, `internal/store` is the metadata database, and
@@ -118,5 +134,7 @@ These are not oversights. Each one is an exercise in [training-tasks.md](trainin
 - **No batch inference plane**, no lineage records for derived datasets.
 - **Polling, not watches.** The controller polls the API server instead of using informers.
 - **Metrics are exposed but not collected.** There is no Prometheus and no dashboard.
+- **The API is unauthenticated and the docs page can drive all of it.** Anyone who can reach `/docs`
+  can promote a model; adding auth middleware is exercise 1.3.
 - **Artifacts belong to root.** Containers write the shared volume as root, so the host user cannot
   delete them directly; `make reset` cleans them from inside the node.

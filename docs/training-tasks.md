@@ -64,7 +64,19 @@ own canary instead of waiting for a human.
   page says so.
 - Tests cover the decision logic without needing a live cluster.
 
-### 1.3 Model version comparison
+### 1.3 Authentication middleware
+
+The API is Gin, so identity belongs in middleware rather than in each handler. Add one.
+
+**Acceptance criteria**
+
+- Requests carry a token; the middleware rejects unauthenticated writes with 401 and leaves reads
+  configurable.
+- The owner recorded on an object comes from the identity, not from the request body.
+- `/docs` can still drive the API: the spec declares the scheme and Swagger UI can authorise.
+- Tests cover an authenticated write, an unauthenticated write, and an owner that cannot be spoofed.
+
+### 1.4 Model version comparison
 
 Add `GET /v1/models/{name}/compare?a=v1&b=v2` returning quality, latency, and cost side by side,
 plus which gates each version passed.
@@ -74,7 +86,7 @@ plus which gates each version passed.
 - `platform ctl model compare -model support-assistant -a v1 -b v2` prints a readable table.
 - Missing or unevaluated versions produce a clear 4xx, not an empty table.
 
-### 1.4 Batch inference plane
+### 1.5 Batch inference plane
 
 The largest gap against `draft.md`. Add a batch job that runs a model over a versioned input dataset
 and registers a versioned output dataset.
@@ -89,7 +101,7 @@ and registers a versioned output dataset.
   version, and job configuration.
 - Throughput and estimated cost appear in the job report.
 
-### 1.5 Quota and priority
+### 1.6 Quota and priority
 
 Online inference must not lose GPUs to experiments.
 
@@ -238,3 +250,5 @@ Before you call a task done, check it the way a platform reviewer would:
 - Is the operation idempotent? What happens if the controller crashes halfway through it?
 - Is there a recovery action, and is it one command?
 - Did you add the metric or event you would want during the incident this feature will cause?
+- Is the endpoint in `internal/api/openapi.yaml`, with an example a stranger could fire from `/docs`
+  and learn something from?

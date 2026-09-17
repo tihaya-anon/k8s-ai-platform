@@ -14,6 +14,10 @@ make down      # delete the cluster
 Ports: control-plane API on `localhost:8080`, inference gateway on `localhost:8081`, both via
 NodePorts mapped by the kind config.
 
+The API documents itself at <http://localhost:8080/docs> (spec at `/openapi.yaml`). Use it to fire
+requests by hand during a drill — including the ones that are supposed to fail, such as canarying a
+version that has not passed its gates.
+
 ### Host prerequisite: inotify limits
 
 kind nodes run systemd, which needs inotify instances. If node creation fails with
