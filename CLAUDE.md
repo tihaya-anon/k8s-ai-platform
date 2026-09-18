@@ -11,8 +11,8 @@ client, its own queue, its own traffic split, no CRDs. That version is archived 
 `3cb8302` and is worth reading as a reference; it is not the direction.
 
 The direction is **compose the ecosystem, own the policy**. Kueue does queueing and quota, KServe
-does serving and traffic, and this repository contributes the custom resources, the controllers,
-the lineage, and the promotion gate. See [docs/architecture.md](docs/architecture.md) for where that
+does serving and traffic, and this repository contributes the custom resources, the controllers, the
+lineage, and the promotion gate. See [docs/architecture.md](docs/architecture.md) for where that
 line falls and why.
 
 - `docs/draft.md` is the product source of truth (user stories and required behaviour). Treat it as
@@ -61,11 +61,37 @@ the annotations, reconcilers are the service layer.
   Keep the tree buildable with the toolchain that is actually installed rather than relying on
   `GOTOOLCHAIN` to fetch another one mid-build.
 - Comments explain _why_ a constraint exists, not what the line does.
-- Run `make fmt vet test` before saying a change is done.
+- **Formatting is automatic, linting is a gate.** `hack/format.sh` is the only entry point; it
+  formats Markdown, JSON, YAML and Go in place. A Claude Code `PostToolUse` hook runs it per edit,
+  and `hack/git-hooks/pre-commit` runs it on the staged set and then blocks the commit on
+  `markdownlint-cli2` and `gofmt -l`. A formatter can fix whitespace but cannot decide whether a
+  heading skips a level, so structure blocks and whitespace does not.
+- **One owner per formatting concern.** Prettier owns line length and wrapping (`MD013` is therefore
+  off), markdownlint owns structure, and the rules they both have an opinion on — list markers,
+  emphasis, fence style — are pinned in `.markdownlint.json` to what Prettier emits. Change one side
+  without the other and the two tools undo each other on every save.
+- Run `make fmt vet test` before saying a change is done — once a `Makefile` exists. Task 0.2 is
+  what scaffolds it; until then there is no Go to build and `hack/format.sh` plus the pre-commit
+  gate is the whole check.
 
 ## Layout
 
-The tree is empty by design; `docs/training-tasks.md` task 0.2 scaffolds it. The target shape:
+Most of the tree is still empty by design; `docs/training-tasks.md` task 0.2 scaffolds it. What
+exists today is the docs, the agent container, and the formatting toolchain:
+
+```text
+docs/                 draft, architecture, training-tasks, progress, agent-container
+hack/format.sh        the one formatter entry point, shared by both hooks
+hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
+.claude/settings.json the format-on-edit hooks
+.markdownlint.json    markdown rules, relaxed where they fought Prettier or the docs
+.prettierrc           width 100, prose wrapped, code inside fences left alone
+.prettierignore       generated manifests are owned by controller-gen, not by Prettier
+Dockerfile.agent      development container image
+Makefile.agent        development container; kept out of Makefile so kubebuilder can own that
+```
+
+The target shape after scaffolding:
 
 ```text
 api/v1alpha1          CRD types and kubebuilder markers
@@ -74,7 +100,6 @@ internal/webhook      the promotion gate and the immutability checks
 internal/artifact     artifact store interface: PVC now, object store later
 config/               kustomize: crd, rbac, manager, samples
 config/overlays/      kind and cloud
-hack/                 kind cluster, Kueue and KServe install
+hack/                 joined by the kind cluster, Kueue and KServe install scripts
 test/e2e/             the loop, against a live cluster
-Makefile.agent        development container; kept out of Makefile so kubebuilder can own that
 ```

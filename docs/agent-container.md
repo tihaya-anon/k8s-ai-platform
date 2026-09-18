@@ -5,8 +5,8 @@ normal commands scoped to the repository checkout.
 
 This is different from the product image in the root `Dockerfile`. The product image is `scratch`
 and runs the platform. `Dockerfile.agent` is a developer sandbox with Go, Make, Git, and small CLI
-tools for editing and testing. It also installs the `pi` and `codex` CLIs, but it does not bake
-any model-provider credentials into the image.
+tools for editing and testing. It also installs the `pi` and `codex` CLIs, but it does not bake any
+model-provider credentials into the image.
 
 ## Boundary
 
@@ -47,9 +47,9 @@ make -f Makefile.agent agent-image
 
 This downloads Go modules, builds the agent container image, fixes ownership on the named Go cache
 volumes, fills the container Go cache, verifies that the source builds and tests inside the agent
-container, and builds the product Docker image.
-Container Go commands inherit the host `go env GOPROXY` value by default; override it with
-`GO_PROXY=...` if your network needs a different module proxy.
+container, and builds the product Docker image. Container Go commands inherit the host
+`go env GOPROXY` value by default; override it with `GO_PROXY=...` if your network needs a different
+module proxy.
 
 To build only the agent image:
 
@@ -90,8 +90,8 @@ make test
 ```
 
 If the Go module cache is empty, `make vet` or `make test` may need dependencies that are not yet in
-the cache. Fill the cache once with `make -f Makefile.agent agent-deps`, then return to `make -f Makefile.agent agent-shell` for normal
-work.
+the cache. Fill the cache once with `make -f Makefile.agent agent-deps`, then return to
+`make -f Makefile.agent agent-shell` for normal work.
 
 Do not mount kubeconfigs, SSH keys, cloud credentials, or broad host directories into the cache-fill
 container.
@@ -117,8 +117,8 @@ Mount credential files read-only and keep the rest of the boundary unchanged:
 - do not mount `~/.kube`, cloud config directories, SSH keys, or `/var/run/docker.sock`;
 - prefer a read-only repo mount for review-only sessions.
 
-Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files under `~/.codex/`.
-Start a writable coding shell by passing only the credential files you want the container to see:
+Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files under `~/.codex/`. Start
+a writable coding shell by passing only the credential files you want the container to see:
 
 ```bash
 make -f Makefile.agent agent-shell-ai AGENT_AI_MOUNTS='\

@@ -14,13 +14,13 @@ the gate that refuses to serve an unevaluated model.
 
 ## Read in this order
 
-| Document | What it is |
-| --- | --- |
-| [docs/draft.md](docs/draft.md) | The requirements. User stories and required behaviour. Source of truth. |
-| [docs/architecture.md](docs/architecture.md) | The design: what is built here, what is adopted, and where the line falls. |
-| [docs/training-tasks.md](docs/training-tasks.md) | The build plan, as levelled exercises with acceptance criteria. |
-| [docs/progress.md](docs/progress.md) | The maintainer log. |
-| [docs/agent-container.md](docs/agent-container.md) | The sandboxed development container. |
+| Document                                           | What it is                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| [docs/draft.md](docs/draft.md)                     | The requirements. User stories and required behaviour. Source of truth.    |
+| [docs/architecture.md](docs/architecture.md)       | The design: what is built here, what is adopted, and where the line falls. |
+| [docs/training-tasks.md](docs/training-tasks.md)   | The build plan, as levelled exercises with acceptance criteria.            |
+| [docs/progress.md](docs/progress.md)               | The maintainer log.                                                        |
+| [docs/agent-container.md](docs/agent-container.md) | The sandboxed development container.                                       |
 
 ## The shape of it
 

@@ -29,15 +29,15 @@ container, `kubebuilder` markers are the annotations, and the domain is model re
 
 ## Build / adopt
 
-| Concern | Owner | What you learn by adopting it |
-| --- | --- | --- |
-| Queue, quota, preemption, borrowing | **Kueue** | `ResourceFlavor` / `ClusterQueue` / `LocalQueue` topology, cohorts, `Workload` conditions |
-| Serving, scaling, traffic split | **KServe** | `InferenceService`, `ServingRuntime`, rollout mechanics |
-| Distributed training runtime | deferred (JobSet / Kubeflow Trainer) | why the user-facing CRD must not name the runtime |
-| GPU discovery and health | deferred (GPU Operator, DRA, DCGM) | device advertisement, extended resources |
-| **Domain objects and their lifecycle** | **this repo** | CRD design, reconcile contracts, conditions |
-| **The promotion gate** | **this repo** | admission control |
-| **Lineage and ownership** | **this repo** | what makes an artifact auditable |
+| Concern                                | Owner                                | What you learn by adopting it                                                             |
+| -------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Queue, quota, preemption, borrowing    | **Kueue**                            | `ResourceFlavor` / `ClusterQueue` / `LocalQueue` topology, cohorts, `Workload` conditions |
+| Serving, scaling, traffic split        | **KServe**                           | `InferenceService`, `ServingRuntime`, rollout mechanics                                   |
+| Distributed training runtime           | deferred (JobSet / Kubeflow Trainer) | why the user-facing CRD must not name the runtime                                         |
+| GPU discovery and health               | deferred (GPU Operator, DRA, DCGM)   | device advertisement, extended resources                                                  |
+| **Domain objects and their lifecycle** | **this repo**                        | CRD design, reconcile contracts, conditions                                               |
+| **The promotion gate**                 | **this repo**                        | admission control                                                                         |
+| **Lineage and ownership**              | **this repo**                        | what makes an artifact auditable                                                          |
 
 The failure mode of adopting a lot is writing a **YAML translator**: a controller whose entire job
 is copying fields from your CRD into somebody else's CRD. If that is all a reconciler does, delete
@@ -70,7 +70,7 @@ A user's training request. The controller renders it into a `batch/v1` Job carry
 `kueue.x-k8s.io/queue-name`, creates it **suspended**, and lets Kueue admit it.
 
 You do not implement queueing. You label into it, then read Kueue's `Workload` conditions
-(`QuotaReserved`, `Admitted`, `Preempted`) back into your own status, so a user learns *why* their
+(`QuotaReserved`, `Admitted`, `Preempted`) back into your own status, so a user learns _why_ their
 job is waiting without having to learn what Kueue is.
 
 The spec must not name the runtime. Today the child is a Job; later it is a `JobSet` or a Kubeflow
@@ -98,8 +98,8 @@ On completion it writes metrics into the `ModelVersion` status and moves it to `
 
 ### `Release`
 
-The serving intent for a logical model: which version is stable, which is canary, at what split.
-The controller renders it into a KServe `InferenceService`.
+The serving intent for a logical model: which version is stable, which is canary, at what split. The
+controller renders it into a KServe `InferenceService`.
 
 Application code addresses the `Release`, never a version. A rollback changes this object and
 nothing else — no application deploy, no image rebuild.
@@ -120,7 +120,7 @@ That is the difference between a platform and a deployment script, expressed in 
 it cannot be routed around.
 
 > **Why not `ValidatingAdmissionPolicy`?** CEL policies are the right tool when the rule concerns
-> the incoming object, and they need no webhook server to run. They cannot reach into a *different*
+> the incoming object, and they need no webhook server to run. They cannot reach into a _different_
 > object's status, which is exactly what this rule does. Knowing where CEL stops is the lesson: use
 > a policy for the rules that fit it, and a webhook for this one.
 
@@ -165,8 +165,8 @@ docs/
 
 ## Conventions
 
-- **Level-triggered, not edge-triggered.** A reconciler reads the world and makes it match the
-  spec. It never assumes it saw the previous event. Reconciling twice equals reconciling once.
+- **Level-triggered, not edge-triggered.** A reconciler reads the world and makes it match the spec.
+  It never assumes it saw the previous event. Reconciling twice equals reconciling once.
 - **Status is conditions.** `type`, `status`, `reason`, `message`, `observedGeneration`,
   `lastTransitionTime`. A user diagnoses from `kubectl describe` without reading controller logs.
 - **Every child object carries an `ownerReference`.** Garbage collection is Kubernetes' job. A

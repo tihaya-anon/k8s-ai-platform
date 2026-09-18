@@ -31,10 +31,10 @@ Specifically, settle these before designing anything:
 
 - Which KServe deployment mode works on kind without Knative and Istio, and **how traffic splitting
   works in that mode** — native `canaryTrafficPercent`, or a Gateway API `HTTPRoute` with weighted
-  backends. This decides the shape of the `Release` controller. Do not take this document's word
-  for it; versions move.
-- What Kueue creates when you submit a suspended Job with a queue label, and which conditions
-  appear on the `Workload` in which order.
+  backends. This decides the shape of the `Release` controller. Do not take this document's word for
+  it; versions move.
+- What Kueue creates when you submit a suspended Job with a queue label, and which conditions appear
+  on the `Workload` in which order.
 - What each project's webhooks intercept, because yours will sit next to them.
 
 **Acceptance criteria**
@@ -128,7 +128,7 @@ Specifically, settle these before designing anything:
 
 ### 2.2 What CEL can do instead
 
-Re-express the rules that *are* about the incoming object — percent bounds, replica floors, required
+Re-express the rules that _are_ about the incoming object — percent bounds, replica floors, required
 owner — as a `ValidatingAdmissionPolicy`.
 
 **Acceptance criteria**
@@ -143,7 +143,8 @@ The previous platform had a hand-written queue. This one has Kueue.
 **Acceptance criteria**
 
 - Two teams, two namespaces, two `LocalQueue`s, one `ClusterQueue` cohort with borrowing.
-- A high-priority job preempts a low-priority one; both outcomes are visible in `TrainingJob` status.
+- A high-priority job preempts a low-priority one; both outcomes are visible in `TrainingJob`
+  status.
 - Online inference is protected from training: show an experiment being refused GPUs that serving
   needs, and explain the mechanism that did it.
 
@@ -228,9 +229,8 @@ The previous platform accepted a `gpus` field and silently ignored it. Do better
 
 **Acceptance criteria**
 
-- GPUs are an extended resource advertised by a fake device plugin, or a dedicated
-  `ResourceFlavor`; either way the request is accounted for by Kueue and a job is refused when the
-  quota is gone.
+- GPUs are an extended resource advertised by a fake device plugin, or a dedicated `ResourceFlavor`;
+  either way the request is accounted for by Kueue and a job is refused when the quota is gone.
 - The refusal reason names the resource and the quota.
 
 ### 5.2 Swap the training runtime
