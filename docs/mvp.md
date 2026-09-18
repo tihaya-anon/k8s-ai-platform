@@ -47,21 +47,32 @@ flowchart LR
 One binary runs every role, selected by the first argument. The image is `FROM scratch` over a
 statically linked binary, so there is nothing to pull and nothing to patch.
 
-### Why Gin only on the control plane
+### Why Huma only on the control plane
 
-The control-plane API uses Gin; everything else — the Kubernetes client, the gateway, the workers,
-the metrics endpoints — is standard library. The split is deliberate:
+The control-plane API uses Huma over `net/http`; everything else — the Kubernetes client, the
+gateway, the workers, the metrics endpoints — is standard library. The split is deliberate:
 
-- The **control plane** is the surface people drive by hand. Route groups, request binding, and a
+- The **control plane** is the surface people drive by hand. Declarative request validation and a
   browsable OpenAPI page are worth a dependency there.
 - The **gateway** is the data path. Every request an application makes passes through it, so it
-  stays dependency-free and small. Moving it to Gin would buy ergonomics on a surface with three
-  routes and cost a dependency on the hot path.
+  stays dependency-free and small. A framework would buy ergonomics on a surface with three routes
+  and cost a dependency on the hot path.
 
-`internal/api/openapi.yaml` is hand written rather than generated from annotations, and served from
-the binary at `/openapi.yaml` with a vendored Swagger UI at `/docs`. Hand writing it keeps the
-document reviewable in a pull request; `TestEveryRouteIsDocumented` fails the build if a route is
-added without documenting it. Vendoring the UI keeps the page working on a disconnected machine.
+Huma is a layer over a router rather than a router itself, so the routing is still
+`http.ServeMux`. It reads the input and output structs each handler is declared with and produces
+three things from them: the request binding and validation, the response encoding, and the OpenAPI
+document. An endpoint therefore cannot be documented wrongly — the document is the types.
+
+`internal/api/openapi.yaml` is a committed snapshot of that generated document, refreshed with
+`make openapi` and checked by `TestSpecSnapshotIsCurrent`. Generating it removes the drift a hand
+written spec invites; committing it keeps a contract change visible as a diff in review instead of
+appearing silently at runtime. The spec is served from the binary at `/openapi.yaml`, and Huma
+renders it as a Swagger UI page at `/docs`. That page pulls Swagger UI from a CDN, which is the one
+thing in the lab that wants an internet connection; the API, the CLI, and the cluster do not.
+
+Errors are RFC 7807 problem documents (`title`, `status`, `detail`, and a per-field `errors` list).
+A rejected request names the field that failed and the value that was sent, so a caller does not
+have to guess which of eight properties the server disliked.
 
 ### Control plane
 

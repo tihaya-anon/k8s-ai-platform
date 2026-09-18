@@ -1,19 +1,29 @@
 package api
 
 import (
+	"flag"
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/tihaya-anon/k8s-ai-platform/internal/store"
 )
 
-func TestDocsPageIsSelfContained(t *testing.T) {
+var updateSpec = flag.Bool("update", false, "rewrite openapi.yaml from the registered operations")
+
+const specFile = "openapi.yaml"
+
+// The documentation page is Huma's, rendered from the generated spec. The check is that it is
+// wired to this API's document rather than to a default, since a docs page pointed at the wrong
+// URL still renders and still looks fine.
+func TestDocsPageIsServed(t *testing.T) {
 	srv, _ := newServer(t)
 
 	resp, err := http.Get(srv.URL + "/docs")
@@ -26,48 +36,28 @@ func TestDocsPageIsSelfContained(t *testing.T) {
 	}
 	body, _ := io.ReadAll(resp.Body)
 	page := string(body)
-	// The lab has to work offline, so the page must reference vendored assets, never a CDN.
-	if strings.Contains(page, "//cdn.") || strings.Contains(page, "unpkg.com") {
-		t.Fatal("the docs page loads an asset from a CDN; it must serve vendored files")
+	if !strings.Contains(page, "/openapi.json") {
+		t.Fatalf("docs page does not load this API's spec:\n%.400s", page)
 	}
-	for _, want := range []string{"/docs/swagger-ui-bundle.js", "/docs/swagger-ui.css", "/openapi.yaml"} {
-		if !strings.Contains(page, want) {
-			t.Fatalf("docs page does not reference %s", want)
-		}
+	// The page is only useful in this lab if a reader can fire the calls they are reading about.
+	if !strings.Contains(page, "tryItOutEnabled") {
+		t.Fatal("docs page does not enable Try it out")
 	}
 }
 
-func TestDocsAssetsAreServed(t *testing.T) {
+// The root is the address people type; it has to land somewhere useful.
+func TestRootRedirectsToDocs(t *testing.T) {
 	srv, _ := newServer(t)
-	for _, tc := range []struct{ path, contentType string }{
-		{"/docs/swagger-ui-bundle.js", "application/javascript"},
-		{"/docs/swagger-ui.css", "text/css"},
-	} {
-		resp, err := http.Get(srv.URL + tc.path)
-		if err != nil {
-			t.Fatalf("GET %s: %v", tc.path, err)
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK || len(body) == 0 {
-			t.Fatalf("GET %s = %d with %d bytes", tc.path, resp.StatusCode, len(body))
-		}
-		if !strings.Contains(resp.Header.Get("Content-Type"), tc.contentType) {
-			t.Fatalf("%s content type = %q, want %s", tc.path, resp.Header.Get("Content-Type"), tc.contentType)
-		}
-	}
-}
-
-// A traversal out of the embedded docs directory must not reach anything else.
-func TestDocsAssetsRejectTraversal(t *testing.T) {
-	srv, _ := newServer(t)
-	resp, err := http.Get(srv.URL + "/docs/..%2fopenapi.yaml")
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(srv.URL + "/")
 	if err != nil {
-		t.Fatalf("GET: %v", err)
+		t.Fatalf("GET /: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		t.Fatal("a traversal path was served; docs assets must stay inside the embedded directory")
+	if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != "/docs" {
+		t.Fatalf("GET / = %d to %q, want 302 to /docs", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
 
@@ -79,52 +69,90 @@ func TestSpecIsServed(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if !strings.HasPrefix(string(body), "openapi: 3") {
-		t.Fatalf("spec does not start with an OpenAPI version: %.40q", body)
+	// Key order comes from the generator, so the version is looked for rather than assumed first.
+	if !strings.Contains(string(body), "openapi: 3.1.0") {
+		t.Fatalf("served document declares no OpenAPI version:\n%.200s", body)
 	}
 }
 
-// The spec is hand written, so it can drift from the router. This is the check that stops it:
-// every route the server actually serves has to appear in the document people read.
-func TestEveryRouteIsDocumented(t *testing.T) {
+// The spec is generated from the handler types, so it cannot describe an endpoint the server does
+// not serve. What it can do is change without anyone noticing, because nobody reads a document
+// that regenerates itself. The snapshot in openapi.yaml exists so a contract change arrives as a
+// reviewable diff; this test is what keeps the snapshot honest.
+//
+// Run `make openapi` (or `go test ./internal/api -update`) after changing an endpoint.
+func TestSpecSnapshotIsCurrent(t *testing.T) {
+	generated, err := newTestServer(t).Spec()
+	if err != nil {
+		t.Fatalf("generate spec: %v", err)
+	}
+	if *updateSpec {
+		if err := os.WriteFile(specFile, generated, 0o644); err != nil {
+			t.Fatalf("write %s: %v", specFile, err)
+		}
+		t.Logf("wrote %s (%d bytes)", specFile, len(generated))
+		return
+	}
+	committed, err := os.ReadFile(specFile)
+	if err != nil {
+		t.Fatalf("read %s: %v", specFile, err)
+	}
+	if string(committed) != string(generated) {
+		t.Fatalf("%s is stale: it no longer matches the registered operations.\n"+
+			"Run `make openapi` to refresh it, then review the diff.\n%s",
+			specFile, firstDifference(string(committed), string(generated)))
+	}
+}
+
+// Every operation carries prose a stranger can act on. Huma guarantees the document describes
+// exactly what is served; nothing guarantees it says anything useful, so that part is checked here.
+func TestEveryOperationIsDescribed(t *testing.T) {
+	_, api := newTestServer(t).build()
+	for path, item := range api.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Patch, item.Delete} {
+			if op == nil {
+				continue
+			}
+			where := op.Method + " " + path
+			if op.OperationID == "" {
+				t.Errorf("%s has no operationId; clients generate method names from it", where)
+			}
+			if op.Summary == "" {
+				t.Errorf("%s has no summary; it renders as a bare path on the docs page", where)
+			}
+			if len(op.Tags) == 0 {
+				t.Errorf("%s has no tag, so the docs page files it under no heading", where)
+			}
+		}
+	}
+}
+
+// newTestServer builds a Server over a throwaway store, for tests that only need the shape of the
+// API rather than its data.
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "state.json"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
-	handler := New(st, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))).Handler()
-	engine, ok := handler.(*gin.Engine)
-	if !ok {
-		t.Fatalf("handler is %T, want *gin.Engine", handler)
-	}
-
-	spec := string(openapiSpec)
-	undocumented := []string{}
-	for _, r := range engine.Routes() {
-		if isDocsRoute(r.Path) {
-			continue
-		}
-		// Gin writes parameters as ":name"; OpenAPI writes them as "{name}".
-		path := specPath(r.Path)
-		if !strings.Contains(spec, "\n  "+path+":\n") {
-			undocumented = append(undocumented, r.Method+" "+r.Path)
-		}
-	}
-	if len(undocumented) > 0 {
-		t.Fatalf("routes missing from openapi.yaml: %s", strings.Join(undocumented, ", "))
-	}
+	return New(st, t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-// isDocsRoute reports paths that serve the documentation itself, which the spec does not describe.
-func isDocsRoute(path string) bool {
-	return path == "/" || path == "/docs" || strings.HasPrefix(path, "/docs/") || path == "/openapi.yaml"
-}
-
-func specPath(ginPath string) string {
-	parts := strings.Split(ginPath, "/")
-	for i, p := range parts {
-		if strings.HasPrefix(p, ":") {
-			parts[i] = "{" + strings.TrimPrefix(p, ":") + "}"
+// firstDifference reports the first differing line, so a stale snapshot points at what changed
+// instead of dumping the whole document.
+func firstDifference(a, b string) string {
+	al, bl := strings.Split(a, "\n"), strings.Split(b, "\n")
+	for i := 0; i < len(al) || i < len(bl); i++ {
+		x, y := "", ""
+		if i < len(al) {
+			x = al[i]
+		}
+		if i < len(bl) {
+			y = bl[i]
+		}
+		if x != y {
+			return "first difference at line " + strconv.Itoa(i+1) + ":\n  committed: " + x + "\n  generated: " + y
 		}
 	}
-	return strings.Join(parts, "/")
+	return ""
 }

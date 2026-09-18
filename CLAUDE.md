@@ -30,14 +30,17 @@ produce code.
 
 - **Standard library everywhere except the control-plane API surface.** Kubernetes access
   (`internal/k8s`), the gateway, the workers, and metrics stay dependency-free so the mechanics
-  remain visible and the lab builds offline. The exception is `internal/api`, which uses Gin for
-  routing and request binding, and a vendored Swagger UI for the docs page. Ask before adding any
-  further dependency.
+  remain visible. The exception is `internal/api`, which uses Huma over `net/http` for declarative
+  validation, spec generation, and the Swagger UI docs page it serves at `/docs`. Huma is the
+  module's only requirement and pulls in nothing else. Ask before adding any further dependency.
 - **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro's Go on PATH.
   `go.mod` declares `go 1.25.0`; keep the tree buildable with the toolchain that is actually
   installed rather than relying on `GOTOOLCHAIN` to fetch another one mid-build.
-- **`internal/api/openapi.yaml` is hand written and part of the change.** A new or changed endpoint
-  is not done until the spec matches; `TestEveryRouteIsDocumented` fails otherwise.
+- **The OpenAPI document is generated from the handler types, and the snapshot is part of the
+  change.** An endpoint's shape, validation, and documentation all come from the input and output
+  structs passed to `huma.Register`, so there is no second place to edit. `internal/api/openapi.yaml`
+  is a committed snapshot of that document: run `make openapi` after changing an endpoint and review
+  the diff. `TestSpecSnapshotIsCurrent` fails otherwise.
 - One binary, `cmd/platform`, with a role as the first argument: `control-plane`, `gateway`,
   `serve`, `train`, `eval`, `ctl`.
 - Every platform object has an owner, a status, timestamps, and a failure reason. Anything new must

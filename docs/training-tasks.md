@@ -66,7 +66,8 @@ own canary instead of waiting for a human.
 
 ### 1.3 Authentication middleware
 
-The API is Gin, so identity belongs in middleware rather than in each handler. Add one.
+The API is Huma over `net/http`, so identity belongs in middleware rather than in each handler.
+Add one, either as a plain `http.Handler` wrapper or through `huma.Middlewares`.
 
 **Acceptance criteria**
 
@@ -250,5 +251,6 @@ Before you call a task done, check it the way a platform reviewer would:
 - Is the operation idempotent? What happens if the controller crashes halfway through it?
 - Is there a recovery action, and is it one command?
 - Did you add the metric or event you would want during the incident this feature will cause?
-- Is the endpoint in `internal/api/openapi.yaml`, with an example a stranger could fire from `/docs`
-  and learn something from?
+- Do the request and response types carry `doc:` tags and validation constraints, so the generated
+  spec gives a stranger something they could fire from `/docs` and learn from? Is the snapshot in
+  `internal/api/openapi.yaml` refreshed (`make openapi`) and reviewed?

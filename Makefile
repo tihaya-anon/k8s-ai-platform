@@ -1,5 +1,5 @@
-# Everything in this Makefile runs offline: the Go build uses only the standard library and the
-# container image has no base layer to pull.
+# The Go build has a single dependency (Huma, which pulls in nothing else) and the container image
+# has no base layer, so once the module cache is warm there is nothing left to pull.
 CLUSTER   ?= ai-platform
 NAMESPACE ?= ai-platform
 IMAGE     ?= ai-platform:dev
@@ -32,6 +32,12 @@ vet: ## run go vet
 .PHONY: test
 test: ## run unit tests
 	go test ./...
+
+.PHONY: openapi
+openapi: ## regenerate internal/api/openapi.yaml from the handler types
+	# The document is derived from the structs the handlers are declared with. This only rewrites
+	# the committed snapshot so a contract change shows up as a reviewable diff.
+	go test ./internal/api -run TestSpecSnapshotIsCurrent -update
 
 .PHONY: dev-deps
 dev-deps: ## download development dependencies into the Go module cache

@@ -122,18 +122,37 @@ func (c *client) do(method, url string, body any, out any) error {
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		var e struct {
-			Error string `json:"error"`
-		}
-		if json.Unmarshal(raw, &e) == nil && e.Error != "" {
-			return fmt.Errorf("%s: %s", resp.Status, e.Error)
-		}
-		return fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(raw)))
+		return fmt.Errorf("%s: %s", resp.Status, problemDetail(raw))
 	}
 	if out == nil {
 		return nil
 	}
 	return json.Unmarshal(raw, out)
+}
+
+// problemDetail renders the control plane's RFC 7807 error body as one line. Field errors are
+// included because a rejected request is usually rejected over one field, and naming it saves a
+// round trip through the docs page.
+func problemDetail(raw []byte) string {
+	var p struct {
+		Title  string `json:"title"`
+		Detail string `json:"detail"`
+		Errors []struct {
+			Message  string `json:"message"`
+			Location string `json:"location"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &p); err != nil || (p.Detail == "" && p.Title == "") {
+		return strings.TrimSpace(string(raw))
+	}
+	msg := p.Detail
+	if msg == "" {
+		msg = p.Title
+	}
+	for _, e := range p.Errors {
+		msg += "\n  " + e.Location + ": " + e.Message
+	}
+	return msg
 }
 
 func tw() *tabwriter.Writer { return tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0) }

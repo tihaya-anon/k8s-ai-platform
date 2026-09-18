@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tihaya-anon/k8s-ai-platform/internal/model"
@@ -40,11 +41,16 @@ func post(t *testing.T, srv *httptest.Server, path string, body any) (int, []byt
 	return resp.StatusCode, raw
 }
 
+// Owner is declared on the request type, so the refusal comes from the schema rather than from a
+// hand-written check, and it arrives as 422 with the offending field named.
 func TestCreateDatasetRequiresOwner(t *testing.T) {
 	srv, _ := newServer(t)
 	code, body := post(t, srv, "/v1/datasets", map[string]any{"name": "docs", "version": "v1"})
-	if code != http.StatusBadRequest {
-		t.Fatalf("status = %d (%s), want 400: every object needs an owner", code, body)
+	if code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d (%s), want 422: every object needs an owner", code, body)
+	}
+	if msg := firstErrorMessage(t, body); !strings.Contains(msg, "owner") {
+		t.Fatalf("error message = %q; the caller has to be told which field failed", msg)
 	}
 }
 
@@ -153,8 +159,8 @@ func TestScaleRefusesZeroReplicas(t *testing.T) {
 	if _, err := st.PutRoute(model.Route{Model: "support", StableVersion: "v1"}, "seed"); err != nil {
 		t.Fatalf("PutRoute: %v", err)
 	}
-	if code, body := post(t, srv, "/v1/routes/support/scale", map[string]any{"replicas": 0}); code != http.StatusBadRequest {
-		t.Fatalf("status = %d (%s), want 400: online inference keeps a replica floor", code, body)
+	if code, body := post(t, srv, "/v1/routes/support/scale", map[string]any{"replicas": 0}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d (%s), want 422: online inference keeps a replica floor", code, body)
 	}
 }
 
@@ -172,6 +178,23 @@ func TestMetricsExposeJobPhases(t *testing.T) {
 	if !bytes.Contains(body, []byte(`aiplatform_training_jobs{phase="Pending"} 1`)) {
 		t.Fatalf("metrics missing pending job gauge:\n%s", body)
 	}
+}
+
+// firstErrorMessage reads the first field error out of an RFC 7807 problem document.
+func firstErrorMessage(t *testing.T, body []byte) string {
+	t.Helper()
+	var problem struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &problem); err != nil {
+		t.Fatalf("decode problem document: %v (%s)", err, body)
+	}
+	if len(problem.Errors) == 0 {
+		t.Fatalf("problem document carries no field errors: %s", body)
+	}
+	return problem.Errors[0].Message
 }
 
 func mustCreateModel(t *testing.T, st *store.Store, status model.ModelStatus) {

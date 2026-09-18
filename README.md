@@ -24,10 +24,11 @@ incidents, and run deployments against a real cluster.
 | Evaluation worker | `platform eval`          | Scores a model version against a golden dataset and writes the report the gates read                                        |
 | CLI               | `platform ctl ...`       | Thin client over the control-plane API                                                                                      |
 
-Everything is one static Go binary and the image has no base layer, so the whole lab builds and runs
-offline. The only third-party dependency is Gin, which serves the control-plane API; the rest of the
-platform — including the Kubernetes client — is standard library. See [docs/mvp.md](docs/mvp.md) for
-the design and its deliberate limits.
+Everything is one static Go binary and the image has no base layer, so there is nothing to pull at
+runtime and nothing to patch. The only third-party dependency is Huma, which derives the
+control-plane API's validation and its OpenAPI document from the handler types; the rest of the
+platform — including the Kubernetes client — is standard library. See [docs/mvp.md](docs/mvp.md)
+for the design and its deliberate limits.
 
 ## Quickstart
 
@@ -41,11 +42,11 @@ make status  # the one page an operator opens first
 
 The control-plane API is on `localhost:8080` and the inference gateway on `localhost:8081`.
 
-**Try the API from a browser: <http://localhost:8080/docs>.** It is a self-hosted Swagger UI served
-by the control plane itself, with the OpenAPI spec at `/openapi.yaml`. Every endpoint has "Try it
-out", so the whole release path — register a dataset, submit a job, evaluate, canary, promote, roll
-back — can be driven without the CLI. The assets are vendored into the binary, so the page works
-with no internet connection. Datasets, checkpoints, model artifacts, evaluation reports, and the
+**Try the API from a browser: <http://localhost:8080/docs>.** It is a Swagger UI page served by the
+control plane, rendering the spec at `/openapi.yaml` that Huma generates from the handler types.
+Every endpoint has "Try it out", so the whole release path — register a dataset, submit a job,
+evaluate, canary, promote, roll back — can be driven without the CLI. The page loads Swagger UI from
+a CDN, so it needs an internet connection; the API itself does not. Datasets, checkpoints, model artifacts, evaluation reports, and the
 control-plane state file are all under `.local/artifacts/`, so you can read exactly what the
 platform read.
 
