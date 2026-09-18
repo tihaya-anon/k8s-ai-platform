@@ -3,23 +3,33 @@
 ## What this repository is
 
 An internal AI model operations platform on Kubernetes — and a training environment. The owner of
-this repository is learning to **maintain** a platform like this, so the code exists to be extended,
-broken, and operated, not just to run.
+this repository is learning to **build and maintain** a platform like this, so the code exists to be
+extended, broken, and operated, not just to run.
+
+It is being rebuilt. The first version implemented everything by hand: its own Kubernetes REST
+client, its own queue, its own traffic split, no CRDs. That version is archived in git history at
+`3cb8302` and is worth reading as a reference; it is not the direction.
+
+The direction is **compose the ecosystem, own the policy**. Kueue does queueing and quota, KServe
+does serving and traffic, and this repository contributes the custom resources, the controllers,
+the lineage, and the promotion gate. See [docs/architecture.md](docs/architecture.md) for where that
+line falls and why.
 
 - `docs/draft.md` is the product source of truth (user stories and required behaviour). Treat it as
   the requirements document; implementation follows it, not the other way around.
-- `docs/mvp.md` states what is built and what is deliberately missing.
+- `docs/architecture.md` is the design: what is built here, what is adopted, and the reasoning.
 - `docs/training-tasks.md` holds the owner's exercises. **The gaps listed there are intentional.**
   Do not implement a task from that list unless explicitly asked — doing so removes the exercise.
 - `docs/progress.md` is the owner's maintainer log.
-- `docs/runbook.md` is how the platform is operated.
 
 ## How to help here
 
-The owner is the maintainer; prefer answers that build their understanding over answers that just
-produce code.
+The owner is an experienced backend engineer (Java, Spring Boot) learning the Kubernetes platform
+side. Prefer answers that build their understanding over answers that just produce code, and lean on
+the analogy where it is honest: `controller-runtime` is the IoC container, kubebuilder markers are
+the annotations, reconcilers are the service layer.
 
-- When asked to explain something, explain the mechanism and where to see it in the running system,
+- When asked to explain something, explain the mechanism and where to see it in the running cluster,
   not only the code path.
 - When asked to implement something, follow the conventions below and add tests in the same change.
 - When reviewing their work, use the checklist at the end of `docs/training-tasks.md`.
@@ -28,41 +38,43 @@ produce code.
 
 ## Conventions
 
-- **Standard library everywhere except the control-plane API surface.** Kubernetes access
-  (`internal/k8s`), the gateway, the workers, and metrics stay dependency-free so the mechanics
-  remain visible. The exception is `internal/api`, which uses Huma over `net/http` for declarative
-  validation, spec generation, and the Swagger UI docs page it serves at `/docs`. Huma is the
-  module's only requirement and pulls in nothing else. Ask before adding any further dependency.
+- **Adopt before you build.** Before writing a controller, establish that no CNCF project already
+  does it. If a reconciler only copies fields from one CRD into another, it is a YAML translator —
+  delete it and let users write the other resource directly. A platform object earns its existence
+  by carrying policy, lineage, or a stable interface across a runtime swap.
+- **Kubebuilder conventions, unaltered.** Standard layout, standard `make` targets, markers for
+  validation and RBAC rather than code. Deviating costs every tool that assumes the standard.
+- **Level-triggered reconcilers.** Read the world, make it match the spec, never assume you saw the
+  previous event. Reconciling twice equals reconciling once.
+- **Status is conditions** — `type`, `status`, `reason`, `message`, `observedGeneration`,
+  `lastTransitionTime` — and a user diagnoses from `kubectl describe` without reading logs.
+- **Every child object carries an `ownerReference`.** Finalizers only for cleanup Kubernetes cannot
+  do, and each one needs a documented removal path for when its controller is down.
+- **Every state transition emits an Event.** The event log is the incident timeline.
+- **Never mutate another operator's resources beyond the fields you own.** Set yours, read their
+  conditions, do not fight their controller.
+- **Errors name the layer at fault.** "Your quota is exhausted" must be distinguishable from "KServe
+  could not pull the image" and from "your model failed its gates".
+- **No `if kind` in Go.** Cluster differences live in kustomize overlays under
+  `config/overlays/{kind,cloud}`. Ask before adding a dependency, a CRD, or a webhook.
 - **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro's Go on PATH.
-  `go.mod` declares `go 1.25.0`; keep the tree buildable with the toolchain that is actually
-  installed rather than relying on `GOTOOLCHAIN` to fetch another one mid-build.
-- **The OpenAPI document is generated from the handler types, and the snapshot is part of the
-  change.** An endpoint's shape, validation, and documentation all come from the input and output
-  structs passed to `huma.Register`, so there is no second place to edit. `internal/api/openapi.yaml`
-  is a committed snapshot of that document: run `make openapi` after changing an endpoint and review
-  the diff. `TestSpecSnapshotIsCurrent` fails otherwise.
-- One binary, `cmd/platform`, with a role as the first argument: `control-plane`, `gateway`,
-  `serve`, `train`, `eval`, `ctl`.
-- Every platform object has an owner, a status, timestamps, and a failure reason. Anything new must
-  too.
-- Every state transition emits an event. The event log is the incident timeline.
-- Kubernetes writes are server-side applies; reconciling twice must equal reconciling once.
-- Errors returned to callers name the layer at fault (`client`, `gateway`, `model-server`).
+  Keep the tree buildable with the toolchain that is actually installed rather than relying on
+  `GOTOOLCHAIN` to fetch another one mid-build.
 - Comments explain _why_ a constraint exists, not what the line does.
 - Run `make fmt vet test` before saying a change is done.
 
 ## Layout
 
+The tree is empty by design; `docs/training-tasks.md` task 0.2 scaffolds it. The target shape:
+
 ```text
-cmd/platform          every process, selected by the first argument
-internal/model        platform objects and the promotion gates
-internal/store        JSON-file metadata database
-internal/api          control-plane REST API
-internal/controller   reconcile loop and the Kubernetes manifest builders
-internal/gateway      online inference routing, canary split, per-version metrics
-internal/serve        model server
-internal/worker       training and evaluation job entrypoints
-internal/ctl          CLI over the API
-deploy/               kind cluster config and manifests
-scripts/demo.sh       the full product loop
+api/v1alpha1          CRD types and kubebuilder markers
+internal/controller   one reconciler per kind
+internal/webhook      the promotion gate and the immutability checks
+internal/artifact     artifact store interface: PVC now, object store later
+config/               kustomize: crd, rbac, manager, samples
+config/overlays/      kind and cloud
+hack/                 kind cluster, Kueue and KServe install
+test/e2e/             the loop, against a live cluster
+Makefile.agent        development container; kept out of Makefile so kubebuilder can own that
 ```

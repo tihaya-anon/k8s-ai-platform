@@ -1,88 +1,60 @@
 # k8s-ai-platform
 
-A small but complete AI model operations platform on Kubernetes, built as a training environment.
-The product requirements live in [docs/draft.md](docs/draft.md); this repository implements the
-first complete product loop from that document:
+An internal AI model operations platform on Kubernetes: register a dataset version, train a model,
+evaluate it against a golden set, and only then let it take production traffic.
+
+It is also a training environment. The point is not the code that exists but the code that does not:
+the platform composes **Kueue** for queueing and quota and **KServe** for serving and traffic
+splitting, and contributes the part nobody ships for you — the domain objects, their lineage, and
+the gate that refuses to serve an unevaluated model.
+
+> **Status: rebuilding.** The tree is intentionally empty. The first version implemented everything
+> by hand — its own Kubernetes client, its own queue, its own traffic split, no CRDs — and is
+> archived at `3cb8302`. Read it as a reference for what the frameworks are doing on your behalf.
+
+## Read in this order
+
+| Document | What it is |
+| --- | --- |
+| [docs/draft.md](docs/draft.md) | The requirements. User stories and required behaviour. Source of truth. |
+| [docs/architecture.md](docs/architecture.md) | The design: what is built here, what is adopted, and where the line falls. |
+| [docs/training-tasks.md](docs/training-tasks.md) | The build plan, as levelled exercises with acceptance criteria. |
+| [docs/progress.md](docs/progress.md) | The maintainer log. |
+| [docs/agent-container.md](docs/agent-container.md) | The sandboxed development container. |
+
+## The shape of it
 
 ```text
-dataset version -> training job -> model artifact -> evaluation -> promotion gates
-                -> canary route -> stable traffic (or rollback)
+  Dataset ──▶ TrainingJob ──▶ ModelVersion ──▶ Evaluation ──▶ Release
+                   │                │                            │
+              Kueue admits     lineage +                   KServe serves
+              (quota, queue,   gate status                 (stable / canary)
+               preemption)          │                            ▲
+                                    └──── admission webhook ─────┘
+                                          refuses an ungated version
 ```
 
-You are the maintainer of this platform. The exercises in
-[docs/training-tasks.md](docs/training-tasks.md) are the job: add features, add tests, handle
-incidents, and run deployments against a real cluster.
+Five custom resources, five controllers, one webhook. Everything else is somebody else's operator,
+configured well.
 
-## What is running
+## Getting started
 
-| Component         | Command                  | What it does                                                                                                                |
-| ----------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Control plane     | `platform control-plane` | REST API for every platform object, plus the reconcile loop that turns them into Kubernetes Jobs, Deployments, and Services |
-| Gateway           | `platform gateway`       | Online inference front door: one logical model name, stable/canary traffic split, per-version metrics                       |
-| Model server      | `platform serve`         | Serves one model version, created by the controller, never by hand                                                          |
-| Training worker   | `platform train`         | Runs a training attempt, writes checkpoints, resumes after failure                                                          |
-| Evaluation worker | `platform eval`          | Scores a model version against a golden dataset and writes the report the gates read                                        |
-| CLI               | `platform ctl ...`       | Thin client over the control-plane API                                                                                      |
+Requirements: Go 1.25+, Docker, kind, kubectl, kubebuilder.
 
-Everything is one static Go binary and the image has no base layer, so there is nothing to pull at
-runtime and nothing to patch. The only third-party dependency is Huma, which derives the
-control-plane API's validation and its OpenAPI document from the handler types; the rest of the
-platform — including the Kubernetes client — is standard library. See [docs/mvp.md](docs/mvp.md)
-for the design and its deliberate limits.
+Start at [task 0.1](docs/training-tasks.md#01-spike-the-stack-and-write-down-what-is-actually-true):
+stand up kind with Kueue and KServe, run their own samples, and write down what is actually true
+before designing against it. Versions move; the spike is not optional.
 
-## Quickstart
-
-Requirements: Go 1.25+, Docker, kind, kubectl.
+Development container:
 
 ```bash
-make up      # create the kind cluster, build and load the image, deploy the platform
-make demo    # run the full product loop: dataset -> train -> eval -> canary -> promote
-make status  # the one page an operator opens first
+make -f Makefile.agent agent-shell
 ```
 
-The control-plane API is on `localhost:8080` and the inference gateway on `localhost:8081`.
+## Why this way
 
-**Try the API from a browser: <http://localhost:8080/docs>.** It is a Swagger UI page served by the
-control plane, rendering the spec at `/openapi.yaml` that Huma generates from the handler types.
-Every endpoint has "Try it out", so the whole release path — register a dataset, submit a job,
-evaluate, canary, promote, roll back — can be driven without the CLI. The page loads Swagger UI from
-a CDN, so it needs an internet connection; the API itself does not. Datasets, checkpoints, model artifacts, evaluation reports, and the
-control-plane state file are all under `.local/artifacts/`, so you can read exactly what the
-platform read.
-
-Call the platform like an application developer would:
-
-```bash
-curl -s localhost:8081/v1/infer \
-  -H 'content-type: application/json' \
-  -d '{"model":"support-assistant","input":"how do I reset my device"}' | jq
-```
-
-The response carries the request ID, the model version that answered, and which lane it came from.
-
-## Day-to-day commands
-
-```bash
-./bin/platform ctl status                                   # everything, one page
-./bin/platform ctl train list                               # jobs, phases, failure reasons
-./bin/platform ctl model list                               # versions and their gate results
-./bin/platform ctl canary -model support-assistant -version v2 -percent 20
-./bin/platform ctl infer -model support-assistant -input hi -n 50   # see the traffic split
-./bin/platform ctl promote  -model support-assistant
-./bin/platform ctl rollback -model support-assistant -reason "latency regression"
-./bin/platform ctl events -limit 40                         # the incident timeline
-```
-
-Run `make test` for the unit tests and `make help` for every target.
-
-## Documentation
-
-- [docs/draft.md](docs/draft.md) — the product requirements: user stories, roles, and the behaviour
-  the platform owes each of them. This is the source of truth.
-- [docs/mvp.md](docs/mvp.md) — what is built, how it works, and what is intentionally missing.
-- [docs/runbook.md](docs/runbook.md) — operating the platform: deploy, inspect, break, recover.
-- [docs/agent-container.md](docs/agent-container.md) — a bounded Docker workspace for AI coding
-  agents.
-- [docs/training-tasks.md](docs/training-tasks.md) — your exercises, in order, with acceptance
-  criteria.
-- [docs/progress.md](docs/progress.md) — your own log of what you finished and what you learned.
+An AI platform on Kubernetes is mostly other people's controllers. Writing your own queue teaches
+you what a queue is; running Kueue teaches you what a platform engineer actually does, which is
+decide policy and own the abstractions your users see. This repository does the second, having
+already done the first — and the first is still in the history, one `git show` away, for when you
+want to know what the framework is hiding.

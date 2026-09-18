@@ -42,7 +42,7 @@ Docker daemon, Kubernetes clusters, or cloud accounts.
 From the repository root in WSL, prepare the usual development dependencies and images:
 
 ```bash
-make setup
+make -f Makefile.agent agent-image
 ```
 
 This downloads Go modules, builds the agent container image, fixes ownership on the named Go cache
@@ -54,7 +54,7 @@ Container Go commands inherit the host `go env GOPROXY` value by default; overri
 To build only the agent image:
 
 ```bash
-make agent-image
+make -f Makefile.agent agent-image
 ```
 
 The build passes your UID/GID into the image so files created by the container belong to your WSL
@@ -63,13 +63,13 @@ user.
 To fill only the Go module cache used by the container:
 
 ```bash
-make agent-deps
+make -f Makefile.agent agent-deps
 ```
 
 For host-side development without the container, use:
 
 ```bash
-make dev-deps
+go mod download
 ```
 
 ## Run for development
@@ -78,7 +78,7 @@ This mode gives the agent write access to this repository only. It is the normal
 changes after you decide the repo itself is an acceptable write boundary.
 
 ```bash
-make agent-shell
+make -f Makefile.agent agent-shell
 ```
 
 Inside the container:
@@ -90,7 +90,7 @@ make test
 ```
 
 If the Go module cache is empty, `make vet` or `make test` may need dependencies that are not yet in
-the cache. Fill the cache once with `make agent-deps`, then return to `make agent-shell` for normal
+the cache. Fill the cache once with `make -f Makefile.agent agent-deps`, then return to `make -f Makefile.agent agent-shell` for normal
 work.
 
 Do not mount kubeconfigs, SSH keys, cloud credentials, or broad host directories into the cache-fill
@@ -102,7 +102,7 @@ This mode is best when you want the agent to inspect or explain the project but 
 checkout.
 
 ```bash
-make agent-review
+make -f Makefile.agent agent-review
 ```
 
 ## Running an AI CLI inside the container
@@ -121,7 +121,7 @@ Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files unde
 Start a writable coding shell by passing only the credential files you want the container to see:
 
 ```bash
-make agent-shell-ai AGENT_AI_MOUNTS='\
+make -f Makefile.agent agent-shell-ai AGENT_AI_MOUNTS='\
   --mount type=bind,src=$$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
   --mount type=bind,src=$$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly'
 ```
@@ -129,7 +129,7 @@ make agent-shell-ai AGENT_AI_MOUNTS='\
 For read-only review with model credentials, use the same mount variable with `agent-review`:
 
 ```bash
-make agent-review AGENT_AI_MOUNTS='\
+make -f Makefile.agent agent-review AGENT_AI_MOUNTS='\
   --mount type=bind,src=$$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
   --mount type=bind,src=$$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly'
 ```
