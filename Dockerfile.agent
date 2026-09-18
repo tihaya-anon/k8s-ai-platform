@@ -13,12 +13,22 @@ ARG USER_GID=1000
 ARG PI_VERSION=0.85.1
 ARG CODEX_VERSION=0.154.0
 
+# Configurable package mirror; override for whatever network the image is built on, e.g.
+#   docker build --build-arg APT_MIRROR=deb.debian.org -f Dockerfile.agent .
+ARG APT_MIRROR=mirrors.aliyun.com
+
 ENV DEBIAN_FRONTEND=noninteractive \
     GOPATH=/home/agent/go \
     GOCACHE=/home/agent/.cache/go-build \
     GOMODCACHE=/home/agent/go/pkg/mod
 
-RUN apt-get update \
+# The base has moved between apt source layouts across releases (deb822 debian.sources vs a plain
+# sources.list), so rewrite whichever is present. `if` rather than `[ -f ] && sed` because a
+# trailing failed test would leave the loop exit status non-zero and break the `&&` chain.
+RUN for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+        if [ -f "$f" ]; then sed -i "s|deb.debian.org|${APT_MIRROR}|g" "$f"; fi; \
+    done \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
