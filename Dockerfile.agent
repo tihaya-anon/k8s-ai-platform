@@ -12,6 +12,8 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 ARG PI_VERSION=0.85.1
 ARG CODEX_VERSION=0.154.0
+ARG MARKDOWNLINT_VERSION=0.23.2
+ARG PRETTIER_VERSION=3.9.6
 
 # Configurable package mirror; override for whatever network the image is built on, e.g.
 #   docker build --build-arg APT_MIRROR=deb.debian.org -f Dockerfile.agent .
@@ -46,6 +48,8 @@ COPY --from=node /usr/local/ /usr/local/
 RUN npm install -g \
         "@earendil-works/pi-coding-agent@${PI_VERSION}" \
         "@openai/codex@${CODEX_VERSION}" \
+        "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
+        "prettier@${PRETTIER_VERSION}" \
     && npm cache clean --force
 
 RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
@@ -63,7 +67,15 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         /home/agent/.codex \
     && chown -R "${USERNAME}:${USERNAME}" /workspace /home/agent
 
+# Baked in rather than run from the mount: the read-only targets cannot execute a script they
+# mount :ro without also trusting the mount, and the entrypoint has to work before the
+# workspace is known to be present at all.
+COPY hack/agent-entrypoint.sh /usr/local/bin/agent-entrypoint
+RUN chmod 0755 /usr/local/bin/agent-entrypoint
+
 USER ${USERNAME}
 WORKDIR /workspace/k8s-ai-platform
 
+# Arms core.hooksPath on every entry, then hands over to CMD or to the docker run arguments.
+ENTRYPOINT ["/usr/local/bin/agent-entrypoint"]
 CMD ["/bin/bash"]

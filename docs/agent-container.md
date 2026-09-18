@@ -96,6 +96,29 @@ the cache. Fill the cache once with `make -f Makefile.agent agent-deps`, then re
 Do not mount kubeconfigs, SSH keys, cloud credentials, or broad host directories into the cache-fill
 container.
 
+## Formatting and the git hook
+
+The image pins `markdownlint-cli2` and `prettier` alongside the agent CLIs, so `hack/format.sh`
+behaves identically inside the container and on the host. Both degrade to a warning when a formatter
+is missing, which would otherwise mean the container silently accepted markdown the host rejects.
+
+`core.hooksPath` lives in `.git/config`, which is not tracked, so a fresh clone starts with the
+pre-commit hook disarmed. The image's entrypoint sets it on every entry instead of relying on anyone
+remembering `git config core.hooksPath hack/git-hooks`. It also adds the workspace to
+`safe.directory`, because the mount is owned by the UID that built the image and git refuses a repo
+owned by anyone else.
+
+Arming is best effort. The review and build targets mount the checkout `:ro` and cannot write
+`.git/config`; the entrypoint says so on stderr and carries on, since failing to arm a hook must not
+fail a build.
+
+To format or lint the tree with the container's pinned versions rather than whatever the host has:
+
+```bash
+make -f Makefile.agent agent-fmt
+make -f Makefile.agent agent-lint
+```
+
 ## Run for read-only review
 
 This mode is best when you want the agent to inspect or explain the project but not modify the

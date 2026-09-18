@@ -57,6 +57,24 @@ agent-build: agent-cache ## verify the source builds and tests inside the agent 
 		$(AGENT_IMAGE) \
 		bash -c 'go build ./... && go test ./...'
 
+.PHONY: agent-fmt
+agent-fmt: agent-cache ## format the tree with the container's pinned formatters
+	docker run --rm \
+		--cap-drop ALL \
+		--security-opt no-new-privileges \
+		-v "$(CURDIR):/workspace/k8s-ai-platform" \
+		-w /workspace/k8s-ai-platform \
+		$(AGENT_IMAGE) ./hack/format.sh
+
+.PHONY: agent-lint
+agent-lint: agent-cache ## run the markdown gate with the container's pinned markdownlint
+	docker run --rm \
+		--cap-drop ALL \
+		--security-opt no-new-privileges \
+		-v "$(CURDIR):/workspace/k8s-ai-platform:ro" \
+		-w /workspace/k8s-ai-platform \
+		$(AGENT_IMAGE) markdownlint-cli2 "**/*.md"
+
 .PHONY: agent-shell
 agent-shell: agent-cache ## open a repo-scoped development shell in the agent container
 	docker run --rm -it \

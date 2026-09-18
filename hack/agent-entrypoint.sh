@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Wire the repo-local git config that cannot be baked into an image, then exec the command.
+#
+# `core.hooksPath` lives in .git/config, which is not tracked, so a fresh clone — or a
+# container that mounts one — starts with the pre-commit hook disarmed. Setting it here
+# means the hook is armed by the act of entering the container rather than by remembering
+# a command. Everything is best-effort: the read-only targets (agent-deps, agent-build,
+# agent-review) mount the workspace with :ro and cannot write .git/config, and failing to
+# arm a hook must never stop the build.
+set -uo pipefail
+
+repo=/workspace/k8s-ai-platform
+
+if [[ -d $repo/.git ]]; then
+  # The mount is owned by the host UID. It matches ${USER_UID} for the person who built the
+  # image, but not for anyone else, and git then refuses the repo outright.
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$repo"; then
+    git config --global --add safe.directory "$repo" 2>/dev/null || true
+  fi
+
+  if [[ -d $repo/hack/git-hooks ]]; then
+    if [[ -w $repo/.git/config ]] && git -C "$repo" config core.hooksPath hack/git-hooks 2>/dev/null; then
+      :
+    else
+      printf 'agent-entrypoint: could not set core.hooksPath (read-only mount?); ' >&2
+      printf 'the pre-commit hook is disarmed in this container.\n' >&2
+    fi
+  fi
+fi
+
+exec "$@"
