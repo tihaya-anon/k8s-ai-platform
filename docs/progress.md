@@ -57,3 +57,61 @@ rather than an `if` in an HTTP handler.
 it. No resource request, no node selector, nothing. The API described a cluster that did not exist.
 
 **Left undone:** all of [training-tasks.md](training-tasks.md).
+
+### 0.1 Spike the stack — 2026-09-20
+
+**Goal:** get cert-manager, KServe and Kueue onto a kind cluster from nothing, repeatably, with
+versions pinned.
+
+**What I changed:** `hack/set-up-cluster.sh` — creates the kind cluster, clones the KServe reference
+checkout at a tag, and runs KServe's own Standard-mode installer (which brings cert-manager), then
+applies Kueue. Every step checks for its own result first, so it is safe to re-run.
+
+**Pinned versions:** kind node v1.36.1 · cert-manager v1.17.0 · KServe v0.20.0 · Kueue v0.19.5.
+
+**How I proved it:** `kind delete cluster` then `./hack/set-up-cluster.sh` from nothing; all three
+controllers reach Available.
+
+**What surprised me:**
+
+- Per the
+  [dependency matrix](https://kserve.github.io/website/docs/install/dependencies#dependency-matrix),
+  Standard mode needs only cert-manager — no Knative, no Istio. "Standard" is the rename of the old
+  `RawDeployment`; see `deps/kserve/pkg/constants/constants.go`.
+- KServe's installer on `master` failed with
+  `ghcr.io/kserve/charts/kserve-crd:v0.21.0-rc1: not found`. Master bumps `KSERVE_VERSION` to the
+  _next_ release as soon as one ships, so for most of a release cycle its installer points at a
+  chart nobody has published. Install from a release tag, not from master.
+- Kueue populates its webhook `caBundle` with no cert-manager `Certificate` anywhere: it self-signs
+  at startup and patches its own webhook configurations. KServe delegates the same job to
+  cert-manager's cainjector. Two valid answers to the same problem, with different failure modes at
+  renewal time.
+
+**Left undone:** the three spike questions the task actually asks — the Standard-mode traffic-split
+mechanism, the `Workload` condition order, and what each project's webhooks intercept. The
+traffic-split one blocks task 1.5.
+
+### 0.2 Scaffold and the first CRD — 2026-09-20
+
+**Goal:** a kubebuilder project and a `Dataset` CRD whose validation lives in markers, not in Go.
+
+**What I changed:** kubebuilder v4.9.0 scaffold; API group `ml.aiplatform.io`, module
+`github.com/tihaya-anon/k8s-ai-platform`. `api/v1alpha1/dataset_types.go`, generated deepcopy and
+CRD manifests, `config/samples/`, and `internal/controller/dataset_api_test.go` — 19 envtest specs,
+none of which run a reconciler.
+
+**How I proved it:** `make fmt vet test` green; `make install` plus
+`kubectl apply -f config/samples/` lists both datasets; an invalid object is refused by the API
+server with both offending fields named.
+
+**What surprised me:**
+
+- `make manifests` appeared to hang for 25 minutes. controller-gen expands `...` by walking the
+  filesystem, so — unlike `go list ./...` — it does **not** skip the nested module in `deps/`, and
+  it tried to resolve KServe's entire dependency graph. Naming our own trees in the Makefile: 0.8s.
+- `kubectl get ds` printed "No resources found" rather than an ambiguity error, because `ds` is
+  already DaemonSet's short name. Renamed to `dset`.
+
+**Quiz answers:** _to fill in — record the ones I got wrong, not the ones I got right._
+
+**Left undone:** the phase printcolumn (my patch job), and the reconciler itself, which is 1.1.

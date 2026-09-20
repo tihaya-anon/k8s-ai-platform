@@ -8,9 +8,10 @@ the platform composes **Kueue** for queueing and quota and **KServe** for servin
 splitting, and contributes the part nobody ships for you — the domain objects, their lineage, and
 the gate that refuses to serve an unevaluated model.
 
-> **Status: rebuilding.** The tree is intentionally empty. The first version implemented everything
-> by hand — its own Kubernetes client, its own queue, its own traffic split, no CRDs — and is
-> archived at `3cb8302`. Read it as a reference for what the frameworks are doing on your behalf.
+> **Status: level 0 done.** The cluster script and the `Dataset` CRD exist; the reconcilers do not
+> yet. The first version of this platform implemented everything by hand — its own Kubernetes
+> client, its own queue, its own traffic split, no CRDs — and is archived at `3cb8302`. Read it as a
+> reference for what the frameworks are doing on your behalf.
 
 ## Read in this order
 
@@ -18,7 +19,7 @@ the gate that refuses to serve an unevaluated model.
 | -------------------------------------------------- | -------------------------------------------------------------------------- |
 | [docs/draft.md](docs/draft.md)                     | The requirements. User stories and required behaviour. Source of truth.    |
 | [docs/architecture.md](docs/architecture.md)       | The design: what is built here, what is adopted, and where the line falls. |
-| [docs/training-tasks.md](docs/training-tasks.md)   | The build plan, as levelled exercises with acceptance criteria.            |
+| [docs/training-tasks.md](docs/training-tasks.md)   | The build plan and the curriculum: what is built, and what you answer for. |
 | [docs/progress.md](docs/progress.md)               | The maintainer log.                                                        |
 | [docs/agent-container.md](docs/agent-container.md) | The sandboxed development container.                                       |
 
@@ -41,14 +42,28 @@ configured well.
 
 Requirements: Go 1.25+, Docker, kind, kubectl, kubebuilder.
 
-Start at [task 0.1](docs/training-tasks.md#01-spike-the-stack-and-write-down-what-is-actually-true):
-stand up kind with Kueue and KServe, run their own samples, and write down what is actually true
-before designing against it. Versions move; the spike is not optional.
+Build the cluster and install the adopted operators — pinned versions, safe to re-run:
+
+```bash
+./hack/set-up-cluster.sh
+```
+
+Then install the CRDs and run the tests:
+
+```bash
+make install            # Dataset CRD into the cluster
+make fmt vet test       # envtest against a real API server
+kubectl apply -f config/samples/
+kubectl get datasets
+```
+
+Work the levels in [docs/training-tasks.md](docs/training-tasks.md) in order. Each one arrives as
+code plus a quiz plus a patch job; the code is the least important of the three.
 
 Development container:
 
 ```bash
-make -f Makefile.agent agent-shell
+make -f agent.Makefile agent-shell
 ```
 
 ## Why this way

@@ -56,9 +56,15 @@ boundary and the RBAC boundary. That alignment is deliberate and worth not break
 A versioned, immutable input. No Kubernetes analogue; a pure platform object.
 
 ```yaml
-spec: { uri, rows, golden, owner, checksum }
-status: { phase, conditions }
+spec: { uri, owner, rows, checksum, golden }
+status:
+  { conditions, phase, observedRows, observedChecksum, lastResolvedTime }
 ```
+
+`rows` and `checksum` appear on both sides on purpose. In `spec` they are the user's claim about
+what they registered; in `status` they are what the controller actually found at the URI. A silently
+rewritten artifact is only detectable because the two can disagree — which is the reason this is an
+object at all rather than a URI string on a training job.
 
 Immutability is enforced in a webhook, not by convention. A golden dataset is the only kind an
 `Evaluation` will score against — score a model on the data it trained on and every gate passes and
@@ -147,19 +153,33 @@ now and an object-store implementation later.
 
 ## Layout
 
-Standard kubebuilder, because deviating from it costs you every tool that assumes it.
+Standard kubebuilder, because deviating from it costs you every tool that assumes it. Scaffolded
+with kubebuilder v4.9.0; API group `ml.aiplatform.io`, module
+`github.com/tihaya-anon/k8s-ai-platform`. Directories marked _later_ do not exist yet.
 
 ```text
 api/v1alpha1/          CRD types and kubebuilder markers
-internal/controller/   one reconciler per kind
-internal/webhook/      the promotion gate and the immutability checks
-internal/artifact/     artifact store interface: PVC now, object store later
-config/                kustomize — crd, rbac, manager, samples
-config/overlays/       kind and cloud
-hack/                  kind cluster, Kueue and KServe install
-test/e2e/              the loop, against a live cluster
+internal/controller/   one reconciler per kind, plus the envtest suite
+internal/webhook/      later — the promotion gate and the immutability checks
+internal/artifact/     later — artifact store interface: PVC now, object store later
+cmd/main.go            the manager entrypoint
+config/                kustomize — crd, rbac, manager, samples, prometheus
+config/overlays/       later — kind and cloud
+hack/                  set-up-cluster.sh, format.sh, git hooks
+deps/                  gitignored — pinned upstream checkouts, read as reference
+test/e2e/              later — the loop, against a live cluster
 docs/
 ```
+
+### The one deviation, and why
+
+`make manifests` and `make generate` name our own package trees instead of kubebuilder's `./...`.
+controller-gen expands `...` by walking the filesystem rather than by asking the go tool, so it does
+**not** skip a nested module the way `go list ./...` does. With upstream reference checkouts in
+`deps/`, it tries to resolve KServe's whole dependency graph and appears to hang — 0.8 seconds
+against 25 minutes and counting. The alternative is keeping the Makefile pristine and moving the
+reference checkouts outside the repository, which is the better fix the day `deps/` holds more than
+one project.
 
 ---
 
