@@ -18,8 +18,9 @@ line falls and why.
 - `docs/draft.md` is the product source of truth (user stories and required behaviour). Treat it as
   the requirements document; implementation follows it, not the other way around.
 - `docs/architecture.md` is the design: what is built here, what is adopted, and the reasoning.
-- `docs/training-tasks.md` holds the owner's exercises. **The gaps listed there are intentional.**
-  Do not implement a task from that list unless explicitly asked — doing so removes the exercise.
+- `docs/training-tasks.md` holds the owner's curriculum. **You write the main implementation; the
+  owner reads it, answers the quiz, and does the patch job.** Read that file's "How a task runs"
+  before starting any task in it.
 - `docs/progress.md` is the owner's maintainer log.
 
 ## How to help here
@@ -33,8 +34,10 @@ the annotations, reconcilers are the service layer.
   not only the code path.
 - When asked to implement something, follow the conventions below and add tests in the same change.
 - When reviewing their work, use the checklist at the end of `docs/training-tasks.md`.
-- If a request would complete one of the training tasks, say so first and ask whether they want it
-  done for them or want to be guided through it.
+- When you finish a task from `docs/training-tasks.md`, hand over three things together: the code,
+  the quiz, and the patch job. Do not move to the next task until the quiz is answered.
+- **Never hand over the answer to a patch job, even when asked twice.** Explain the mechanism, name
+  the file, refuse the diff. That refusal is the only part of the curriculum that is load-bearing.
 
 ## Conventions
 
@@ -70,36 +73,40 @@ the annotations, reconcilers are the service layer.
   off), markdownlint owns structure, and the rules they both have an opinion on — list markers,
   emphasis, fence style — are pinned in `.markdownlint.json` to what Prettier emits. Change one side
   without the other and the two tools undo each other on every save.
-- Run `make fmt vet test` before saying a change is done — once a `Makefile` exists. Task 0.2 is
-  what scaffolds it; until then there is no Go to build and `hack/format.sh` plus the pre-commit
-  gate is the whole check.
+- Run `make fmt vet test` before saying a change is done. `go vet` is slow on a cold cache here
+  (WSL2); that is not a hang.
 
 ## Layout
 
-Most of the tree is still empty by design; `docs/training-tasks.md` task 0.2 scaffolds it. What
-exists today is the docs, the agent container, and the formatting toolchain:
+Scaffolded by kubebuilder at task 0.2; API group `ml.aiplatform.io`, module
+`github.com/tihaya-anon/k8s-ai-platform`.
 
 ```text
-docs/                 draft, architecture, training-tasks, progress, agent-container
+api/v1alpha1          CRD types and kubebuilder markers
+internal/controller   one reconciler per kind, plus the envtest suite
+cmd/main.go           the manager entrypoint
+config/               kustomize: crd, rbac, manager, samples, prometheus
+Makefile              kubebuilder's; `make manifests generate fmt vet test`
+PROJECT               kubebuilder's registry of scaffolded kinds
+hack/set-up-cluster.sh  kind + cert-manager + KServe + Kueue, pinned and idempotent
 hack/format.sh        the one formatter entry point, shared by both hooks
 hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
+hack/boilerplate.go.txt  licence header controller-gen stamps on generated files
+docs/                 draft, architecture, training-tasks, progress, agent-container
+deps/                 gitignored; pinned upstream checkouts read as reference (KServe v0.20.0)
 .claude/settings.json the format-on-edit hooks
 .markdownlint.json    markdown rules, relaxed where they fought Prettier or the docs
 .prettierrc           width 100, prose wrapped, code inside fences left alone
 .prettierignore       generated manifests are owned by controller-gen, not by Prettier
-Dockerfile.agent      development container image
-Makefile.agent        development container; kept out of Makefile so kubebuilder can own that
+agent.Dockerfile      development container image
+agent.Makefile        development container; kept out of Makefile so kubebuilder owns that
 ```
 
-The target shape after scaffolding:
+Not yet created, and expected as the levels land:
 
 ```text
-api/v1alpha1          CRD types and kubebuilder markers
-internal/controller   one reconciler per kind
 internal/webhook      the promotion gate and the immutability checks
 internal/artifact     artifact store interface: PVC now, object store later
-config/               kustomize: crd, rbac, manager, samples
 config/overlays/      kind and cloud
-hack/                 joined by the kind cluster, Kueue and KServe install scripts
 test/e2e/             the loop, against a live cluster
 ```
