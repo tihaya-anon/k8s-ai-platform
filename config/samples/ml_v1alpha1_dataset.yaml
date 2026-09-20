@@ -1,0 +1,25 @@
+apiVersion: ml.aiplatform.io/v1alpha1
+kind: Dataset
+metadata:
+  labels:
+    app.kubernetes.io/name: k8s-ai-platform
+    app.kubernetes.io/managed-by: kustomize
+  name: reviews-v3
+spec:
+  uri: s3://datasets/reviews/v3.parquet
+  owner: team-search
+  rows: 1240000
+  checksum: sha256:3b1f2c9d4e5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e
+---
+apiVersion: ml.aiplatform.io/v1alpha1
+kind: Dataset
+metadata:
+  labels:
+    app.kubernetes.io/name: k8s-ai-platform
+    app.kubernetes.io/managed-by: kustomize
+  name: reviews-golden
+spec:
+  uri: s3://datasets/reviews/golden.parquet
+  owner: team-search
+  rows: 5000
+  golden: true

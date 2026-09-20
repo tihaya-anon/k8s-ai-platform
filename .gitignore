@@ -1,2 +1,22 @@
 /bin/
 /.local/
+/deps/
+
+# Go / kubebuilder
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+Dockerfile.cross
+*.test
+*.out
+go.work
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+.vscode
+*.swp
+*.swo
+*~
