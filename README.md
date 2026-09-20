@@ -17,7 +17,7 @@ the gate that refuses to serve an unevaluated model.
 
 | Document                                           | What it is                                                                 |
 | -------------------------------------------------- | -------------------------------------------------------------------------- |
-| [docs/draft.md](docs/draft.md)                     | The requirements. User stories and required behaviour. Source of truth.    |
+| [docs/requirements.md](docs/requirements.md)       | The requirements. User stories and required behaviour. Source of truth.    |
 | [docs/architecture.md](docs/architecture.md)       | The design: what is built here, what is adopted, and where the line falls. |
 | [docs/training-tasks.md](docs/training-tasks.md)   | The build plan and the curriculum: what is built, and what you answer for. |
 | [docs/progress.md](docs/progress.md)               | The maintainer log.                                                        |
@@ -25,15 +25,23 @@ the gate that refuses to serve an unevaluated model.
 
 ## The shape of it
 
-```text
-  Dataset ──▶ TrainingJob ──▶ ModelVersion ──▶ Evaluation ──▶ Release
-                   │                │                            │
-              Kueue admits     lineage +                   KServe serves
-              (quota, queue,   gate status                 (stable / canary)
-               preemption)          │                            ▲
-                                    └──── admission webhook ─────┘
-                                          refuses an ungated version
+```mermaid
+flowchart LR
+    DS[Dataset] --> TJ[TrainingJob]
+    TJ --> MV[ModelVersion]
+    MV --> EV[Evaluation]
+    EV --> RL[Release]
+
+    KUEUE([Kueue: quota, queue, preemption]) -. admits .-> TJ
+    KUEUE -. admits .-> EV
+    RL -. renders .-> KSERVE([KServe: stable / canary traffic])
+
+    GATE{{admission webhook}}
+    MV -- gate status --> GATE
+    GATE -- refuses an ungated version --> RL
 ```
+
+Kueue and KServe are other people's operators. Everything else in that diagram is defined here.
 
 Five custom resources, five controllers, one webhook. Everything else is somebody else's operator,
 configured well.

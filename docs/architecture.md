@@ -2,8 +2,8 @@
 
 What this platform builds, and — more importantly — what it refuses to build.
 
-The requirements are in [draft.md](draft.md). This document is how they are met. The exercises that
-get you there are in [training-tasks.md](training-tasks.md).
+The requirements are in [requirements.md](requirements.md). This document is how they are met. The
+exercises that get you there are in [training-tasks.md](training-tasks.md).
 
 ---
 
@@ -86,10 +86,24 @@ The spec must not name the runtime. Today the child is a Job; later it is a `Job
 
 A registered artifact and its position in the release funnel. The heart of the platform.
 
-```text
-Registered → Evaluating → PromotionReady → Canary → Stable
-                      ↘ PromotionBlocked        ↘ Retired
+```mermaid
+stateDiagram-v2
+    [*] --> Registered
+    Registered --> Evaluating
+    Evaluating --> PromotionReady
+    Evaluating --> PromotionBlocked
+    PromotionReady --> Canary
+    Canary --> Stable
+    Canary --> Retired
+    Stable --> Retired
+    PromotionBlocked --> [*]
+    Retired --> [*]
 ```
+
+That graph is the set of legal transitions, not a `phase` field. The position is carried in
+conditions, so that "evaluated but blocked" and "promotable but not yet canaried" are both
+expressible; a single string would have to pick one. What the diagram defines is which moves the
+controller refuses.
 
 Status carries the metrics, the gate results, the source `TrainingJob`, and the `Dataset` that
 produced it. That chain is the lineage: from serving traffic back to the rows that made the weights.

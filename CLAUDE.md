@@ -15,8 +15,8 @@ does serving and traffic, and this repository contributes the custom resources, 
 lineage, and the promotion gate. See [docs/architecture.md](docs/architecture.md) for where that
 line falls and why.
 
-- `docs/draft.md` is the product source of truth (user stories and required behaviour). Treat it as
-  the requirements document; implementation follows it, not the other way around.
+- `docs/requirements.md` is the product source of truth (user stories and required behaviour). Treat
+  it as the requirements document; implementation follows it, not the other way around.
 - `docs/architecture.md` is the design: what is built here, what is adopted, and the reasoning.
 - `docs/training-tasks.md` holds the owner's curriculum. **You write the main implementation; the
   owner reads it, answers the quiz, and does the patch job.** Read that file's "How a task runs"
@@ -64,6 +64,11 @@ the annotations, reconcilers are the service layer.
   Keep the tree buildable with the toolchain that is actually installed rather than relying on
   `GOTOOLCHAIN` to fetch another one mid-build.
 - Comments explain _why_ a constraint exists, not what the line does.
+- **Diagrams are Mermaid, not ASCII art.** A mermaid fence renders on GitHub, survives reflow by
+  Prettier, and can be diffed line by line; box drawing cannot. Directory listings stay in a text
+  fence — a file tree is a listing, not a diagram. Render a new diagram with `mmdc` before
+  committing it; a fence that fails to parse renders as a blank box, and nothing in the lint gate
+  catches it.
 - **Formatting is automatic, linting is a gate.** `hack/format.sh` is the only entry point; it
   formats Markdown, JSON, YAML and Go in place. A Claude Code `PostToolUse` hook runs it per edit,
   and `hack/git-hooks/pre-commit` runs it on the staged set and then blocks the commit on
@@ -92,7 +97,7 @@ hack/set-up-cluster.sh  kind + cert-manager + KServe + Kueue, pinned and idempot
 hack/format.sh        the one formatter entry point, shared by both hooks
 hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
 hack/boilerplate.go.txt  licence header controller-gen stamps on generated files
-docs/                 draft, architecture, training-tasks, progress, agent-container
+docs/                 requirements, architecture, training-tasks, progress, agent-container
 deps/                 gitignored; pinned upstream checkouts read as reference (KServe v0.20.0)
 .claude/settings.json the format-on-edit hooks
 .markdownlint.json    markdown rules, relaxed where they fought Prettier or the docs

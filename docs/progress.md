@@ -29,7 +29,7 @@ One entry per task. Keep them short; the value is in the evidence and the surpri
 > Archived. This entry describes the hand-written first version, replaced by the rebuild described
 > in [architecture.md](architecture.md). The code and its `mvp.md` are in git history at `3cb8302`.
 
-**Goal:** stand up the hand-written MVP from the requirements in [draft.md](draft.md).
+**Goal:** stand up the hand-written MVP from the requirements in [requirements.md](requirements.md).
 
 **What I changed:** initial implementation — control plane API and reconcile loop, gateway, model
 server, training and evaluation workers, CLI, kind cluster, manifests, unit tests.

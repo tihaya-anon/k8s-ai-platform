@@ -5,7 +5,7 @@ answer for it, and patch it.** The code arriving finished is not the end of the 
 able to defend it is.
 
 The end state is the system in [architecture.md](architecture.md), serving the requirements in
-[draft.md](draft.md).
+[requirements.md](requirements.md).
 
 ## How a task runs
 
@@ -359,8 +359,8 @@ defend the choice of type — counter, gauge, or histogram.
 
 ### 3.2 Alerts
 
-**Built for you:** the alert rules over 3.1's metrics, for the conditions [draft.md](draft.md)
-names.
+**Built for you:** the alert rules over 3.1's metrics, for the conditions
+[requirements.md](requirements.md) names.
 
 **Quiz**
 
