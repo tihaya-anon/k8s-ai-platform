@@ -19,7 +19,7 @@ help: ## show this help
 .PHONY: agent-image
 agent-image: ## build the AI agent development container
 	docker build \
-		-f Dockerfile.agent \
+		-f agent.Dockerfile \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		-t $(AGENT_IMAGE) .
