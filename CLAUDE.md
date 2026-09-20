@@ -66,9 +66,14 @@ the annotations, reconcilers are the service layer.
 - Comments explain _why_ a constraint exists, not what the line does.
 - **Diagrams are Mermaid, not ASCII art.** A mermaid fence renders on GitHub, survives reflow by
   Prettier, and can be diffed line by line; box drawing cannot. Directory listings stay in a text
-  fence — a file tree is a listing, not a diagram. Render a new diagram with `mmdc` before
-  committing it; a fence that fails to parse renders as a blank box, and nothing in the lint gate
-  catches it.
+  fence — a file tree is a listing, not a diagram.
+- **A diagram reads in the column it sits in.** Prose here is 100 columns; a diagram wider than it
+  is tall shrinks to an illegible strip in that space. Prefer `flowchart TB` over `LR`, break long
+  node labels with `<br/>`, and keep the rendered aspect ratio under roughly 1:1. Render with
+  `mmdc -i x.mmd -o x.png` and check the pixel dimensions before committing — a six-to-one strip
+  looks fine in the source and is unreadable on the page. `mmdc` is also the only parse check there
+  is: a malformed fence renders as a blank box, and neither Prettier nor markdownlint looks inside
+  it.
 - **Formatting is automatic, linting is a gate.** `hack/format.sh` is the only entry point; it
   formats Markdown, JSON, YAML and Go in place. A Claude Code `PostToolUse` hook runs it per edit,
   and `hack/git-hooks/pre-commit` runs it on the staged set and then blocks the commit on

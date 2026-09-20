@@ -26,25 +26,25 @@ the gate that refuses to serve an unevaluated model.
 ## The shape of it
 
 ```mermaid
-flowchart LR
+flowchart TB
     DS[Dataset] --> TJ[TrainingJob]
     TJ --> MV[ModelVersion]
     MV --> EV[Evaluation]
     EV --> RL[Release]
 
-    KUEUE([Kueue: quota, queue, preemption]) -. admits .-> TJ
+    KUEUE([Kueue<br/>quota, queue,<br/>preemption])
+    KUEUE -. admits .-> TJ
     KUEUE -. admits .-> EV
-    RL -. renders .-> KSERVE([KServe: stable / canary traffic])
 
-    GATE{{admission webhook}}
+    GATE{{admission<br/>webhook}}
     MV -- gate status --> GATE
-    GATE -- refuses an ungated version --> RL
+    GATE -- refuses an<br/>ungated version --> RL
+
+    RL -. renders .-> KSERVE([KServe<br/>stable / canary])
 ```
 
-Kueue and KServe are other people's operators. Everything else in that diagram is defined here.
-
-Five custom resources, five controllers, one webhook. Everything else is somebody else's operator,
-configured well.
+Kueue and KServe are other people's operators, configured well. Everything else in that diagram —
+five custom resources, five controllers, one webhook — is defined here.
 
 ## Getting started
 
