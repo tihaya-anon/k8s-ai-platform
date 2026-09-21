@@ -102,9 +102,11 @@ hack/set-up-cluster.sh  kind + cert-manager + KServe + Kueue, pinned and idempot
 hack/format.sh        the one formatter entry point, shared by both hooks
 hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
 hack/boilerplate.go.txt  licence header controller-gen stamps on generated files
-docs/                 requirements, architecture, training-tasks, progress, agent-container
+hack/agent-home/      shell and editor config baked into the agent container image
+docs/                 requirements, architecture, training-tasks, progress, agent-container, editors
 deps/                 gitignored; pinned upstream checkouts read as reference (KServe v0.20.0)
 .claude/settings.json the format-on-edit hooks
+.zed/                 Zed project settings and tasks; see docs/editors.md
 .markdownlint.json    markdown rules, relaxed where they fought Prettier or the docs
 .prettierrc           width 100, prose wrapped, code inside fences left alone
 .prettierignore       generated manifests are owned by controller-gen, not by Prettier

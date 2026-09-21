@@ -1,0 +1,92 @@
+// Project settings for Zed, checked in so the editor agrees with hack/format.sh and the
+// pre-commit gate instead of racing them. See docs/editors.md.
+{
+  "format_on_save": "on",
+  "remove_trailing_whitespace_on_save": true,
+  "ensure_final_newline_on_save": true,
+  "preferred_line_length": 100,
+  "wrap_guides": [100],
+  "file_scan_exclusions": [
+    "**/.git",
+    "**/bin",
+    "**/deps",
+    "**/dist",
+    "**/.local",
+    "**/node_modules",
+    "**/cover.out"
+  ],
+  "file_types": {
+    "Dockerfile": ["agent.Dockerfile"],
+    "Makefile": ["agent.Makefile"],
+    "YAML": ["PROJECT"],
+    "JSONC": [".markdownlint.json", ".prettierrc"]
+  },
+  // Prettier here is the same owner of wrapping and whitespace that hack/format.sh gives it; it
+  // reads the repo .prettierrc. markdownlint's structural --fix is not run on save, because it has
+  // no stdin mode -- the pre-commit hook still applies it to the staged set.
+  "languages": {
+    "Go": {
+      "tab_size": 4,
+      "hard_tabs": true,
+      "format_on_save": "language_server",
+      "code_actions_on_format": {
+        "source.organizeImports": true
+      }
+    },
+    "Markdown": {
+      "formatter": "prettier",
+      "soft_wrap": "preferred_line_length",
+      "prettier": { "allowed": true }
+    },
+    "JSON": {
+      "tab_size": 2,
+      "formatter": "prettier",
+      "prettier": { "allowed": true }
+    },
+    "JSONC": {
+      "tab_size": 2,
+      "formatter": "prettier",
+      "prettier": { "allowed": true }
+    },
+    "YAML": {
+      "tab_size": 2,
+      "formatter": "prettier",
+      "prettier": { "allowed": true }
+    }
+  },
+  "lsp": {
+    "gopls": {
+      "initialization_options": {
+        "gofumpt": false,
+        "staticcheck": true,
+        "usePlaceholders": true,
+        "semanticTokens": true,
+        "hints": {
+          "assignVariableTypes": true,
+          "compositeLiteralFields": true,
+          "constantValues": true,
+          "functionTypeParameters": true,
+          "parameterNames": true
+        },
+        "analyses": {
+          "unusedparams": true,
+          "shadow": true
+        },
+        "directoryFilters": ["-bin", "-deps", "-dist", "-.local"]
+      }
+    },
+    "yaml-language-server": {
+      "settings": {
+        "yaml": {
+          "keyOrdering": false,
+          "format": { "enable": false },
+          "schemas": {
+            "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json": [
+              ".devcontainer/devcontainer.json"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

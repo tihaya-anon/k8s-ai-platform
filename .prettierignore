@@ -6,3 +6,6 @@ bin/
 
 # Vendored or third-party manifests fetched by hack/ scripts.
 hack/vendor/
+
+# Vendored editor/shell configuration owned by its own tooling (lazy.nvim writes the lock file).
+hack/agent-home/

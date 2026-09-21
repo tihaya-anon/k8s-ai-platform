@@ -119,6 +119,23 @@ make -f agent.Makefile agent-fmt
 make -f agent.Makefile agent-lint
 ```
 
+## The editor inside the container
+
+The container is meant to be lived in, not only shelled into, so the image carries the same shell
+and editor the host runs: bash with ble.sh and starship, and Neovim with the LazyVim configuration
+vendored at `hack/agent-home/`. `EDITOR` is `nvim` and `amake` is an alias for the
+`make -f agent.Makefile` that is easy to forget from inside.
+
+Populate the Neovim plugin volumes once before the first session:
+
+```bash
+make -f agent.Makefile agent-nvim
+```
+
+Configuration is baked into the image; plugins, Treesitter parsers and Mason downloads live in named
+volumes and survive `--rm`. The full picture, including the version pins and what differs from the
+host config, is in [editors.md](editors.md).
+
 ## Run for read-only review
 
 This mode is best when you want the agent to inspect or explain the project but not modify the

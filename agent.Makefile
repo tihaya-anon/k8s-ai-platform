@@ -12,6 +12,15 @@ AGENT_NAME     ?= k8s-ai-agent
 AGENT_AI_MOUNTS ?=
 GO_PROXY       ?= $(shell go env GOPROXY 2>/dev/null || printf direct)
 
+# Neovim's plugins, Treesitter parsers and Mason downloads are large, fetched from the network, and
+# rebuilt from scratch by every `docker run --rm`. They live in named volumes for the same reason
+# the Go caches do. The configuration itself is baked into the image from hack/agent-home/, so
+# these hold only derived state and can be deleted at any time.
+NVIM_VOLUMES = \
+	-v k8s-ai-nvim-share:/home/agent/.local/share/nvim \
+	-v k8s-ai-nvim-state:/home/agent/.local/state/nvim \
+	-v k8s-ai-nvim-cache:/home/agent/.cache/nvim
+
 .PHONY: help
 help: ## show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -25,12 +34,13 @@ agent-image: ## build the AI agent development container
 		-t $(AGENT_IMAGE) .
 
 .PHONY: agent-cache
-agent-cache: agent-image ## ensure named Go cache volumes are writable by the agent user
+agent-cache: agent-image ## ensure the named cache volumes are writable by the agent user
 	docker run --rm --user root \
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
+		$(NVIM_VOLUMES) \
 		$(AGENT_IMAGE) \
-		sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache/go-build'
+		sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.local/share/nvim /home/agent/.local/state/nvim /home/agent/.cache/nvim && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.local'
 
 .PHONY: agent-deps
 agent-deps: agent-cache ## download Go dependencies through the agent container
@@ -86,6 +96,7 @@ agent-shell: agent-cache ## open a repo-scoped development shell in the agent co
 		-v "$(CURDIR):/workspace/k8s-ai-platform" \
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
+		$(NVIM_VOLUMES) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)
@@ -101,9 +112,28 @@ agent-review: agent-cache ## open a readonly repo-scoped shell in the agent cont
 		-v "$(CURDIR):/workspace/k8s-ai-platform:ro" \
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
+		$(NVIM_VOLUMES) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)
+
+.PHONY: agent-nvim
+agent-nvim: agent-cache ## populate the Neovim plugin volume from lazy-lock.json, then exit
+	docker run --rm -it \
+		--cap-drop ALL \
+		--security-opt no-new-privileges \
+		-e GOPROXY="$(GO_PROXY)" \
+		-v "$(CURDIR):/workspace/k8s-ai-platform" \
+		-v k8s-ai-go-pkg:/home/agent/go/pkg \
+		-v k8s-ai-go-build:/home/agent/.cache/go-build \
+		$(NVIM_VOLUMES) \
+		-w /workspace/k8s-ai-platform \
+		$(AGENT_IMAGE) \
+		nvim --headless "+Lazy! restore" "+TSUpdateSync" +qa
+
+.PHONY: agent-nvim-reset
+agent-nvim-reset: ## delete the Neovim volumes; the next agent-nvim rebuilds them
+	-docker volume rm k8s-ai-nvim-share k8s-ai-nvim-state k8s-ai-nvim-cache
 
 .PHONY: agent-shell-ai
 agent-shell-ai: agent-shell ## alias for agent-shell with optional AI credential mounts

@@ -10,5 +10,11 @@
 !go.mod
 !go.sum
 
+# The agent image's entrypoint and the shell/editor configuration it bakes in. Everything is
+# excluded by default above, so a COPY of an untracked path fails at build time rather than
+# silently shipping nothing.
+!hack/agent-entrypoint.sh
+!hack/agent-home/**
+
 # Upstream reference checkouts; not part of the build context.
 deps/
