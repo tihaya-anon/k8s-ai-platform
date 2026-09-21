@@ -30,6 +30,11 @@ ARG GOIMPORTS_VERSION=v0.50.0
 # cannot reach github.com directly, e.g. --build-arg GITHUB_MIRROR=https://ghproxy.net/https://github.com
 ARG GITHUB_MIRROR=https://github.com
 
+# Module proxy for the build-time `go install` below. The run targets already pass the host's
+# `go env GOPROXY`; the build needs it too, or it reaches for proxy.golang.org on a network that
+# may not have it.
+ARG GO_PROXY=https://proxy.golang.org,direct
+
 # Configurable package mirror; override for whatever network the image is built on, e.g.
 #   docker build --build-arg APT_MIRROR=deb.debian.org -f Dockerfile.agent .
 ARG APT_MIRROR=mirrors.aliyun.com
@@ -96,11 +101,13 @@ RUN set -eu; \
 # gopls, gofumpt and goimports are installed into the image rather than left to Mason, so the
 # editor is useful on first launch and without a second package manager fetching over the network.
 # lua/plugins/go.lua already prefers a $GOPATH/bin gopls over Mason's copy.
+# One `go install` per tool: the command refuses a list whose arguments come from different
+# modules or versions, and these are three modules at three versions.
 RUN set -eu; \
-    GOBIN=/usr/local/bin GOFLAGS=-mod=mod go install \
-      "golang.org/x/tools/gopls@${GOPLS_VERSION}" \
-      "mvdan.cc/gofumpt@${GOFUMPT_VERSION}" \
-      "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; \
+    export GOBIN=/usr/local/bin GOFLAGS=-mod=mod GOPROXY="${GO_PROXY}"; \
+    go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"; \
+    go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"; \
+    go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; \
     rm -rf /root/.cache/go-build "${GOPATH}/pkg/mod" "${GOCACHE}"
 
 RUN npm install -g \

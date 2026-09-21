@@ -31,6 +31,7 @@ agent-image: ## build the AI agent development container
 		-f agent.Dockerfile \
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
+		--build-arg GO_PROXY="$(GO_PROXY)" \
 		-t $(AGENT_IMAGE) .
 
 .PHONY: agent-cache
