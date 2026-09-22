@@ -66,9 +66,17 @@ outside it:
 | starship                  | `STARSHIP_VERSION=1.25.0`        | not packaged                                       |
 | ble.sh                    | `BLESH_NIGHTLY=20260310+b99cadb` | not packaged; upstream tags releases rarely        |
 | gopls, gofumpt, goimports | `v0.23.0`, `v0.12.0`, `v0.50.0`  | `go install`ed so the editor works on first launch |
+| Claude Code               | `CLAUDE_VERSION=2.1.278`         | npm, alongside the other agent CLIs                |
 
 Override any of them with `--build-arg`. `GITHUB_MIRROR` redirects every release download at once,
-for a build network that cannot reach GitHub.com.
+for a build network that cannot reach GitHub.com, and `GO_PROXY` defaults to the host's
+`go env GOPROXY`.
+
+The three Go tools declare `go 1.26.0` while the image is deliberately on Go 1.25 — the toolchain
+this repository builds with — so their build layer, and only that layer, sets `GOTOOLCHAIN=auto`.
+The fetched toolchain unpacks into the module cache and is deleted with it before the layer is
+committed, so the finished image cannot reach for another toolchain and the product build still uses
+the base image's Go.
 
 ### First run
 

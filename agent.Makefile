@@ -21,6 +21,11 @@ NVIM_VOLUMES = \
 	-v k8s-ai-nvim-state:/home/agent/.local/state/nvim \
 	-v k8s-ai-nvim-cache:/home/agent/.cache/nvim
 
+# Claude Code keeps its credentials, session history and installed skills under ~/.claude. A named
+# volume means `claude /login` inside the container survives `docker run --rm`, so the host's
+# credentials never have to be mounted in at all.
+CLAUDE_VOLUME = -v k8s-ai-claude:/home/agent/.claude
+
 .PHONY: help
 help: ## show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -40,8 +45,9 @@ agent-cache: agent-image ## ensure the named cache volumes are writable by the a
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
+		$(CLAUDE_VOLUME) \
 		$(AGENT_IMAGE) \
-		sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.local/share/nvim /home/agent/.local/state/nvim /home/agent/.cache/nvim && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.local'
+		sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.local/share/nvim /home/agent/.local/state/nvim /home/agent/.cache/nvim /home/agent/.claude && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.local /home/agent/.claude'
 
 .PHONY: agent-deps
 agent-deps: agent-cache ## download Go dependencies through the agent container
@@ -98,6 +104,7 @@ agent-shell: agent-cache ## open a repo-scoped development shell in the agent co
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
+		$(CLAUDE_VOLUME) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)
@@ -114,6 +121,7 @@ agent-review: agent-cache ## open a readonly repo-scoped shell in the agent cont
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
+		$(CLAUDE_VOLUME) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)

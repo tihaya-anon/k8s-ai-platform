@@ -103,16 +103,37 @@ RUN set -eu; \
 # lua/plugins/go.lua already prefers a $GOPATH/bin gopls over Mason's copy.
 # One `go install` per tool: the command refuses a list whose arguments come from different
 # modules or versions, and these are three modules at three versions.
+#
+# GOTOOLCHAIN=auto is scoped to this layer and nowhere else. All three tools now declare
+# `go 1.26.0`, and the base image is deliberately Go 1.25 -- the toolchain this repository builds
+# with -- so `local` cannot compile them. The alternative is pinning three tools back to their last
+# 1.25-compatible releases, which diverges from the host in three places to save a download that is
+# deleted before the layer is committed: the fetched toolchain unpacks into ${GOPATH}/pkg/mod and
+# the rm below takes it with the rest of the module cache. Nothing in the finished image can reach
+# for another toolchain, and the product build still uses the base image's Go.
 RUN set -eu; \
-    export GOBIN=/usr/local/bin GOFLAGS=-mod=mod GOPROXY="${GO_PROXY}"; \
+    export GOBIN=/usr/local/bin GOFLAGS=-mod=mod GOPROXY="${GO_PROXY}" GOTOOLCHAIN=auto; \
     go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"; \
     go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"; \
     go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; \
     rm -rf /root/.cache/go-build "${GOPATH}/pkg/mod" "${GOCACHE}"
 
+# Declared here rather than with the version pins at the top of the file, and deliberately. Docker
+# invalidates every layer after a changed instruction, so a pin that lives above the Neovim download
+# and the `go install` costs a full rebuild of both every time it moves. The npm layer is cheap; the
+# two above it are not.
+ARG CLAUDE_VERSION=2.1.278
+
+# CLAUDE_CONFIG_DIR is set explicitly so every piece of Claude Code state -- credentials, session
+# history, installed skills and its config file -- lands under one directory, which agent.Makefile
+# backs with a single named volume. Left to the default, the config file sits beside the directory
+# at $HOME and is lost on every `docker run --rm`.
+ENV CLAUDE_CONFIG_DIR=/home/agent/.claude
+
 RUN npm install -g \
         "@earendil-works/pi-coding-agent@${PI_VERSION}" \
         "@openai/codex@${CODEX_VERSION}" \
+        "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
         "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
         "prettier@${PRETTIER_VERSION}" \
     && npm cache clean --force
@@ -130,6 +151,7 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         "${GOCACHE}" \
         /home/agent/.pi/agent \
         /home/agent/.codex \
+        /home/agent/.claude \
         /home/agent/.local/share/nvim \
         /home/agent/.local/state/nvim \
         /home/agent/.cache/nvim \

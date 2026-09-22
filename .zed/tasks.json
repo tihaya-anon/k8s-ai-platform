@@ -25,12 +25,13 @@
     "command": "hack/format.sh",
     "args": ["$ZED_RELATIVE_FILE"],
     "use_new_terminal": false,
-    "reveal": "on_error"
+    "reveal": "no_focus"
   },
   {
     "label": "go test this package",
     "command": "go",
-    "args": ["test", "./$ZED_RELATIVE_DIRNAME/..."],
+    "args": ["test", "./..."],
+    "cwd": "$ZED_DIRNAME",
     "use_new_terminal": false
   },
   {

@@ -5,8 +5,8 @@ normal commands scoped to the repository checkout.
 
 This is different from the product image in the root `Dockerfile`. The product image is `scratch`
 and runs the platform. `agent.Dockerfile` is a developer sandbox with Go, Make, Git, and small CLI
-tools for editing and testing. It also installs the `pi` and `codex` CLIs, but it does not bake any
-model-provider credentials into the image.
+tools for editing and testing. It also installs the `claude`, `pi` and `codex` CLIs, but it does not
+bake any model-provider credentials into the image.
 
 ## Boundary
 
@@ -157,6 +157,12 @@ Mount credential files read-only and keep the rest of the boundary unchanged:
 - do not mount `~/.kube`, cloud config directories, SSH keys, or `/var/run/docker.sock`;
 - prefer a read-only repo mount for review-only sessions.
 
+Claude Code is the exception, and the easier case. The image sets `CLAUDE_CONFIG_DIR` to `~/.claude`
+and `agent.Makefile` backs that directory with a named volume, so running `claude` inside the
+container and logging in once there keeps the credential in the volume across `docker run --rm`. The
+host credential is never mounted, and revoking the container's access is
+`docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
+
 Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files under `~/.codex/`. Start
 a writable coding shell by passing only the credential files you want the container to see:
 
@@ -177,6 +183,8 @@ make -f agent.Makefile agent-review AGENT_AI_MOUNTS='\
 Then run the agent inside that shell, for example:
 
 ```bash
+claude
+# or
 pi
 # or
 codex
