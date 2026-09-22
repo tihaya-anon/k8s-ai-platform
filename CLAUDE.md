@@ -100,6 +100,7 @@ Makefile              kubebuilder's; `make manifests generate fmt vet test`
 PROJECT               kubebuilder's registry of scaffolded kinds
 hack/set-up-cluster.sh  kind + cert-manager + KServe + Kueue, pinned and idempotent
 hack/format.sh        the one formatter entry point, shared by both hooks
+hack/agent.sh         development container: build it, and run work inside it
 hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
 hack/boilerplate.go.txt  licence header controller-gen stamps on generated files
 hack/agent-home/      shell config for host and container; the nvim config is host-only
@@ -111,7 +112,6 @@ deps/                 gitignored; pinned upstream checkouts read as reference (K
 .prettierrc           width 100, prose wrapped, code inside fences left alone
 .prettierignore       generated manifests are owned by controller-gen, not by Prettier
 agent.Dockerfile      development container image
-agent.Makefile        development container; kept out of Makefile so kubebuilder owns that
 ```
 
 Not yet created, and expected as the levels land:

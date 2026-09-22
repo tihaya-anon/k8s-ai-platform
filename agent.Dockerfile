@@ -120,7 +120,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # cleaning it would only throw away what makes the next build fast.
 
 # CLAUDE_CONFIG_DIR is set explicitly so every piece of Claude Code state -- credentials, session
-# history, installed skills and its config file -- lands under one directory, which agent.Makefile
+# history, installed skills and its config file -- lands under one directory, which hack/agent.sh
 # backs with a single named volume. Left to the default, the config file sits beside the directory
 # at $HOME and is lost on every `docker run --rm`.
 #

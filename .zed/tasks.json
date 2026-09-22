@@ -42,8 +42,8 @@
   },
   {
     "label": "agent container shell",
-    "command": "make",
-    "args": ["-f", "agent.Makefile", "agent-shell"],
+    "command": "hack/agent.sh",
+    "args": ["shell"],
     "use_new_terminal": true
   }
 ]

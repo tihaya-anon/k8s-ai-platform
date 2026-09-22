@@ -53,11 +53,11 @@ the task list just saves typing them.
 
 ## The container's shell
 
-`make -f agent.Makefile agent-shell` drops you into bash with ble.sh, starship and your aliases. The
-configuration lives in `hack/agent-home/` and reaches the container twice over: copied into the
-image at build time, so the image works standalone and a `--read-only` session still has a prompt,
-and then bind-mounted read-only over that copy by the run targets, so editing a file in
-`hack/agent-home/` takes effect in the next shell without a rebuild.
+`hack/agent.sh shell` drops you into bash with ble.sh, starship and your aliases. The configuration
+lives in `hack/agent-home/` and reaches the container twice over: copied into the image at build
+time, so the image works standalone and a `--read-only` session still has a prompt, and then
+bind-mounted read-only over that copy by the run targets, so editing a file in `hack/agent-home/`
+takes effect in the next shell without a rebuild.
 
 The image pins the versions the host runs, so a session inside the container behaves like a session
 outside it:
@@ -96,7 +96,7 @@ needed. Three things did need attention:
 ### What is deliberately not vendored
 
 - `~/.bash_env` holds real API tokens. It must never reach a git repository, and the `.bashrc` guard
-  skips it when absent, which is the container case. Mount it explicitly with `AGENT_AI_MOUNTS` if a
+  skips it when absent, which is the container case. Pass `hack/agent.sh shell --mount ...` if a
   session genuinely needs one of those tokens.
 - `~/.profile` is read by login shells only, and the container's are not login shells.
 - `~/.gitconfig` names an identity and a `gh` credential helper that the image does not have. Git

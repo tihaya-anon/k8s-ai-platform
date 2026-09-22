@@ -17,7 +17,6 @@
   ],
   "file_types": {
     "Dockerfile": ["agent.Dockerfile"],
-    "Makefile": ["agent.Makefile"],
     "YAML": ["PROJECT"],
     "JSONC": [".markdownlint.json", ".prettierrc"]
   },

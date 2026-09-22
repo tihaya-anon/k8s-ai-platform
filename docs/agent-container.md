@@ -29,7 +29,7 @@ Allowed in the review shell:
 
 Not allowed unless you explicitly mount it:
 
-- host filesystem access outside this checkout;
+- host filesystem access outside this checkout, with one exception below;
 - host Docker socket access;
 - kubeconfig access;
 - cloud credentials, SSH keys, or personal secrets.
@@ -37,12 +37,21 @@ Not allowed unless you explicitly mount it:
 That means the agent can be given model credentials without also giving it your host filesystem,
 Docker daemon, Kubernetes clusters, or cloud accounts.
 
+The exception is `$GOMODCACHE/cache/download`, mounted read-only. That directory is already laid out
+as a module proxy, so `hack/agent.sh` puts it at the front of `GOPROXY` as `file:///hostproxy`
+rather than making the container re-download the Kubernetes dependency tree into its own volume:
+measured, that is 3.5 seconds instead of fourteen minutes, for three seconds of actual CPU. What it
+exposes is public module source, read-only, and nothing else of the host. `GOSUMDB` is passed
+through unchanged, so `go.sum` verification is exactly as it is on the host, and the network proxy
+stays behind the file one as a fallback for anything missing. `--no-host-mods` turns it off and
+restores the strict reading of the rule above.
+
 ## Build the agent image
 
 From the repository root in WSL, prepare the usual development dependencies and images:
 
 ```bash
-make -f agent.Makefile agent-image
+hack/agent.sh image
 ```
 
 This downloads Go modules, builds the agent container image, fixes ownership on the named Go cache
@@ -54,7 +63,7 @@ module proxy.
 To build only the agent image:
 
 ```bash
-make -f agent.Makefile agent-image
+hack/agent.sh image
 ```
 
 The build passes your UID/GID into the image so files created by the container belong to your WSL
@@ -71,7 +80,7 @@ is a BuildKit cache mount, so an interrupted build resumes rather than starting 
 To fill only the Go module cache used by the container:
 
 ```bash
-make -f agent.Makefile agent-deps
+hack/agent.sh deps
 ```
 
 For host-side development without the container, use:
@@ -86,7 +95,7 @@ This mode gives the agent write access to this repository only. It is the normal
 changes after you decide the repo itself is an acceptable write boundary.
 
 ```bash
-make -f agent.Makefile agent-shell
+hack/agent.sh shell
 ```
 
 Inside the container:
@@ -97,9 +106,20 @@ make vet
 make test
 ```
 
+Or without opening a shell at all, which is what a hook or a CI step wants — `--` passes the rest
+through, and the tty is only allocated when there is one to attach to:
+
+```bash
+hack/agent.sh shell -- go test ./internal/...
+```
+
+Setup output — the image build and the volume permissions — is captured rather than printed, since
+it is noise on every run but the first. `-v` prints it, along with the exact `docker` commands. A
+step that fails prints what it captured either way.
+
 If the Go module cache is empty, `make vet` or `make test` may need dependencies that are not yet in
-the cache. Fill the cache once with `make -f agent.Makefile agent-deps`, then return to
-`make -f agent.Makefile agent-shell` for normal work.
+the cache. Fill the cache once with `hack/agent.sh deps`, then return to `hack/agent.sh shell` for
+normal work.
 
 Do not mount kubeconfigs, SSH keys, cloud credentials, or broad host directories into the cache-fill
 container.
@@ -123,8 +143,8 @@ fail a build.
 To format or lint the tree with the container's pinned versions rather than whatever the host has:
 
 ```bash
-make -f agent.Makefile agent-fmt
-make -f agent.Makefile agent-lint
+hack/agent.sh fmt
+hack/agent.sh lint
 ```
 
 ## The shell inside the container
@@ -140,7 +160,8 @@ happens on the host against the same inodes through the bind mount; [editors.md]
 reasoning.
 
 `~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
-`.bashrc` guard skips it when absent. Mount it through `AGENT_AI_MOUNTS` if a session needs one.
+`.bashrc` guard skips it when absent. Pass `--mount` if a session genuinely needs one of those
+tokens.
 
 ## Run for read-only review
 
@@ -148,7 +169,7 @@ This mode is best when you want the agent to inspect or explain the project but 
 checkout.
 
 ```bash
-make -f agent.Makefile agent-review
+hack/agent.sh review
 ```
 
 ## Running an AI CLI inside the container
@@ -164,7 +185,7 @@ Mount credential files read-only and keep the rest of the boundary unchanged:
 - prefer a read-only repo mount for review-only sessions.
 
 Claude Code is the exception, and the easier case. The image sets `CLAUDE_CONFIG_DIR` to `~/.claude`
-and `agent.Makefile` backs that directory with a named volume, so running `claude` inside the
+and `hack/agent.sh` backs that directory with a named volume, so running `claude` inside the
 container and logging in once there keeps the credential in the volume across `docker run --rm`. The
 host credential is never mounted, and revoking the container's access is
 `docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
@@ -173,17 +194,17 @@ Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files unde
 a writable coding shell by passing only the credential files you want the container to see:
 
 ```bash
-make -f agent.Makefile agent-shell-ai AGENT_AI_MOUNTS='\
-  --mount type=bind,src=$$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
-  --mount type=bind,src=$$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly'
+hack/agent.sh shell \
+  --mount type=bind,src=$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
+  --mount type=bind,src=$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly
 ```
 
-For read-only review with model credentials, use the same mount variable with `agent-review`:
+For read-only review with model credentials, pass the same flags to `review`:
 
 ```bash
-make -f agent.Makefile agent-review AGENT_AI_MOUNTS='\
-  --mount type=bind,src=$$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
-  --mount type=bind,src=$$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly'
+hack/agent.sh review \
+  --mount type=bind,src=$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
+  --mount type=bind,src=$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly
 ```
 
 Then run the agent inside that shell, for example:

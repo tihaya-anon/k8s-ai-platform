@@ -71,7 +71,7 @@ code plus a quiz plus a patch job; the code is the least important of the three.
 Development container:
 
 ```bash
-make -f agent.Makefile agent-shell
+hack/agent.sh shell
 ```
 
 ## Why this way
