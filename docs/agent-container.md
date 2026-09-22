@@ -35,7 +35,9 @@ Not allowed unless you explicitly mount it:
 - cloud credentials, SSH keys, or personal secrets.
 
 That means the agent can be given model credentials without also giving it your host filesystem,
-Docker daemon, Kubernetes clusters, or cloud accounts.
+Docker daemon, Kubernetes clusters, or cloud accounts. Within those limits the agent runs
+unattended, with its own permission prompts turned off -- see
+[Why the agents run unattended](#why-the-agents-run-unattended).
 
 The exception is `$GOMODCACHE/cache/download`, mounted read-only. That directory is already laid out
 as a module proxy, so `hack/agent.sh` puts it at the front of `GOPROXY` as `file:///hostproxy`
@@ -216,6 +218,47 @@ pi
 # or
 codex
 ```
+
+## Why the agents run unattended
+
+`claude` and `codex` in this image are wrapper scripts in `hack/agent-bin/`, copied to
+`/usr/local/libexec/agent-bin` and put ahead of npm's `/usr/local/bin` on `PATH`. They exec the real
+binary with its interactive gate removed -- `--dangerously-skip-permissions` for Claude Code,
+`--dangerously-bypass-approvals-and-sandbox` for Codex -- so an agent works to completion instead of
+stopping on every write and every shell command.
+
+That is the point of the container. The boundary is the one described under [Boundary](#boundary):
+`--cap-drop ALL`, `--security-opt no-new-privileges`, no Docker socket, no kubeconfig, no host home,
+and the only writable host path is this checkout. Everything the agent could reach by answering a
+prompt with "yes", it can reach anyway; the prompt is a question whose answer is already fixed, and
+the honest place to have refused was `docker run`. Withdrawing the trust is `docker rm` and
+`docker volume rm k8s-ai-claude`, not an audit of what got approved at 02:00.
+
+The consequence, stated plainly: **an agent in this container can destroy the checkout.** It is a
+bind mount of your working tree, not a copy. Commit or push before a long unattended run, and use
+`hack/agent.sh review` -- where the checkout is mounted `:ro` -- for anything that only needs to
+read. `pi` is left alone; it has no equivalent global flag here.
+
+It is a launch flag rather than configuration, on both sides, and deliberately:
+
+- Claude Code's `permissions.defaultMode` would live in `settings.json` inside the `k8s-ai-claude`
+  volume, which outlives any one container and travels with the credential.
+- Codex's `approval_policy` and `sandbox_mode` would live in `~/.codex/config.toml`, the directory
+  sessions bind-mount `auth.json` into from the host.
+
+Either would quietly widen something outside the container's lifetime. A flag is scoped to the
+process that was launched.
+
+To get the prompts back for one session, set `AGENT_BYPASS=0`:
+
+```bash
+AGENT_BYPASS=0 claude
+```
+
+The wrappers also stand aside on their own when the invocation already decides the question --
+`claude --permission-mode plan`, `codex --sandbox read-only` -- and when the subcommand does not
+take the flag at all, such as `claude mcp list` or `codex login`. They are root-owned and `0755`, so
+the agent user cannot edit its own launcher.
 
 Model usage is controlled by the credentials/account you mount. The repo/container boundary only
 prevents the agent's shell commands from reaching host secrets or cloud credentials you did not

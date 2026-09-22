@@ -184,8 +184,14 @@ RUN set -eu; \
 # LANG is unset in a container, and an unset LANG means the C locale: ble.sh warns about it, and
 # anything that draws a box or a glyph -- starship's prompt, Neovim's UI -- degrades to ASCII.
 # C.UTF-8 is built into glibc, so this needs no locales package.
+#
+# PATH puts /usr/local/libexec/agent-bin ahead of npm's /usr/local/bin so the wrappers copied in
+# below shadow `claude` and `codex`. Set here, in the image, rather than in .bashrc: a session is
+# also started non-interactively -- `hack/agent.sh shell -- claude -p ...` from a hook or CI reads
+# no rc file -- and the two must not disagree about which binary runs.
 ENV CLAUDE_CONFIG_DIR=/home/agent/.claude \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    PATH=/usr/local/libexec/agent-bin:${PATH}
 
 RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
     && useradd \
@@ -213,6 +219,13 @@ COPY --chown=${USER_UID}:${USER_GID} hack/agent-home/ /home/agent/
 # workspace is known to be present at all.
 COPY hack/agent-entrypoint.sh /usr/local/bin/agent-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-entrypoint
+
+# The agent CLIs' own permission prompts are turned off by these wrappers, because the container
+# is already the boundary -- see docs/agent-container.md. Baked in, not mounted: the read-only
+# targets mount only the workspace, and an agent whose launcher disappears under --read-only is
+# not usable. Root-owned and 0755, so the agent user cannot edit its own leash.
+COPY hack/agent-bin/ /usr/local/libexec/agent-bin/
+RUN chmod 0755 /usr/local/libexec/agent-bin/*
 
 USER ${USERNAME}
 WORKDIR /workspace/k8s-ai-platform

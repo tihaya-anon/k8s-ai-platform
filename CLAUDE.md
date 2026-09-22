@@ -101,6 +101,7 @@ PROJECT               kubebuilder's registry of scaffolded kinds
 hack/set-up-cluster.sh  kind + cert-manager + KServe + Kueue, pinned and idempotent
 hack/format.sh        the one formatter entry point, shared by both hooks
 hack/agent.sh         development container: build it, and run work inside it
+hack/agent-bin/       PATH shims that launch claude and codex with their prompts bypassed
 hack/git-hooks/       pre-commit; enable with `git config core.hooksPath hack/git-hooks`
 hack/boilerplate.go.txt  licence header controller-gen stamps on generated files
 hack/agent-home/      shell config for host and container; the nvim config is host-only
