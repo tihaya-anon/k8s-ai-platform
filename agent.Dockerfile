@@ -109,15 +109,72 @@ ARG NPM_REGISTRY=https://registry.npmjs.org
 # claude-code ship their real binaries as per-platform optionalDependencies -- around 570MB
 # unpacked between them -- and without a cache every interrupted build starts the download again.
 # Cache mounts live outside the image, so the layer's size is unchanged.
-RUN --mount=type=cache,target=/root/.npm \
+# One `npm install -g` per CLI, not one command listing five packages, and that is the whole
+# reason this block looks repetitive. npm drops the per-platform optionalDependencies of codex and
+# claude-code when several roots are installed in a single global command: it creates
+# node_modules/@anthropic-ai/ and leaves it empty, the postinstall then finds no binary to copy,
+# and both CLIs ship as stubs that fail on first use. Installed one at a time, the same versions
+# and the same registry resolve correctly. Verified in this image, not assumed.
+#
+# codex needs one more step than that. Its binary is an *aliased* optionalDependency
+# (@openai/codex-linux-x64 -> npm:@openai/codex@<version>-linux-x64), and npm installs no aliased
+# optional dependency at all under -g -- claude-code's plain scoped one installs fine, which is how
+# the two were told apart. So the alias is installed explicitly, by the name codex resolves:
+# bin/codex.js calls require.resolve("@openai/codex-<arch>/package.json"), and the module walk
+# reaches /usr/local/lib/node_modules, so a global install of that name is found.
+#
+# --include=optional is npm's default, and is written out anyway: it is what pulls those binaries,
+# and a default this load-bearing should be visible in the file rather than inherited.
+#
+# --allow-scripts is not optional either. npm 11.19 -- the version in node:24-bookworm -- stopped
+# running dependency install scripts unless the package is named, and because strict-allow-scripts
+# defaults to false it *warns and continues* rather than failing. Claude Code copies its native
+# binary into place from its own postinstall, so without this the build succeeds and the image
+# ships a stub. The list is exactly one package: codex's binary arrives as an aliased
+# optionalDependency rather than a script, and pi runs fine with esbuild's and protobufjs's
+# scripts skipped. Install scripts are arbitrary code from the registry, so it stays that short.
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) codex_arch=linux-x64 ;; \
+      arm64) codex_arch=linux-arm64 ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    npm install -g --include=optional --registry="${NPM_REGISTRY}" \
+        --allow-scripts=@anthropic-ai/claude-code \
+        "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; \
+    npm install -g --include=optional --registry="${NPM_REGISTRY}" \
+        "@openai/codex@${CODEX_VERSION}"; \
     npm install -g --registry="${NPM_REGISTRY}" \
-        "@earendil-works/pi-coding-agent@${PI_VERSION}" \
-        "@openai/codex@${CODEX_VERSION}" \
-        "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
+        "@openai/codex-${codex_arch}@npm:@openai/codex@${CODEX_VERSION}-${codex_arch}"; \
+    npm install -g --include=optional --registry="${NPM_REGISTRY}" \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
+    npm install -g --registry="${NPM_REGISTRY}" \
         "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
         "prettier@${PRETTIER_VERSION}"
 # No `npm cache clean` any more: the cache is a build mount, so it never reached the image, and
 # cleaning it would only throw away what makes the next build fast.
+
+# Both mechanisms above fail quietly: a skipped install script is a warning, and npm counts a failed
+# optionalDependency as success. Either one yields an image that builds clean, passes every layer,
+# and then tells whoever types `claude` that its native binary is missing. This image exists to run
+# these three CLIs, so it must not be allowed to build without them.
+#
+# The gate runs each CLI rather than checking for a directory: it is the same code path the user
+# takes, and it also catches a binary that unpacked but will not execute. It is deliberately the
+# layer right after the install, so the failure lands next to its cause.
+RUN set -eu; \
+    for cli in claude codex pi; do \
+      if ! "$cli" --version; then \
+        echo >&2; \
+        echo "agent.Dockerfile: '$cli --version' failed, so the install above did not produce a" >&2; \
+        echo "  working CLI. Two known causes, both silent:" >&2; \
+        echo "    - its postinstall was skipped; add it to --allow-scripts on the npm install" >&2; \
+        echo "    - its per-platform optionalDependency was dropped; keep one npm install -g" >&2; \
+        echo "      per CLI, since npm discards them when several roots share one command" >&2; \
+        echo "    - NPM_REGISTRY=${NPM_REGISTRY} does not serve it; try registry.npmjs.org" >&2; \
+        exit 1; \
+      fi; \
+    done
 
 # CLAUDE_CONFIG_DIR is set explicitly so every piece of Claude Code state -- credentials, session
 # history, installed skills and its config file -- lands under one directory, which hack/agent.sh
