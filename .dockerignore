@@ -16,5 +16,10 @@
 !hack/agent-entrypoint.sh
 !hack/agent-home/**
 
+# The Neovim configuration is versioned here for the host, not for the image: the container's
+# nvim is $EDITOR, not an IDE. Keeping it out of the build context also keeps a plugin-lock churn
+# from invalidating image layers.
+hack/agent-home/.config/nvim/
+
 # Upstream reference checkouts; not part of the build context.
 deps/

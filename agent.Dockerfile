@@ -22,18 +22,10 @@ ARG STARSHIP_VERSION=1.25.0
 # ble.sh cuts tagged releases rarely; the host runs 0.4.0-devel4+b99cadb, which upstream ships as
 # a dated nightly asset. Pinning the asset, not "nightly", keeps the build reproducible.
 ARG BLESH_NIGHTLY=20260310+b99cadb
-ARG GOPLS_VERSION=v0.23.0
-ARG GOFUMPT_VERSION=v0.12.0
-ARG GOIMPORTS_VERSION=v0.50.0
 
 # Every download below comes from GitHub releases. Point this at a mirror when the build network
 # cannot reach github.com directly, e.g. --build-arg GITHUB_MIRROR=https://ghproxy.net/https://github.com
 ARG GITHUB_MIRROR=https://github.com
-
-# Module proxy for the build-time `go install` below. The run targets already pass the host's
-# `go env GOPROXY`; the build needs it too, or it reaches for proxy.golang.org on a network that
-# may not have it.
-ARG GO_PROXY=https://proxy.golang.org,direct
 
 # Configurable package mirror; override for whatever network the image is built on, e.g.
 #   docker build --build-arg APT_MIRROR=deb.debian.org -f Dockerfile.agent .
@@ -72,9 +64,15 @@ RUN ln -sf "$(command -v fdfind)" /usr/local/bin/fd
 
 COPY --from=node /usr/local/ /usr/local/
 
-# Neovim, starship and ble.sh, installed from upstream release tarballs rather than apt: Debian
-# stable carries a Neovim far older than LazyVim supports, and neither starship nor ble.sh is
-# packaged at all. TARGETARCH comes from BuildKit and is the only architecture switch in the image.
+# Neovim, starship and ble.sh, from upstream release tarballs rather than apt: Debian stable's
+# Neovim is ancient and neither starship nor ble.sh is packaged at all.
+#
+# Neovim here is $EDITOR, not an IDE. `git commit` without -m, `git rebase -i` and an agent
+# shelling out all need an editor to exist; editing this repository happens on the host, against
+# the same inodes through the bind mount. The IDE configuration and its language servers were
+# removed for that reason -- see docs/editors.md.
+#
+# TARGETARCH comes from BuildKit and is the only architecture switch in the image.
 ARG TARGETARCH
 RUN set -eu; \
     case "${TARGETARCH:-amd64}" in \
@@ -98,33 +96,12 @@ RUN set -eu; \
     nvim --version | head -1; \
     starship --version | head -1
 
-# gopls, gofumpt and goimports are installed into the image rather than left to Mason, so the
-# editor is useful on first launch and without a second package manager fetching over the network.
-# lua/plugins/go.lua already prefers a $GOPATH/bin gopls over Mason's copy.
-# One `go install` per tool: the command refuses a list whose arguments come from different
-# modules or versions, and these are three modules at three versions.
-#
-# GOTOOLCHAIN=auto is scoped to this layer and nowhere else. All three tools now declare
-# `go 1.26.0`, and the base image is deliberately Go 1.25 -- the toolchain this repository builds
-# with -- so `local` cannot compile them. The alternative is pinning three tools back to their last
-# 1.25-compatible releases, which diverges from the host in three places to save a download that is
-# deleted before the layer is committed: the fetched toolchain unpacks into ${GOPATH}/pkg/mod and
-# the rm below takes it with the rest of the module cache. Nothing in the finished image can reach
-# for another toolchain, and the product build still uses the base image's Go.
-RUN set -eu; \
-    export GOBIN=/usr/local/bin GOFLAGS=-mod=mod GOPROXY="${GO_PROXY}" GOTOOLCHAIN=auto; \
-    go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"; \
-    go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"; \
-    go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; \
-    rm -rf /root/.cache/go-build "${GOPATH}/pkg/mod" "${GOCACHE}"
-
 # Declared here rather than with the version pins at the top of the file, and deliberately. Docker
-# invalidates every layer after a changed instruction, so a pin that lives above the Neovim download
-# and the `go install` costs a full rebuild of both every time it moves. The npm layer is no bargain
-# either, but it is the cheaper of the three.
+# invalidates every layer after a changed instruction, so a pin that lives above the Neovim
+# download costs a rebuild of it every time this one moves.
 ARG CLAUDE_VERSION=2.1.278
 
-# The third package mirror, for the same reason as APT_MIRROR and GO_PROXY: the agent CLIs are the
+# The second package mirror, for the same reason as APT_MIRROR: the agent CLIs are by far the
 # largest downloads in the image and the default registry is the slow path on some networks.
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
@@ -167,9 +144,6 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         /home/agent/.pi/agent \
         /home/agent/.codex \
         /home/agent/.claude \
-        /home/agent/.local/share/nvim \
-        /home/agent/.local/state/nvim \
-        /home/agent/.cache/nvim \
     && chown -R "${USERNAME}:${USERNAME}" /workspace /home/agent
 
 # Shell and editor configuration, tracked in hack/agent-home/ so the container's environment is

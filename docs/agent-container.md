@@ -127,26 +127,20 @@ make -f agent.Makefile agent-fmt
 make -f agent.Makefile agent-lint
 ```
 
-## The editor inside the container
+## The shell inside the container
 
-The container is meant to be lived in, not only shelled into, so it gets the same shell and editor
-the host runs: bash with ble.sh, starship and the usual git/docker/kubectl aliases, and Neovim with
-the LazyVim configuration. All of it is vendored at `hack/agent-home/`, baked into the image so it
-works standalone, and bind-mounted over that copy by the run targets so a change on the host takes
-effect in the next shell without a rebuild.
+The container is meant to be lived in, not only shelled into, so it gets the shell the host runs:
+bash with ble.sh, starship and the usual git/docker/kubectl aliases, vendored at `hack/agent-home/`,
+baked into the image so it works standalone and bind-mounted read-only over that copy by the run
+targets so a change on the host takes effect in the next shell without a rebuild.
+
+It does not get an IDE. Neovim is installed as `$EDITOR` — `git commit` without `-m` and
+`git rebase -i` need one — but without the LazyVim configuration or any language server. Editing
+happens on the host against the same inodes through the bind mount; [editors.md](editors.md) has the
+reasoning.
 
 `~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
 `.bashrc` guard skips it when absent. Mount it through `AGENT_AI_MOUNTS` if a session needs one.
-
-Populate the Neovim plugin volumes once before the first session:
-
-```bash
-make -f agent.Makefile agent-nvim
-```
-
-Configuration is baked into the image; plugins, Treesitter parsers and Mason downloads live in named
-volumes and survive `--rm`. The full picture, including the version pins and what differs from the
-host config, is in [editors.md](editors.md).
 
 ## Run for read-only review
 
