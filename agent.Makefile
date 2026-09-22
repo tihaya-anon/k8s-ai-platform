@@ -11,6 +11,7 @@ AGENT_IMAGE    ?= k8s-ai-platform-agent
 AGENT_NAME     ?= k8s-ai-agent
 AGENT_AI_MOUNTS ?=
 GO_PROXY       ?= $(shell go env GOPROXY 2>/dev/null || printf direct)
+NPM_REGISTRY   ?= $(shell npm config get registry 2>/dev/null || printf https://registry.npmjs.org)
 
 # Neovim's plugins, Treesitter parsers and Mason downloads are large, fetched from the network, and
 # rebuilt from scratch by every `docker run --rm`. They live in named volumes for the same reason
@@ -37,6 +38,7 @@ agent-image: ## build the AI agent development container
 		--build-arg USER_UID=$$(id -u) \
 		--build-arg USER_GID=$$(id -g) \
 		--build-arg GO_PROXY="$(GO_PROXY)" \
+		--build-arg NPM_REGISTRY="$(NPM_REGISTRY)" \
 		-t $(AGENT_IMAGE) .
 
 .PHONY: agent-cache

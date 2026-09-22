@@ -120,23 +120,38 @@ RUN set -eu; \
 
 # Declared here rather than with the version pins at the top of the file, and deliberately. Docker
 # invalidates every layer after a changed instruction, so a pin that lives above the Neovim download
-# and the `go install` costs a full rebuild of both every time it moves. The npm layer is cheap; the
-# two above it are not.
+# and the `go install` costs a full rebuild of both every time it moves. The npm layer is no bargain
+# either, but it is the cheaper of the three.
 ARG CLAUDE_VERSION=2.1.278
+
+# The third package mirror, for the same reason as APT_MIRROR and GO_PROXY: the agent CLIs are the
+# largest downloads in the image and the default registry is the slow path on some networks.
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
+# The cache mount is not an optimisation here, it is what makes a retry survivable. codex and
+# claude-code ship their real binaries as per-platform optionalDependencies -- around 570MB
+# unpacked between them -- and without a cache every interrupted build starts the download again.
+# Cache mounts live outside the image, so the layer's size is unchanged.
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g --registry="${NPM_REGISTRY}" \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}" \
+        "@openai/codex@${CODEX_VERSION}" \
+        "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
+        "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
+        "prettier@${PRETTIER_VERSION}"
+# No `npm cache clean` any more: the cache is a build mount, so it never reached the image, and
+# cleaning it would only throw away what makes the next build fast.
 
 # CLAUDE_CONFIG_DIR is set explicitly so every piece of Claude Code state -- credentials, session
 # history, installed skills and its config file -- lands under one directory, which agent.Makefile
 # backs with a single named volume. Left to the default, the config file sits beside the directory
 # at $HOME and is lost on every `docker run --rm`.
-ENV CLAUDE_CONFIG_DIR=/home/agent/.claude
-
-RUN npm install -g \
-        "@earendil-works/pi-coding-agent@${PI_VERSION}" \
-        "@openai/codex@${CODEX_VERSION}" \
-        "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
-        "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
-        "prettier@${PRETTIER_VERSION}" \
-    && npm cache clean --force
+#
+# LANG is unset in a container, and an unset LANG means the C locale: ble.sh warns about it, and
+# anything that draws a box or a glyph -- starship's prompt, Neovim's UI -- degrades to ASCII.
+# C.UTF-8 is built into glibc, so this needs no locales package.
+ENV CLAUDE_CONFIG_DIR=/home/agent/.claude \
+    LANG=C.UTF-8
 
 RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
     && useradd \

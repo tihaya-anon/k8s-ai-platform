@@ -58,7 +58,15 @@ make -f agent.Makefile agent-image
 ```
 
 The build passes your UID/GID into the image so files created by the container belong to your WSL
-user.
+user. It also passes the host's `go env GOPROXY` and `npm config get registry` through, so the build
+uses whatever mirrors the host already trusts; `APT_MIRROR` and `GITHUB_MIRROR` are build args on
+the same footing.
+
+Expect around 3GB and a slow first build. `codex` and `claude-code` are thin npm wrappers around
+per-platform native binaries pulled in as optional dependencies -- roughly 570MB unpacked between
+them -- and that is the bulk of both the image and the build time. Keeping all three agent CLIs is
+deliberate: the image is a general-purpose agent sandbox, not a Claude-specific one. The npm cache
+is a BuildKit cache mount, so an interrupted build resumes rather than starting the download again.
 
 To fill only the Go module cache used by the container:
 

@@ -12,6 +12,11 @@ case $- in
 *) return ;;
 esac
 
+# Docker sets no $USER, and ble.sh treats that as an insane environment and patches it loudly on
+# every start. Derived here rather than baked in as an ENV, because the image is also entered with
+# `--user root` and a hardcoded USER would then be a lie. LANG comes from the image.
+export USER="${USER:-$(id -un)}"
+
 [[ -r /usr/share/blesh/ble.sh ]] && source /usr/share/blesh/ble.sh --noattach
 
 HISTCONTROL=ignoreboth
