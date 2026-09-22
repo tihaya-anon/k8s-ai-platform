@@ -129,10 +129,14 @@ make -f agent.Makefile agent-lint
 
 ## The editor inside the container
 
-The container is meant to be lived in, not only shelled into, so the image carries the same shell
-and editor the host runs: bash with ble.sh and starship, and Neovim with the LazyVim configuration
-vendored at `hack/agent-home/`. `EDITOR` is `nvim` and `amake` is an alias for the
-`make -f agent.Makefile` that is easy to forget from inside.
+The container is meant to be lived in, not only shelled into, so it gets the same shell and editor
+the host runs: bash with ble.sh, starship and the usual git/docker/kubectl aliases, and Neovim with
+the LazyVim configuration. All of it is vendored at `hack/agent-home/`, baked into the image so it
+works standalone, and bind-mounted over that copy by the run targets so a change on the host takes
+effect in the next shell without a rebuild.
+
+`~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
+`.bashrc` guard skips it when absent. Mount it through `AGENT_AI_MOUNTS` if a session needs one.
 
 Populate the Neovim plugin volumes once before the first session:
 

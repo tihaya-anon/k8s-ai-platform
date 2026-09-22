@@ -22,6 +22,30 @@ NVIM_VOLUMES = \
 	-v k8s-ai-nvim-state:/home/agent/.local/state/nvim \
 	-v k8s-ai-nvim-cache:/home/agent/.cache/nvim
 
+# The shell and editor configuration, mounted from the repository rather than read from the copy
+# baked into the image. The image keeps that copy so it still works standalone, but a mount means
+# editing hack/agent-home/ on the host takes effect in the next shell without a rebuild, and there
+# is one source of truth for both sides.
+#
+# Read-only, except the Neovim directory: lazy.nvim rewrites lazy-lock.json when plugins are
+# updated, and that belongs back in the repository as a diff to review. ~/.bash_env is absent on
+# purpose -- it holds real tokens on the host and the .bashrc guard skips it here.
+HOME_MOUNTS = \
+	-v "$(CURDIR)/hack/agent-home/.bashrc:/home/agent/.bashrc:ro" \
+	-v "$(CURDIR)/hack/agent-home/.bash_aliases:/home/agent/.bash_aliases:ro" \
+	-v "$(CURDIR)/hack/agent-home/.blerc:/home/agent/.blerc:ro" \
+	-v "$(CURDIR)/hack/agent-home/.config/starship.toml:/home/agent/.config/starship.toml:ro" \
+	-v "$(CURDIR)/hack/agent-home/.config/nvim:/home/agent/.config/nvim"
+
+# The review shell takes the same set with Neovim's configuration read-only too, to match the
+# read-only workspace: a session that cannot change the code should not change its own editor.
+HOME_MOUNTS_RO = \
+	-v "$(CURDIR)/hack/agent-home/.bashrc:/home/agent/.bashrc:ro" \
+	-v "$(CURDIR)/hack/agent-home/.bash_aliases:/home/agent/.bash_aliases:ro" \
+	-v "$(CURDIR)/hack/agent-home/.blerc:/home/agent/.blerc:ro" \
+	-v "$(CURDIR)/hack/agent-home/.config/starship.toml:/home/agent/.config/starship.toml:ro" \
+	-v "$(CURDIR)/hack/agent-home/.config/nvim:/home/agent/.config/nvim:ro"
+
 # Claude Code keeps its credentials, session history and installed skills under ~/.claude. A named
 # volume means `claude /login` inside the container survives `docker run --rm`, so the host's
 # credentials never have to be mounted in at all.
@@ -107,6 +131,7 @@ agent-shell: agent-cache ## open a repo-scoped development shell in the agent co
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
 		$(CLAUDE_VOLUME) \
+		$(HOME_MOUNTS) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)
@@ -124,6 +149,7 @@ agent-review: agent-cache ## open a readonly repo-scoped shell in the agent cont
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
 		$(CLAUDE_VOLUME) \
+		$(HOME_MOUNTS_RO) \
 		$(AGENT_AI_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE)
@@ -138,6 +164,7 @@ agent-nvim: agent-cache ## populate the Neovim plugin volume from lazy-lock.json
 		-v k8s-ai-go-pkg:/home/agent/go/pkg \
 		-v k8s-ai-go-build:/home/agent/.cache/go-build \
 		$(NVIM_VOLUMES) \
+		$(HOME_MOUNTS) \
 		-w /workspace/k8s-ai-platform \
 		$(AGENT_IMAGE) \
 		nvim --headless "+Lazy! restore" "+TSUpdateSync" +qa

@@ -1,0 +1,99 @@
+alias python='python3'
+alias bcat='batcat'
+alias c='clear'
+alias src='source'
+
+# Filesystem navigation
+alias l.='ls -d .* --color=auto'
+alias ..='cd ..'
+
+# Editors
+alias nv=nvim
+alias vi=nvim
+alias svi='sudo vi'
+
+# Network
+alias ping='ping -c 5'
+alias fastping='ping -c 100 -i 0.2'
+
+# Git
+alias g='git'
+alias gi='git init'
+alias gb='git branch'
+alias ga='git add'
+alias gamd='git commit --amend --no-edit'
+alias gcm='git commit -m'
+alias gco='git checkout'
+alias gs='git status'
+alias gp='git push'
+alias gP='git pull'
+alias gf='git fetch'
+alias grb='git rebase'
+
+gr() {
+  if [ "$#" -eq 0 ]; then
+    git remote -v
+  else
+    git remote "$@"
+  fi
+}
+alias gcp='git cherry-pick'
+alias gst='git stash'
+# Show the five most recent commits unless a count is supplied.
+glg() {
+  if [ "$#" -eq 0 ]; then
+    git log --oneline -n 5
+  else
+    git log --oneline -n "$@"
+  fi
+}
+# Create merge commits without opening an editor, except when explicitly requested.
+gmg() {
+  local arg
+
+  for arg in "$@"; do
+    if [ "$arg" = '-e' ]; then
+      git merge "$@"
+      return
+    fi
+  done
+
+  git merge --no-edit "$@"
+}
+
+# Docker
+alias d='docker'
+alias dc='docker compose'
+alias dps='docker ps'
+alias di='docker image'
+alias dr='docker run'
+alias drm='docker rm'
+alias dpss='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias lzd='lazydocker'
+
+# Kubernetes
+k() {
+  if [ -n "${KUBECTL_NAMESPACE:-}" ]; then
+    kubectl --namespace="$KUBECTL_NAMESPACE" "$@"
+  else
+    kubectl "$@"
+  fi
+}
+alias ka='k apply'
+alias kd='k describe'
+alias kdel='k delete'
+alias kg='k get'
+alias kga='k get all'
+alias kgp='k get pods'
+alias kgd='k get deployments'
+alias kgs='k get services'
+alias kgn='k get nodes'
+alias kl='k logs'
+alias kex='k exec -it'
+alias kfwd='sudo -E kubefwd svc'
+alias kctx='k config current-context'
+alias k9='k9s'
+
+# Infrastructure
+alias tf='terraform'
+alias tg='terragrunt'

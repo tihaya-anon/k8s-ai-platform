@@ -13,10 +13,11 @@ There is deliberately no dev container. See
 ```text
 .zed/settings.json               formatters, gopls, the 100-column ruler, scan exclusions
 .zed/tasks.json                  the make targets, bound to the task runner
-hack/agent-home/.bashrc          the container's interactive shell: ble.sh, starship, aliases
+hack/agent-home/.bashrc          interactive bash for the host and the container alike
+hack/agent-home/.bash_aliases    the git, docker and kubectl shortcuts
 hack/agent-home/.blerc           ble.sh in vi mode
 hack/agent-home/.config/starship.toml   the prompt
-hack/agent-home/.config/nvim/    LazyVim configuration, copied into the image
+hack/agent-home/.config/nvim/    LazyVim configuration
 ```
 
 `.zed/` and `hack/agent-home/` are checked in deliberately. `.vscode/` and `.idea/` stay gitignored
@@ -52,10 +53,15 @@ the task list just saves typing them.
 ## Neovim, in the agent container
 
 `make -f agent.Makefile agent-shell` drops you into a bash shell with ble.sh, starship and Neovim,
-and that shell is the IDE. The configuration is the LazyVim setup from the host, vendored into
-`hack/agent-home/` and copied into the image at build time — copied rather than mounted, because the
-read-only targets mount only the workspace and a shell that loses its prompt and its editor under
-`--read-only` is not usable.
+and that shell is the IDE. The configuration lives in `hack/agent-home/` and reaches the container
+twice over: copied into the image at build time, so the image works standalone and a `--read-only`
+session still has its prompt and its editor, and then bind-mounted over that copy by the run
+targets, so editing a file in `hack/agent-home/` takes effect in the next shell without a rebuild.
+
+The mounts are read-only except `.config/nvim`, which is writable in `agent-shell` because lazy.nvim
+rewrites `lazy-lock.json` when plugins are updated and that belongs back in the repository as a diff
+to review. `agent-review` takes the editor read-only too: a session that cannot change the code
+should not change its own editor.
 
 The image pins the versions the host runs, so a session inside the container behaves like a session
 outside it:
@@ -99,17 +105,40 @@ make -f agent.Makefile agent-nvim-reset
 `gopls`, `gofumpt` and `goimports` are already on `PATH` in the image, and `lua/plugins/go.lua`
 prefers a `PATH` gopls over Mason's copy, so Go LSP works before any Mason download happens.
 
-### What differs from the host config
+### One config, two places
 
-One change, in `lua/config/options.lua`: the WSL clipboard provider is guarded on `clip.exe` being
-executable. In WSL it behaves exactly as before; in the container, where the Windows binaries do not
-exist, an unguarded provider makes every yank fail with a shell error.
+`hack/agent-home/.bashrc` is written to work unchanged on the WSL host and in the container. That is
+possible because almost everything in it is already behind an existence guard — nvm, sdkman, cargo,
+brew, zoxide and lesspipe simply do not fire in the container — so no branch on the environment is
+needed. Three things did need attention:
 
-`lua/config/system_theme.lua` needs no guard — it already probes for WSL and returns nothing when
-the probe fails.
+- ble.sh installs to `~/.local/share/blesh` on the host and `/usr/share/blesh` in the image, so the
+  file probes both. It is sourced with `--noattach` and attached on the last line, after starship
+  has installed its prompt; attaching first and letting starship rewrite the prompt is the usual way
+  those two end up fighting over the cursor.
+- `$USER` is unset in a container and ble.sh treats that as an insane environment, so the file
+  derives it. Not an image `ENV`, because `agent-cache` enters as root and a baked value would lie.
+- `EDITOR` and `VISUAL` come from `~/.bash_env` on the host, which is not vendored, so the file
+  supplies them with `:-` and leaves the host's value alone.
 
-The vendored tree is a copy, not a symlink, so it and `~/.config/nvim` drift independently. Copy in
-the direction you mean when you change one.
+In `lua/config/options.lua`, the WSL clipboard provider is guarded on `clip.exe` being executable.
+In WSL it behaves exactly as before; in the container, where the Windows binaries do not exist, an
+unguarded provider makes every yank fail with a shell error. `lua/config/system_theme.lua` needs no
+guard — it already probes for WSL and returns nothing when the probe fails.
+
+### What is deliberately not vendored
+
+- `~/.bash_env` holds real API tokens. It must never reach a git repository, and the `.bashrc` guard
+  skips it when absent, which is the container case. Mount it explicitly with `AGENT_AI_MOUNTS` if a
+  session genuinely needs one of those tokens.
+- `~/.profile` is read by login shells only, and the container's are not login shells.
+- `~/.gitconfig` names an identity and a `gh` credential helper that the image does not have. Git
+  identity for commits made in the container comes from the mounted checkout's own `.git/config`.
+- `~/.tmux.conf`, because tmux is not installed in the image.
+
+The host's own dotfiles are still the originals; `hack/agent-home/` holds copies, so the two drift
+independently. Point `~/.bashrc` and `~/.config/nvim` at the repository copies if you would rather
+have one source of truth for both.
 
 ## Why there is no `.devcontainer`
 
