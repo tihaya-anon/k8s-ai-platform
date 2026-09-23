@@ -30,6 +30,7 @@ Allowed in the review shell:
 Not allowed unless you explicitly mount it:
 
 - host filesystem access outside this checkout, with one exception below;
+- model-provider credentials, which `--creds` mounts read-only only when you ask for it;
 - host Docker socket access;
 - kubeconfig access;
 - cloud credentials, SSH keys, or personal secrets.
@@ -192,21 +193,39 @@ container and logging in once there keeps the credential in the volume across `d
 host credential is never mounted, and revoking the container's access is
 `docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
 
-Pi stores credentials in `~/.pi/agent/auth.json`. Codex commonly uses files under `~/.codex/`. Start
-a writable coding shell by passing only the credential files you want the container to see:
+Pi stores its credential in `~/.pi/agent/auth.json` and Codex in `~/.codex/auth.json`
+(`$CODEX_HOME/auth.json` when that is set). `--creds` mounts whichever of them this host has,
+read-only, and nothing at all without it:
+
+```bash
+hack/agent.sh shell --creds
+```
+
+It prints what it handed over, because giving a container a host secret is the one thing this script
+does that belongs in the scrollback whether or not anyone asked for `-v`:
+
+```text
+agent.sh: mounting pi credential, read-only: /home/you/.pi/agent/auth.json
+agent.sh: mounting codex credential, read-only: /home/you/.codex/auth.json
+```
+
+Name the ones you want to narrow it further, and the same flag works on `review`:
+
+```bash
+hack/agent.sh review --creds codex
+```
+
+The two halves behave differently on purpose. A credential named explicitly must exist, because
+`--creds codex` quietly opening a shell without it is the failure worth an error message; one that
+is simply absent under a bare `--creds` is skipped. Both are read-only without exception -- the
+container has no business rewriting a token the host owns, and a refresh written inside it would die
+with `--rm` anyway.
+
+`--mount` remains for anything `--creds` does not know about:
 
 ```bash
 hack/agent.sh shell \
-  --mount type=bind,src=$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
-  --mount type=bind,src=$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly
-```
-
-For read-only review with model credentials, pass the same flags to `review`:
-
-```bash
-hack/agent.sh review \
-  --mount type=bind,src=$HOME/.pi/agent/auth.json,dst=/home/agent/.pi/agent/auth.json,readonly \
-  --mount type=bind,src=$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly
+  --mount type=bind,src=$HOME/.config/x/token,dst=/home/agent/.config/x/token,readonly
 ```
 
 Then run the agent inside that shell, for example:

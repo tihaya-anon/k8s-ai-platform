@@ -6,7 +6,7 @@
 # string variables -- so the flags could not be shared by a function, arguments were not
 # expressible, and every `$` had to be written `$$`. A script says the same thing once.
 #
-# Usage: hack/agent.sh [-v] <command> [--mount SPEC ...] [-- COMMAND ...]
+# Usage: hack/agent.sh [-v] <command> [--creds [LIST]] [--mount SPEC ...] [-- COMMAND ...]
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,6 +41,18 @@ home_mounts=(
   -v "$repo_root/hack/agent-home/.config/starship.toml:/home/agent/.config/starship.toml:ro"
 )
 
+# The credential files the agent CLIs read, as name:host:container. Opt-in through --creds and
+# never mounted otherwise, because "no host secrets unless you asked for one" is the property the
+# container is for -- see docs/agent-container.md.
+#
+# Claude Code is deliberately absent: one `claude /login` inside the container puts its credential
+# in the k8s-ai-claude volume, so there is nothing on the host to mount and nothing to revoke
+# beyond the volume. CODEX_HOME is honoured because codex documents it; pi has no equivalent.
+credentials=(
+  "pi:${HOME}/.pi/agent/auth.json:/home/agent/.pi/agent/auth.json"
+  "codex:${CODEX_HOME:-$HOME/.codex}/auth.json:/home/agent/.codex/auth.json"
+)
+
 sandbox=(--cap-drop ALL --security-opt no-new-privileges)
 
 # Setup output -- the image build and the volume chown -- is captured rather than printed, because
@@ -63,6 +75,10 @@ use_host_mods=1
 # Filled by --mount, for the credential files a session is explicitly given. Kept as a flag rather
 # than an environment variable so the boundary is visible in the command that opened the shell.
 extra_mounts=()
+# Filled by --creds, from the registry above. Same reasoning, one flag shorter to type.
+cred_mounts=()
+creds=0
+creds_select=
 # Filled by everything after --, to run one command instead of an interactive shell.
 command_override=()
 
@@ -123,6 +139,22 @@ parse_options() {
       extra_mounts+=(--mount "${1#--mount=}")
       shift
       ;;
+    --creds)
+      creds=1
+      # The value is optional. Every non-option word here would otherwise be rejected as an
+      # unexpected argument, so a bare word following --creds can only be its selection.
+      if [[ -n ${2:-} && ${2:-} != -* ]]; then
+        creds_select=$2
+        shift 2
+      else
+        shift
+      fi
+      ;;
+    --creds=*)
+      creds=1
+      creds_select=${1#--creds=}
+      shift
+      ;;
     --)
       shift
       command_override=("$@")
@@ -131,6 +163,48 @@ parse_options() {
     -*) die "unknown option: $1 (see hack/agent.sh help)" ;;
     *) die "unexpected argument: $1 (pass a command after --)" ;;
     esac
+  done
+}
+
+# Turn --creds into mount flags. Read-only without exception: the container has no business
+# rewriting a token the host owns, and a refresh written inside it would die with --rm anyway.
+#
+# The two halves are deliberately asymmetric. A named credential that is absent is an error,
+# because `--creds codex` silently opening a shell without it is exactly the failure worth an
+# error message. A bare --creds takes whatever is there and says what it took.
+resolve_credentials() {
+  ((creds)) || return 0
+
+  local wanted=() entry name host container
+  [[ -n $creds_select ]] && IFS=, read -ra wanted <<<"$creds_select"
+
+  for name in ${wanted[@]+"${wanted[@]}"}; do
+    local known=0
+    for entry in "${credentials[@]}"; do
+      [[ ${entry%%:*} == "$name" ]] && known=1
+    done
+    ((known)) || die "unknown credential: $name (known: ${credentials[*]%%:*})"
+  done
+
+  for entry in "${credentials[@]}"; do
+    name=${entry%%:*}
+    host=${entry#*:}
+    host=${host%:*}
+    container=${entry##*:}
+
+    if ((${#wanted[@]})) && ! printf '%s\n' "${wanted[@]}" | grep -qxF "$name"; then
+      continue
+    fi
+
+    if [[ ! -f $host ]]; then
+      ((${#wanted[@]})) && die "no $name credential at $host"
+      continue
+    fi
+
+    cred_mounts+=(--mount "type=bind,src=$host,dst=$container,readonly")
+    # Printed unconditionally, not under -v. Handing a host secret to a container is the one
+    # thing this script does that the scrollback should record without being asked.
+    printf 'agent.sh: mounting %s credential, read-only: %s\n' "$name" "$host" >&2
   done
 }
 
@@ -206,6 +280,7 @@ agent_run() {
     "${caches[@]}" \
     "${claude_volume[@]}" \
     "${home_mounts[@]}" \
+    ${cred_mounts[@]+"${cred_mounts[@]}"} \
     "${extra_mounts[@]}" \
     -w "$workspace" \
     "$image" \
@@ -214,7 +289,7 @@ agent_run() {
 
 usage() {
   cat <<'EOF'
-Usage: hack/agent.sh [-v] <command> [--mount SPEC ...] [-- COMMAND ...]
+Usage: hack/agent.sh [-v] <command> [--creds [LIST]] [--mount SPEC ...] [-- COMMAND ...]
 
 Commands:
   image     build the development container image
@@ -234,15 +309,20 @@ Options:
   --no-host-mods Do not mount the host module cache as a local GOPROXY. The container then
                  downloads every dependency over the network into its own volume, which is
                  slower by minutes but touches no host path outside the checkout.
-  --mount SPEC   passed to docker as --mount, repeatable. For the credential files a
-                 session is explicitly given, e.g.
-                   --mount type=bind,src=$HOME/.codex/auth.json,dst=/home/agent/.codex/auth.json,readonly
-                 Claude Code needs none of this: log in once inside the container and the
-                 k8s-ai-claude volume keeps it.
+  --creds [LIST] mount the agent CLI credentials this host has, read-only. Nothing is
+                 mounted without it. LIST is a comma-separated selection of pi,codex;
+                 omit it to take whichever of them exist. A name given explicitly must
+                 exist, a missing one under a bare --creds is skipped, and either way the
+                 paths handed over are printed. Claude Code needs none of this: log in
+                 once inside the container and the k8s-ai-claude volume keeps it.
+  --mount SPEC   passed to docker as --mount, repeatable. The escape hatch for anything
+                 --creds does not know about, e.g.
+                   --mount type=bind,src=$HOME/.config/x/token,dst=/home/agent/.config/x/token,readonly
   -- COMMAND     run COMMAND in the container instead of the command's default, e.g.
                    hack/agent.sh shell -- go test ./internal/...
 
 Environment:
+  CODEX_HOME     codex configuration directory --creds reads (default: ~/.codex)
   AGENT_IMAGE    image tag (default: k8s-ai-platform-agent)
   AGENT_NAME     container name for the interactive shells (default: k8s-ai-agent)
   GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
@@ -261,6 +341,8 @@ main() {
   local command=${1:-help}
   [[ $# -gt 0 ]] && shift
   parse_options "$@"
+  # Before prepare_volumes, so `--creds codx` fails in a second instead of after an image build.
+  resolve_credentials
 
   case $command in
   image) build_image ;;
