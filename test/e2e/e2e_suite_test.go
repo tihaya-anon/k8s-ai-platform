@@ -17,6 +17,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package e2e exercises the manager against a live cluster, the one thing envtest cannot do:
+// envtest runs an apiserver and etcd with no kubelet and no other operators, so scheduling, KServe
+// and Kueue are all absent there. Anything that depends on a pod actually running, or on another
+// operator's controller reacting, has to be asserted here.
 package e2e
 
 import (

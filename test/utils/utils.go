@@ -14,6 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package utils holds helpers shared by the end-to-end suites: shelling out to the tools a live
+// cluster needs, and the small assertions built on them. It is test support rather than product
+// code, which is why it lives under test/ and not internal/ -- nothing the manager runs may
+// import it.
 package utils
 
 import (

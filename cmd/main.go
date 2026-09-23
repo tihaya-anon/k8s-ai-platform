@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package main is the manager entrypoint: it wires the scheme, the controller-runtime manager and
+// every reconciler in this repository together, then blocks serving them. Nothing here carries
+// platform policy -- the policy lives in the reconcilers and the CRD types they act on -- so a
+// change to this file is almost always a change to how the process is configured or observed,
+// not to what the platform does.
 package main
 
 import (
