@@ -41,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
-	platformv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 	"github.com/tihaya-anon/k8s-ai-platform/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
@@ -54,7 +53,6 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(platformv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(mlv1alpha1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
