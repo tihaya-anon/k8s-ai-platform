@@ -61,7 +61,9 @@ This downloads Go modules, builds the agent container image, fixes ownership on 
 volumes, fills the container Go cache, verifies that the source builds and tests inside the agent
 container, and builds the product Docker image. Container Go commands inherit the host
 `go env GOPROXY` value by default; override it with `GO_PROXY=...` if your network needs a different
-module proxy.
+module proxy. Runtime containers also pass through the host proxy environment variables and use host
+networking by default, so a proxy bound to `127.0.0.1` on the WSL host still works for model calls;
+set `AGENT_RUN_NETWORK=bridge` only if the session does not need a localhost proxy.
 
 To build only the agent image:
 
@@ -192,6 +194,11 @@ and `hack/agent.sh` backs that directory with a named volume, so running `claude
 container and logging in once there keeps the credential in the volume across `docker run --rm`. The
 host credential is never mounted, and revoking the container's access is
 `docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
+
+The image also bakes in this maintainer's usual Pi extension packages under the container's Pi
+home: `@inobit/pi-reader` and `pi-background-tasks` with its packaged background-task and
+Anthropic-attribution extensions. This makes the extensions available in a fresh container, but does
+not mount or copy any provider credentials.
 
 Pi stores its credential in `~/.pi/agent/auth.json` and Codex in `~/.codex/auth.json`
 (`$CODEX_HOME/auth.json` when that is set). `--creds` mounts whichever of them this host has,

@@ -14,6 +14,8 @@ ARG PI_VERSION=0.85.1
 ARG CODEX_VERSION=0.154.0
 ARG MARKDOWNLINT_VERSION=0.23.2
 ARG PRETTIER_VERSION=3.9.6
+ARG PI_READER_VERSION=latest
+ARG PI_BACKGROUND_TASKS_VERSION=latest
 
 # The editor side of the sandbox. Pinned to the versions the host runs, so a session in the
 # container behaves like a session outside it rather than like a slightly different editor.
@@ -204,10 +206,28 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         /workspace/k8s-ai-platform \
         "${GOPATH}/pkg/mod" \
         "${GOCACHE}" \
-        /home/agent/.pi/agent \
+        /home/agent/.pi/agent/npm \
         /home/agent/.codex \
         /home/agent/.claude \
     && chown -R "${USERNAME}:${USERNAME}" /workspace /home/agent
+
+# These are personal Pi extensions that are part of this repository's agent experience, not project
+# source. Bake the packages into Pi's own npm directory so a fresh container can load them without
+# mutating the user's host Pi settings; credentials are still mounted separately and explicitly by
+# hack/agent.sh --creds.
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    npm install --prefix /home/agent/.pi/agent/npm --registry="${NPM_REGISTRY}" \
+        "@inobit/pi-reader@${PI_READER_VERSION}" \
+        "pi-background-tasks@${PI_BACKGROUND_TASKS_VERSION}"; \
+    printf '%s\n' \
+        '{' \
+        '  "packages": [' \
+        '    "npm:@inobit/pi-reader",' \
+        '    "npm:pi-background-tasks@latest"' \
+        '  ]' \
+        '}' \
+        > /home/agent/.pi/agent/settings.json; \
+    chown -R "${USERNAME}:${USERNAME}" /home/agent/.pi
 
 # Shell and editor configuration, tracked in hack/agent-home/ so the container's environment is
 # reviewed in the same diff as the code. Copied, not mounted: the read-only targets mount only the

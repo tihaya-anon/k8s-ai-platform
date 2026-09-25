@@ -12,7 +12,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 1
 
-image=${AGENT_IMAGE:-}
+image_repo=${AGENT_IMAGE_REPOSITORY:-k8s-ai-platform-agent}
+image=${AGENT_IMAGE:-$image_repo:latest}
 name=${AGENT_NAME:-k8s-ai-agent}
 workspace=/workspace/k8s-ai-platform
 
@@ -85,23 +86,6 @@ command_override=()
 die() {
   printf 'agent.sh: %s\n' "$1" >&2
   exit 1
-}
-
-select_image() {
-  [[ -n $image ]] && return 0
-
-  local git_sha input_hash
-  git_sha=$(git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit')
-  input_hash=$(
-    {
-      printf 'USER_UID=%s\nUSER_GID=%s\nNPM_REGISTRY=%s\n' "$(id -u)" "$(id -g)" "$npm_registry"
-      find agent.Dockerfile .dockerignore hack/agent-entrypoint.sh hack/agent-home hack/agent-bin \
-        -type f ! -path 'hack/agent-home/.config/nvim/*' -print0 \
-        | sort -z \
-        | xargs -0 sha256sum
-    } | sha256sum | cut -c1-12
-  )
-  image="k8s-ai-platform-agent:${git_sha}-${input_hash}"
 }
 
 # Echo under -v, so what happened to the boundary can be put in the scrollback. %q rather than $*,
@@ -226,10 +210,9 @@ resolve_credentials() {
 }
 
 build_image() {
-  if docker image inspect "$image" >/dev/null 2>&1; then
-    printf 'agent.sh: image exists, skipping build: %s\n' "$image" >&2
-    return 0
-  fi
+  local git_sha commit_image
+  git_sha=$(git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit')
+  commit_image="$image_repo:$git_sha"
 
   local build_flags=(--network "${AGENT_BUILD_NETWORK:-host}")
   local build_args=(
@@ -245,18 +228,27 @@ build_image() {
   done
 
   # A cold build fetches most of a gigabyte, so say something before going quiet for minutes.
-  ((verbose)) || printf 'agent.sh: building %s (-v to follow)\n' "$image" >&2
+  ((verbose)) || printf 'agent.sh: building %s and %s (-v to follow)\n' "$commit_image" "$image" >&2
   run_step docker build \
     "${build_flags[@]}" \
     -f agent.Dockerfile \
     "${build_args[@]}" \
+    -t "$commit_image" \
     -t "$image" .
+}
+
+ensure_image() {
+  if docker image inspect "$image" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  die "no agent image found: $image (run ./hack/agent.sh image first)"
 }
 
 # The named volumes are created root-owned by the daemon; the agent user has to be able to write
 # them. Idempotent, and the only place this script needs root.
 prepare_volumes() {
-  build_image
+  ensure_image
   run_step docker run --rm --user root \
     "${caches[@]}" \
     "${claude_volume[@]}" \
@@ -302,13 +294,22 @@ agent_run() {
     fi
   fi
 
+  local proxy_flags=() proxy_var
+  for proxy_var in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
+    if [[ -n ${!proxy_var:-} ]]; then
+      proxy_flags+=(-e "$proxy_var=${!proxy_var}")
+    fi
+  done
+
   local cmd=("$@")
   [[ ${#command_override[@]} -gt 0 ]] && cmd=("${command_override[@]}")
 
   run docker run \
     "${mode_flags[@]}" \
+    --network "${AGENT_RUN_NETWORK:-host}" \
     "${sandbox[@]}" \
     -e GOPROXY="$proxy_chain" \
+    "${proxy_flags[@]}" \
     "${hostmod_flags[@]}" \
     "${mount_flags[@]}" \
     "${caches[@]}" \
@@ -326,8 +327,8 @@ usage() {
 Usage: hack/agent.sh [-v] <command> [--creds [LIST]] [--mount SPEC ...] [-- COMMAND ...]
 
 Commands:
-  image     build the development container image
-  prepare   build the image and make the named volumes writable
+  image     build the development container image and tag it as latest
+  prepare   make the named volumes writable using the latest image
   deps      download this repository's Go dependencies into the cache volume
   build     verify the source builds and tests, from a read-only checkout
   fmt       format the tree with the container's pinned formatters
@@ -357,10 +358,14 @@ Options:
 
 Environment:
   CODEX_HOME     codex configuration directory --creds reads (default: ~/.codex)
-  AGENT_IMAGE    image tag (default: k8s-ai-platform-agent:<git-sha>-<input-hash>)
+  AGENT_IMAGE    image tag to use and update during image builds (default: k8s-ai-platform-agent:latest)
+  AGENT_IMAGE_REPOSITORY
+                 image repository for commit-tagged builds (default: k8s-ai-platform-agent)
   AGENT_NAME     container name for the interactive shells (default: k8s-ai-agent)
   AGENT_BUILD_NETWORK
                  docker build network mode (default: host, so localhost proxies work)
+  AGENT_RUN_NETWORK
+                 docker run network mode (default: host, so localhost proxies work)
   GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
   NPM_REGISTRY   npm registry for the image build (default: the host's `npm config get registry`)
 EOF
@@ -376,7 +381,6 @@ main() {
 
   local command=${1:-help}
   [[ $# -gt 0 ]] && shift
-  select_image
   parse_options "$@"
   # Before prepare_volumes, so `--creds codx` fails in a second instead of after an image build.
   resolve_credentials
