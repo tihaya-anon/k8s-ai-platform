@@ -12,7 +12,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 1
 
-image=${AGENT_IMAGE:-k8s-ai-platform-agent}
+image=${AGENT_IMAGE:-}
 name=${AGENT_NAME:-k8s-ai-agent}
 workspace=/workspace/k8s-ai-platform
 
@@ -85,6 +85,23 @@ command_override=()
 die() {
   printf 'agent.sh: %s\n' "$1" >&2
   exit 1
+}
+
+select_image() {
+  [[ -n $image ]] && return 0
+
+  local git_sha input_hash
+  git_sha=$(git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit')
+  input_hash=$(
+    {
+      printf 'USER_UID=%s\nUSER_GID=%s\nNPM_REGISTRY=%s\n' "$(id -u)" "$(id -g)" "$npm_registry"
+      find agent.Dockerfile .dockerignore hack/agent-entrypoint.sh hack/agent-home hack/agent-bin \
+        -type f ! -path 'hack/agent-home/.config/nvim/*' -print0 \
+        | sort -z \
+        | xargs -0 sha256sum
+    } | sha256sum | cut -c1-12
+  )
+  image="k8s-ai-platform-agent:${git_sha}-${input_hash}"
 }
 
 # Echo under -v, so what happened to the boundary can be put in the scrollback. %q rather than $*,
@@ -209,13 +226,30 @@ resolve_credentials() {
 }
 
 build_image() {
+  if docker image inspect "$image" >/dev/null 2>&1; then
+    printf 'agent.sh: image exists, skipping build: %s\n' "$image" >&2
+    return 0
+  fi
+
+  local build_flags=(--network "${AGENT_BUILD_NETWORK:-host}")
+  local build_args=(
+    --build-arg USER_UID="$(id -u)"
+    --build-arg USER_GID="$(id -g)"
+    --build-arg NPM_REGISTRY="$npm_registry"
+  )
+  local proxy_var
+  for proxy_var in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
+    if [[ -n ${!proxy_var:-} ]]; then
+      build_args+=(--build-arg "$proxy_var=${!proxy_var}")
+    fi
+  done
+
   # A cold build fetches most of a gigabyte, so say something before going quiet for minutes.
   ((verbose)) || printf 'agent.sh: building %s (-v to follow)\n' "$image" >&2
   run_step docker build \
+    "${build_flags[@]}" \
     -f agent.Dockerfile \
-    --build-arg USER_UID="$(id -u)" \
-    --build-arg USER_GID="$(id -g)" \
-    --build-arg NPM_REGISTRY="$npm_registry" \
+    "${build_args[@]}" \
     -t "$image" .
 }
 
@@ -323,8 +357,10 @@ Options:
 
 Environment:
   CODEX_HOME     codex configuration directory --creds reads (default: ~/.codex)
-  AGENT_IMAGE    image tag (default: k8s-ai-platform-agent)
+  AGENT_IMAGE    image tag (default: k8s-ai-platform-agent:<git-sha>-<input-hash>)
   AGENT_NAME     container name for the interactive shells (default: k8s-ai-agent)
+  AGENT_BUILD_NETWORK
+                 docker build network mode (default: host, so localhost proxies work)
   GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
   NPM_REGISTRY   npm registry for the image build (default: the host's `npm config get registry`)
 EOF
@@ -340,6 +376,7 @@ main() {
 
   local command=${1:-help}
   [[ $# -gt 0 ]] && shift
+  select_image
   parse_options "$@"
   # Before prepare_volumes, so `--creds codx` fails in a second instead of after an image build.
   resolve_credentials

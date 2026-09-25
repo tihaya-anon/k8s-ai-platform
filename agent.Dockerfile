@@ -80,15 +80,15 @@ RUN set -eu; \
       arm64) nvim_arch=linux-arm64;  star_arch=aarch64-unknown-linux-gnu ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL -o /tmp/nvim.tar.gz \
+    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/nvim.tar.gz \
       "${GITHUB_MIRROR}/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-${nvim_arch}.tar.gz"; \
     tar -C /opt -xzf /tmp/nvim.tar.gz; \
     mv "/opt/nvim-${nvim_arch}" /opt/nvim; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \
-    curl -fsSL -o /tmp/starship.tar.gz \
+    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/starship.tar.gz \
       "${GITHUB_MIRROR}/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${star_arch}.tar.gz"; \
     tar -C /usr/local/bin -xzf /tmp/starship.tar.gz starship; \
-    curl -fsSL -o /tmp/blesh.tar.xz \
+    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/blesh.tar.xz \
       "${GITHUB_MIRROR}/akinomyoga/ble.sh/releases/download/nightly/ble-nightly-${BLESH_NIGHTLY}.tar.xz"; \
     mkdir -p /usr/share/blesh; \
     tar -C /usr/share/blesh --strip-components=1 -xJf /tmp/blesh.tar.xz; \
