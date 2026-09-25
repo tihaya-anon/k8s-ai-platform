@@ -20,3 +20,6 @@ go.work
 *.swp
 *.swo
 *~
+
+# agent cache
+/.pi/tasks/
