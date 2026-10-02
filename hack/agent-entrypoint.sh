@@ -18,6 +18,11 @@ if [[ -d $repo/.git ]]; then
     git config --global --add safe.directory "$repo" 2>/dev/null || true
   fi
 
+  if [[ -w $repo/.git/config ]]; then
+    git -C "$repo" config user.name "${AGENT_GIT_USER_NAME:-AI Platform Agent}" 2>/dev/null || true
+    git -C "$repo" config user.email "${AGENT_GIT_USER_EMAIL:-agent@k8s-ai-platform.local}" 2>/dev/null || true
+  fi
+
   if [[ -d $repo/hack/git-hooks ]]; then
     if [[ -w $repo/.git/config ]] && git -C "$repo" config core.hooksPath hack/git-hooks 2>/dev/null; then
       :

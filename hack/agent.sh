@@ -21,6 +21,11 @@ workspace=/workspace/k8s-ai-platform
 go_proxy=${GO_PROXY:-$(go env GOPROXY 2>/dev/null || printf direct)}
 npm_registry=${NPM_REGISTRY:-$(npm config get registry 2>/dev/null || printf 'https://registry.npmjs.org')}
 
+# Give throwaway containers a Git identity for commits. Prefer the host's configured identity so
+# commits remain attributable; fall back to a clearly synthetic project-local identity.
+git_user_name=${AGENT_GIT_USER_NAME:-$(git config --global user.name 2>/dev/null || git config user.name 2>/dev/null || printf 'AI Platform Agent')}
+git_user_email=${AGENT_GIT_USER_EMAIL:-$(git config --global user.email 2>/dev/null || git config user.email 2>/dev/null || printf 'agent@k8s-ai-platform.local')}
+
 # Named volumes for everything expensive to rebuild and pointless to keep in the image.
 caches=(
   -v k8s-ai-go-pkg:/home/agent/go/pkg
@@ -309,6 +314,8 @@ agent_run() {
     --network "${AGENT_RUN_NETWORK:-host}" \
     "${sandbox[@]}" \
     -e GOPROXY="$proxy_chain" \
+    -e AGENT_GIT_USER_NAME="$git_user_name" \
+    -e AGENT_GIT_USER_EMAIL="$git_user_email" \
     "${proxy_flags[@]}" \
     "${hostmod_flags[@]}" \
     "${mount_flags[@]}" \
@@ -368,6 +375,10 @@ Environment:
                  docker run network mode (default: host, so localhost proxies work)
   GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
   NPM_REGISTRY   npm registry for the image build (default: the host's `npm config get registry`)
+  AGENT_GIT_USER_NAME
+  AGENT_GIT_USER_EMAIL
+                 git commit identity used inside the container (default: host git config,
+                 then AI Platform Agent <agent@k8s-ai-platform.local>)
 EOF
 }
 
