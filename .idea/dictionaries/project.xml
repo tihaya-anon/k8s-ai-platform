@@ -1,0 +1,26 @@
+<component name="ProjectDictionaryState">
+  <dictionary name="project">
+    <words>
+      <w>BUILDPLATFORM</w>
+      <w>CRDs</w>
+      <w>KServe</w>
+      <w>Kueue</w>
+      <w>apiserver</w>
+      <w>certmanager</w>
+      <w>clusterrolebinding</w>
+      <w>controllergen</w>
+      <w>controller-runtime</w>
+      <w>dset</w>
+      <w>envtest</w>
+      <w>gofmt</w>
+      <w>golangci</w>
+      <w>kubebuilder</w>
+      <w>kustomize</w>
+      <w>markdownlint</w>
+      <w>mmdc</w>
+      <w>mypoperator</w>
+      <w>myregistry</w>
+      <w>prettierignore</w>
+    </words>
+  </dictionary>
+</component>
