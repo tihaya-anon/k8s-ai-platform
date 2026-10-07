@@ -167,35 +167,46 @@ now and an object-store implementation later.
 
 ## Layout
 
-Standard kubebuilder, because deviating from it costs you every tool that assumes it. The checked-in
-scaffold uses kubebuilder v4.9.0; API group `ml.aiplatform.io`, module
-`github.com/tihaya-anon/k8s-ai-platform`. In the training plan, task 0.2 is intentionally redone
-from a blank project so the generated layout is learned before it is trusted. Directories marked
-_later_ do not exist yet.
+The repository is intentionally blank at the start of the curriculum. The previous generated
+Kubebuilder scaffold was archived in commit `131697f`; the training path recreates it instead of
+starting with it checked in.
+
+Current files are documentation and project policy only:
+
+```text
+README.md
+CLAUDE.md
+docs/
+.markdownlint.json
+.prettierrc
+.prettierignore
+.gitignore
+```
+
+As the levels progress, the repository should grow into standard Kubebuilder layout. Deviating from
+that layout costs you every tool that assumes it.
 
 ```text
 api/v1alpha1/          CRD types and kubebuilder markers
 internal/controller/   one reconciler per kind, plus the envtest suite
-internal/webhook/      later — the promotion gate and the immutability checks
-internal/artifact/     later — artifact store interface: PVC now, object store later
+internal/webhook/      promotion gate and immutability checks
+internal/artifact/     artifact store interface: PVC now, object store later
 cmd/main.go            the manager entrypoint
 config/                kustomize — crd, rbac, manager, samples, prometheus
-config/overlays/       later — kind and cloud
-hack/                  set-up-cluster.sh, format.sh, git hooks
-deps/                  gitignored — pinned upstream checkouts, read as reference
-test/e2e/              later — the loop, against a live cluster
+config/overlays/       kind and cloud differences
+hack/                  scripts you wrote after running the commands manually
+deps/                  gitignored pinned upstream checkouts, read as reference
+test/e2e/              the loop against a live cluster
 docs/
 ```
 
-### The one deviation, and why
+### Expected generator deviation
 
-`make manifests` and `make generate` name our own package trees instead of kubebuilder's `./...`.
-controller-gen expands `...` by walking the filesystem rather than by asking the go tool, so it does
-**not** skip a nested module the way `go list ./...` does. With upstream reference checkouts in
-`deps/`, it tries to resolve KServe's whole dependency graph and appears to hang — 0.8 seconds
-against 25 minutes and counting. The alternative is keeping the Makefile pristine and moving the
-reference checkouts outside the repository, which is the better fix the day `deps/` holds more than
-one project.
+When you recreate the Makefile, keep Kubebuilder's generated targets first. If `deps/` later lives
+under the repository root, adjust `make manifests` and `make generate` to name your own package
+trees instead of a broad `./...`. `controller-gen` expands `...` by walking the filesystem rather
+than by asking the Go tool, so it does **not** skip a nested module the way `go list ./...` does.
+That difference is why the archived scaffold eventually used explicit paths.
 
 ---
 

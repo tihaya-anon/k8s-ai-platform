@@ -1,118 +1,256 @@
 # Maintainer Training Tasks
 
-This platform is built for you to learn from. Most levels follow a review-and-patch loop, but the
-bootstrap is different: **you start from a blank operator project and run the scaffolding
-yourself.** The goal is to make the generated files feel explainable, not magical.
+This platform is built for you to learn Kubernetes operator work by constructing it from a blank
+repository. The checked-in generated scaffold was archived in commit `131697f`; use that commit only
+as a reference when you are stuck, not as something to copy first.
 
 The end state is the system in [architecture.md](architecture.md), serving the requirements in
 [requirements.md](requirements.md).
 
-## How a task runs
+## How a task runs now
 
-Each task below usually has four parts, and they run in this order:
+The training loop is no longer "agent writes the main implementation". The loop is:
 
-1. **Built for you** — the implementation Claude writes for you, with tests, as the first change in
-   the task. These files do not all have to exist before the task starts.
-2. **Review focus** — the files you read after that implementation exists. This is where the
-   important design decision lives. Do not treat this section as a list of files you must create or
-   edit yourself.
-3. **Quiz** — questions you answer out loud, in the chat, before the task is closed. Wrong answers
-   are the point; they show which mechanism is still a black box. Claude marks them and re-explains
-   what missed.
-4. **Your patch** — the only required code change you make yourself for the task. It is a small,
-   sharply bounded change in the code Claude just wrote, chosen so that doing it requires having
-   understood the review focus.
+1. **You build** — you run the CLI, write the first version, or create the script named by the task.
+2. **Claude reviews** — ask for explanation, debugging, review, or a nudge when the output differs
+   from the task. Claude should not paste the whole patch unless the task explicitly says the code
+   is agent-built.
+3. **Quiz** — answer the questions out loud before closing the task. Wrong answers are the useful
+   part; record them in [progress.md](progress.md).
+4. **Patch/refine** — make one small improvement after review so the mechanism is exercised twice.
 
-**Exception:** task 0.2 is a blank-start task. Claude may explain, review, and debug, but you run
-the Kubebuilder commands, inspect the diffs after every generator step, and write the first
-`Dataset` markers yourself. That bootstrap experience is load-bearing for the rest of the
-curriculum.
+Generated files are part of the lesson. When a task says to run a generator, inspect the diff and be
+able to name which tool wrote each file.
 
-A task is done when the acceptance criteria hold, your patch is merged and tested, and you have
-answered the quiz. Record the quiz answers you got wrong in [progress.md](progress.md) — that list
-is the most useful thing in this repository for the next person, and for you in six months.
-
-Claude's side of the contract: do not hand over the patch answer, even when asked twice. Explain the
-mechanism, point at the file, refuse the diff.
-
-> The previous version of this platform — handwritten Kubernetes client, handwritten queue,
-> handwritten traffic split, no CRDs — is in git history at `3cb8302`. It is worth reading when a
-> task here says "Kueue does this for you", because that commit is what "this" looks like when you
-> do it yourself.
+> Reference point: commit `131697f` contains the previous generated Kubebuilder scaffold, `Dataset`
+> CRD, envtest harness, and cluster scripts. If you look at it, write down what you learned before
+> copying anything back.
 
 ---
 
-## Level 0 — Ground truth
+## Level 0 — Bootstrap from nothing
 
-### 0.1 Spike the stack and write down what is actually true
+### 0.0 Install the local toolchain
 
-**Status: done.** `hack/set-up-cluster.sh` builds the cluster and installs cert-manager, KServe
-v0.20.0 and Kueue v0.19.5 from nothing.
+**You build:** install or verify the host tools before any repository code exists.
 
-Still outstanding, and worth finishing before 1.5 because the answer shapes the `Release`
-controller:
+Required tools:
 
-- Which traffic-split mechanism Standard mode actually uses — native `canaryTrafficPercent`, or a
-  Gateway API `HTTPRoute` with weighted backends.
-- What Kueue creates when you submit a suspended Job with a queue label, and which conditions appear
-  on the `Workload` in which order.
-- What each project's webhooks intercept, because yours will sit next to them.
+- Go 1.25 on `PATH` before any distro Go.
+- Docker or another container runtime usable by kind.
+- `kubectl`.
+- `kind`.
+- `kubebuilder` v4.9.x.
+- Optional but useful now: `controller-gen`, `kustomize`, and `setup-envtest`; Kubebuilder's
+  scaffolded Makefile will also install pinned local copies later.
 
-**Review focus:** `deps/kserve/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/`.
-
-**Quiz**
-
-1. Why does the API server refuse to call a webhook over plain HTTP, and what are the two separate
-   things that must be in place before the first call succeeds?
-2. Kueue has no cert-manager `Certificate` in this cluster but its `caBundle` is populated. By what
-   mechanism? What does Kueue pay for that choice that KServe does not?
-3. A webhook's serving certificate expires at 3am. What breaks, and what does the user see?
-
-**Your patch:** add a `kubectl wait` to `hack/set-up-cluster.sh` that fails the script when
-`kserve-controller-manager` does not become available. Right now the script trusts KServe's
-installer exit code and reports success for a cluster that is not ready.
-
-### 0.2 Bootstrap from blank and create the first CRD
-
-**You build:** start from an empty operator project, run `kubebuilder init`, then
-`kubebuilder create api` for `Dataset`. Commit or at least inspect the tree after each step so you
-can say which files Kubebuilder created and which files `controller-gen` created later. Then add the
-`Dataset` spec/status fields, validation markers, status subresource, printcolumns, sample YAML, and
-envtest coverage.
-
-If this repository already contains the scaffold, do the exercise on a scratch branch or in a fresh
-copy first, then port the understood result back here. Do not continue to 1.1 until you can recreate
-0.2 without treating the existing files as a template to copy blindly.
-
-**Review focus:** `PROJECT`, `Makefile` (the `manifests`, `generate` and `envtest` targets),
-`api/v1alpha1/dataset_types.go`, `api/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, and
-`config/samples/`.
+**Review focus:** the output of `go version`, `kubebuilder version`, `kubectl version --client`,
+`kind version`, and `docker version`.
 
 **Quiz**
 
-1. `make manifests` and `make generate` run different tools and write different files. Which is
-   which, and what breaks if you commit the types but not the output?
-2. What does the status subresource actually change about how the API server handles a write? Why
-   does a controller need it?
-3. Where does the validation live, and what enforces it — the reconciler, the API server, or the
-   webhook? How would you prove your answer with one `kubectl` command?
-4. `spec` is user intent and `status` is observed reality. Name a field you might be tempted to put
-   in `spec` that belongs in `status`, and say why.
-5. The first short name for this kind was `ds`. `kubectl get ds` printed "No resources found" while
-   two datasets existed, rather than reporting an ambiguity. Why? What does that tell you about how
-   `kubectl` resolves a short name, and what is the rule for choosing one?
+1. Which tools are runtime cluster tools, and which tools are code-generation/scaffolding tools?
+2. Why do we pin generator versions instead of using whatever happens to be installed globally?
+3. What is the difference between `kubebuilder` and `controller-gen`?
 
-**Your patch:** after your scaffold works, make one deliberately small API change yourself: add or
-adjust a printcolumn so `kubectl get datasets` shows useful state without `-o yaml`, and regenerate.
-Then break it on purpose: change a validation marker, run `make manifests`, and find the resulting
-diff in `config/crd/bases/`.
+**Patch/refine:** write down the exact versions you installed in [progress.md](progress.md).
+
+**Acceptance criteria**
+
+- The commands above run successfully.
+- You can explain which future task will first use each tool.
+
+### 0.1 Repository hygiene before Go code
+
+**You build:** keep the repository intentionally small before scaffolding. Add only documentation
+and project hygiene that is not generated by Kubebuilder:
+
+- `README.md` describing the platform goal and the blank-start training flow.
+- `docs/requirements.md`, `docs/architecture.md`, `docs/training-tasks.md`, and `docs/progress.md`.
+- `.gitignore` for build output, local binaries, envtest assets, coverage files, editor state, and
+  upstream checkouts.
+- Formatting/linting config for Markdown if you want it now; otherwise defer it to 0.6.
+
+Do **not** add `Makefile`, `PROJECT`, `api/`, `cmd/`, `config/`, `internal/`, `go.mod`, or `go.sum`
+by hand. Those arrive from Kubebuilder in 0.2.
+
+**Review focus:** the root file list. Every file should be explainable without saying "Kubebuilder
+made it".
+
+**Quiz**
+
+1. Why is it useful to commit the repository before running `kubebuilder init`?
+2. Which files are product documentation, and which files are developer workflow?
+3. What belongs in `.gitignore` before generators start producing local binaries?
+
+**Patch/refine:** add one ignored path only after you have produced the local artifact that proves
+it is needed.
+
+**Acceptance criteria**
+
+- `git status --short` is clean.
+- The root has no operator scaffold yet.
+
+### 0.2 Initialize the Kubebuilder project
+
+**You build:** run Kubebuilder from the blank repository:
+
+```bash
+kubebuilder init \
+  --domain aiplatform.io \
+  --repo github.com/tihaya-anon/k8s-ai-platform
+```
+
+Then inspect and commit the result before creating any API kind.
+
+**Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, and the initial `config/` tree.
+
+**Quiz**
+
+1. Which files did Kubebuilder create that are source code, and which are deployment configuration?
+2. Why does the generated manager use `controller-runtime` instead of a handwritten Kubernetes REST
+   client?
+3. Which Makefile targets call generators, and which targets talk to a live cluster?
+4. What is recorded in `PROJECT`, and why does Kubebuilder need it for later scaffolding commands?
+
+**Patch/refine:** run `make help`, then add a short note to [progress.md](progress.md) naming the
+three Makefile targets you expect to use most.
+
+**Acceptance criteria**
+
+- `go test ./...` or the generated equivalent passes.
+- The Kubebuilder-only scaffold is committed separately from the first API kind.
+
+### 0.3 Create the `Dataset` API and learn the generators
+
+**You build:** run Kubebuilder's API scaffolder:
+
+```bash
+kubebuilder create api \
+  --group ml \
+  --version v1alpha1 \
+  --kind Dataset
+```
+
+Allow it to create the resource and the controller scaffold when prompted, but keep the controller
+logic empty until Level 1. Then edit `api/v1alpha1/dataset_types.go` yourself:
+
+- `spec.uri`, `spec.owner`, optional expected rows/checksum, and `spec.golden`.
+- `status.conditions`, `status.phase`, observed rows/checksum, and last resolved time.
+- validation markers for the user-facing contract.
+- a status subresource.
+- printcolumns for useful `kubectl get datasets` output.
+
+Run both generators and inspect the diff:
+
+```bash
+make manifests
+make generate
+```
+
+**Review focus:** `api/v1alpha1/dataset_types.go`, `api/v1alpha1/zz_generated.deepcopy.go`,
+`config/crd/bases/`, `config/rbac/`, and `config/samples/`.
+
+**Quiz**
+
+1. `make manifests` and `make generate` run the same binary for different jobs. Which output belongs
+   to each target?
+2. Where does validation live after `make manifests`, and what enforces it at runtime?
+3. What does the status subresource change about writes to `.spec` and `.status`?
+4. Why are `observedRows` and `observedChecksum` status fields instead of spec fields?
+5. Why should a short name avoid collisions with built-in resources like DaemonSet's `ds`?
+
+**Patch/refine:** change one validation marker, rerun `make manifests`, and explain the exact YAML
+change in `config/crd/bases/`. Revert the deliberate break before committing.
 
 **Acceptance criteria**
 
 - `make manifests generate` is wired and its output is committed.
-- `Dataset` has a status subresource, printcolumns worth reading, and validation expressed as
-  markers rather than as code in the reconciler.
-- `kubectl get datasets` shows owner, rows, golden, and phase without `-o yaml`.
+- `Dataset` validation is expressed as markers, not as reconciler code.
+- `kubectl get datasets` will show owner, rows, golden, phase, and age after the CRD is installed.
+
+### 0.4 Add API-server tests with envtest
+
+**You build:** add the envtest suite that starts a real API server without running your reconciler.
+Test the `Dataset` contract you generated in 0.3:
+
+- valid sample creates successfully.
+- invalid URI, owner, rows, or checksum is rejected by the API server.
+- status writes go through the status client.
+- normal spec updates do not accidentally mutate status.
+
+**Review focus:** `internal/controller/suite_test.go`, the first API tests, and the `setup-envtest`
+Makefile target.
+
+**Quiz**
+
+1. What is envtest running that a plain unit test is not running?
+2. Why does this task test API validation before a reconciler exists?
+3. What does this prove about marker-generated validation?
+
+**Patch/refine:** add one failing sample first, watch the API server reject it, then fix it.
+
+**Acceptance criteria**
+
+- `make test` runs envtest and passes.
+- At least one test proves the API server, not Go business logic, rejects invalid input.
+
+### 0.5 Write the cluster setup scripts
+
+**You build:** create the `hack/` directory and write the cluster lifecycle scripts yourself:
+
+- `hack/set-up-cluster.sh` creates or reuses a kind cluster.
+- It installs cert-manager, KServe v0.20.0, and Kueue v0.19.5 with pinned versions.
+- It waits for the relevant controller deployments to become Available.
+- `hack/shutdown-cluster.sh` stops or deletes the cluster in a predictable way.
+
+Do not copy the archived scripts first. Use upstream install docs, run each command manually once,
+then encode only the commands you understand.
+
+**Review focus:** the scripts, the live namespaces, controller deployments, webhook configurations,
+and CRDs they install.
+
+**Quiz**
+
+1. Why does the API server refuse to call a webhook over plain HTTP?
+2. What two separate things must be true before an admission webhook call succeeds?
+3. Kueue and KServe manage webhook serving certificates differently. What are the failure modes of
+   each approach?
+4. Why should the script wait for deployments instead of trusting installer exit codes?
+
+**Patch/refine:** add one missing readiness check after you observe a real race or failure.
+
+**Acceptance criteria**
+
+- Starting from no kind cluster, `hack/set-up-cluster.sh` leaves cert-manager, KServe, and Kueue
+  Available.
+- Re-running the script is safe.
+- The shutdown script can stop or delete the cluster.
+
+### 0.6 Add development workflow after it hurts
+
+**You build:** add only the workflow helpers you now have evidence for:
+
+- `hack/format.sh` once there are Markdown, YAML, and Go files to format.
+- git hooks once you have repeated a mistake they would catch.
+- editor tasks or CI only after the local commands are stable.
+- a development container only if host setup becomes a real source of drift.
+
+**Review focus:** any new workflow file and the command it wraps. A wrapper is not allowed to hide a
+command you cannot run directly.
+
+**Quiz**
+
+1. What is the single source of truth for formatting?
+2. Which generated files should formatters avoid touching?
+3. Why is workflow automation added after the manual command is understood?
+
+**Patch/refine:** make one workflow helper print the command it is about to run before it runs it.
+
+**Acceptance criteria**
+
+- `make fmt vet test` or the project equivalent is the normal local gate.
+- Workflow files are documented in README or progress notes.
 
 ---
 
@@ -120,12 +258,11 @@ diff in `config/crd/bases/`.
 
 ### 1.1 Dataset lifecycle
 
-**Built for you:** the `Dataset` reconciler, an immutability webhook created at
-`internal/webhook/dataset_webhook.go`, and envtest coverage of both including the failure paths.
+**You build, Claude reviews:** implement the `Dataset` reconciler, an immutability webhook, and
+envtest coverage of both including failure paths.
 
 **Review focus:** `internal/controller/dataset_controller.go`,
-`internal/webhook/dataset_webhook.go`. `dataset_webhook.go` is created by the **Built for you**
-step, then read here, then changed only if the **Your patch** step asks for it.
+`internal/webhook/dataset_webhook.go`, conditions, events, and status updates.
 
 **Quiz**
 
@@ -133,217 +270,133 @@ step, then read here, then changed only if the **Your patch** step asks for it.
    seen the previous event, and say what would go wrong.
 2. `observedGeneration` on a condition — what question does it let a user answer that the condition
    alone cannot?
-3. The webhook rejects spec changes after creation. Name two ways a user could change the stored
-   object anyway, and say which of them the webhook catches.
+3. The webhook rejects spec changes after creation. Name two ways a user could try to change the
+   stored object anyway, and say which of them the webhook catches.
 4. What happens if the reconciler returns an error? What happens if it returns `Requeue: true`? When
    is each correct?
 
-**Your patch:** the immutability message names the field. Make it also say what the user should do
-instead — create a new `Dataset` — and add the test case that asserts the message.
-
-**Acceptance criteria**
-
-- The controller validates the dataset exists at its URI and records rows and a checksum in status.
-- A webhook rejects any change to a spec field after creation, with a message that says which field
-  and why immutability matters here.
-- Conditions carry `observedGeneration`, so a stale status is detectable.
+**Patch/refine:** make the immutability error message tell the user to create a new `Dataset`, and
+add the assertion for that message.
 
 ### 1.2 TrainingJob on Kueue
 
-**Built for you:** the `TrainingJob` type and reconciler, rendering a suspended `batch/v1` Job
-labelled into a `LocalQueue`; status translation from Kueue's `Workload` conditions into the
-platform's own vocabulary; artifact writing.
+**You build, Claude reviews:** add the `TrainingJob` API and reconciler. It should render a
+suspended `batch/v1` Job labelled into a `LocalQueue`, translate Kueue `Workload` conditions into
+platform vocabulary, and record artifact output.
 
-**Review focus:** `internal/controller/trainingjob_controller.go`, and the Kueue `Workload` object
-in the live cluster during a run.
+**Review focus:** `internal/controller/trainingjob_controller.go`, child Job owner references, and
+the live Kueue `Workload` during a run.
 
 **Quiz**
 
-1. Why is the child Job created **suspended**? What would happen if it were not, and which component
-   would you be fighting?
-2. Trace one job from `kubectl apply` to a running pod, naming every controller that touches it in
-   order.
-3. `TrainingJob.spec` names no runtime. Name two things that would have to change if it did, when
-   you swap `batch/v1` for `JobSet` in 5.2.
-4. A user's job is not starting. Which condition tells them it is a quota problem rather than an
-   image-pull problem, and where does the text come from?
+1. What object does Kueue create from a suspended Job, and what labels connect the chain?
+2. Why does this controller translate Kueue conditions instead of exposing them raw?
+3. Which fields on the child Job does this controller own, and which fields must it not fight?
+4. What happens when quota is exhausted, and where should the user see that reason?
 
-**Your patch:** the status reports admission state. Add the queue position to the waiting message,
-and the test that fills a `ClusterQueue` and asserts it.
-
-**Acceptance criteria**
-
-- `TrainingJob` renders a suspended `batch/v1` Job labelled into a `LocalQueue`; Kueue admits it.
-- `TrainingJob.status` reports admission state in the platform's own words. A user who has never
-  heard of Kueue can read why their job has not started.
-- Quota exhaustion is visible: submit more than the `ClusterQueue` allows and the waiting jobs say
-  so, with queue position.
-- The job writes checkpoints and a final artifact to the artifact store.
-- **The spec names no runtime.** Nothing in `TrainingJob.spec` mentions `batch/v1`.
-
-**Proof:** fill the queue, show the wait, show the admission.
+**Patch/refine:** add a test that fills a `ClusterQueue` and proves the platform condition names the
+quota layer rather than blaming training code.
 
 ### 1.3 ModelVersion and the funnel
 
-**Built for you:** the `ModelVersion` type, registration from a succeeded `TrainingJob` with
-`ownerReference` lineage, and the condition-based funnel with illegal transitions refused.
+**You build, Claude reviews:** add `ModelVersion`, registration from a succeeded `TrainingJob` with
+lineage, and condition-based transitions that refuse illegal state jumps.
 
-**Review focus:** `api/v1alpha1/modelversion_types.go`, the transition table in
-`internal/controller/modelversion_controller.go`.
+**Review focus:** `api/v1alpha1/modelversion_types.go` and the transition table in the controller.
 
 **Quiz**
 
-1. The funnel is conditions, not a phase string. What does that buy you the first time two things
-   are true at once?
-2. `ownerReference` from `ModelVersion` to `TrainingJob`: what does Kubernetes do with that, and
-   what does it _not_ do that you might expect?
-3. Deleting the `TrainingJob` garbage-collects the `ModelVersion`. Is that what you want? Defend
-   either answer.
+1. Why is a model artifact not enough without lineage to the training job and dataset?
+2. Which state transitions are legal, and what makes an illegal transition dangerous?
+3. What should be an owner reference, and what should be only a recorded reference?
 
-**Your patch:** add one printcolumn that makes `kubectl get modelversions` read as a release
-dashboard rather than a list of names, and justify the choice in the PR description.
-
-**Acceptance criteria**
-
-- A succeeded `TrainingJob` registers a `ModelVersion` with `ownerReference` lineage back to the job
-  and the dataset.
-- The funnel is conditions, not a single string field, and illegal transitions are refused.
-- `kubectl get modelversions` reads as a release dashboard.
+**Patch/refine:** add one extra field that helps a dashboard without making policy depend on a UI
+concern, and justify it in the progress log.
 
 ### 1.4 Evaluation and gates
 
-**Built for you:** the `Evaluation` type, Kueue admission reusing 1.2's machinery, gate evaluation
-with platform defaults, and the `PromotionReady` / `PromotionBlocked` transition with a reason.
+**You build, Claude reviews:** add `Evaluation`, Kueue admission for evaluation jobs, gate defaults,
+and `PromotionReady` / `PromotionBlocked` status.
 
-**Review focus:** `internal/controller/evaluation_controller.go`, the gate defaulting.
+**Review focus:** `internal/controller/evaluation_controller.go` and the default gate policy.
 
 **Quiz**
 
-1. Why does `Evaluation` go through Kueue at all, rather than just running a pod?
-2. A gate fails by 0.3%. Where does that number appear, and how many `kubectl` commands does a user
-   need to find it?
-3. Gates have platform defaults. Where are the defaults applied — the CRD markers, the webhook, or
-   the reconciler? Why there and not the other two?
+1. Why is a golden dataset a policy input rather than a label anyone can edit?
+2. Which failures are infrastructure failures, and which are model-quality failures?
+3. Why does the promotion gate consume conditions instead of raw metric names?
 
-**Your patch:** add one gate of your own choosing to the defaults, with its test. Pick one that is
-not a threshold on a metric, and explain what class of failure it catches.
-
-**Acceptance criteria**
-
-- `Evaluation` is Kueue-admitted, like training, and scores against a golden `Dataset` only.
-- Results land in the `ModelVersion` status; the version moves to `PromotionReady` or
-  `PromotionBlocked` with a reason naming the gate that failed and by how much.
-- Gates are declared on the `Evaluation`, with platform defaults when omitted.
+**Patch/refine:** add one gate that catches a non-metric release risk, and explain its failure mode.
 
 ### 1.5 Release on KServe
 
-**Built for you:** the `Release` type and the controller rendering an `InferenceService`, using
-whichever traffic mechanism 0.1 establishes.
+**You build, Claude reviews:** add `Release` and render the KServe `InferenceService` using the
+traffic-split mechanism established in 0.5.
 
-**Review focus:** `internal/controller/release_controller.go`, and the generated `InferenceService`
-in the cluster.
+**Review focus:** `internal/controller/release_controller.go`, the generated `InferenceService`, and
+KServe status conditions.
 
 **Quiz**
 
-1. This controller renders one CRD into another. Argue that it is _not_ a YAML translator, using the
-   test in the review checklist. If you cannot, it should be deleted — say so.
-2. KServe sets conditions on the `InferenceService`. Which of them does your controller read, and
-   which does it copy into `Release.status`? What is the rule for when copying is acceptable?
-3. A lane has no ready replicas. What stops traffic reaching it — your code, or KServe's?
-4. Rollback is an edit to `Release` alone. What convergence property of the reconciler makes that
-   true?
+1. Which fields on `InferenceService` does this controller own?
+2. How does the controller avoid fighting KServe's own controller?
+3. What condition tells the user the failure is in KServe rather than in the platform gate?
+4. Why is traffic percent validation an API concern, not reconcile-time business logic?
 
-**Your patch:** add the guard that refuses a `canaryPercent` outside 0–100 — as a kubebuilder
-marker, not as Go — and the test proving the API server rejects it before your code runs.
-
-**Acceptance criteria**
-
-- `Release` renders an `InferenceService`; traffic reaches the stable version.
-- Setting `canaryVersion` and a percentage splits traffic, by whichever mechanism 0.1 established.
-- Promote and rollback are edits to `Release` alone. Prove it: no other object is touched by hand.
-- A lane with no ready replicas receives no traffic.
+**Patch/refine:** add the percent bounds as a Kubebuilder validation marker and prove the API server
+rejects invalid values before reconcile.
 
 ---
 
-## Level 2 — Policy (the reason the platform exists)
+## Level 2 — Policy
 
 ### 2.1 The promotion gate as admission control
 
-**Built for you:** the `ValidatingAdmissionWebhook` on `Release`, its certificate wiring, the
-failure-policy decision with the reasoning in a comment, and the bypass-attempt test table.
+**You build, Claude reviews:** add the validating admission webhook that refuses a `Release`
+pointing at a `ModelVersion` that has not passed gates. Include certificate wiring and
+bypass-attempt tests.
 
-**Review focus:** `internal/webhook/release_webhook.go`, `config/webhook/`, `config/certmanager/`.
+**Review focus:** `internal/webhook/release_webhook.go`, webhook manifests, certificate resources,
+and failure policy.
 
 **Quiz**
 
-1. Four bypass attempts are in the test table. One of them succeeds. Which, why, and what would it
-   take to close it?
-2. `failurePolicy: Fail` versus `Ignore` — which did the code choose, and what is the failure it
-   accepts in exchange?
-3. Your webhook and KServe's webhook both fire on a release. In what order, and can you rely on it?
-4. The gate reads `ModelVersion` status during admission. Name the risk in doing I/O in an admission
-   path, and what bounds it here.
+1. Why does this policy belong at admission time instead of only in the reconciler?
+2. What does `failurePolicy` mean during a webhook outage?
+3. Which bypass attempts does the webhook catch, and which are handled by RBAC or API validation?
 
-**Your patch:** the rejection message states the current status. Make it also state what would make
-the version promotable, and add the test that asserts the exact string.
-
-**Acceptance criteria**
-
-- A `ValidatingAdmissionWebhook` rejects a `Release` whose `canaryVersion` is not `PromotionReady`.
-- The rejection message tells the user the current status and what would make it promotable.
-- **Prove it cannot be bypassed:** try `kubectl apply`, try patching the subresource, try editing
-  the `InferenceService` directly, and write down which of those the gate does and does not catch.
-  The last one is the interesting case.
-- Failure policy is deliberate: decide whether a down webhook blocks all releases or allows them,
-  and defend the choice in a comment.
+**Patch/refine:** improve one denial message so a user knows what to fix next.
 
 ### 2.2 What CEL can do instead
 
-**Built for you:** the object-scoped rules — percent bounds, replica floors, required owner — moved
-out of Go into a `ValidatingAdmissionPolicy`, with the Go tests still passing.
+**You build, Claude reviews:** move simple object-scoped rules into `ValidatingAdmissionPolicy` and
+keep cross-object rules in Go.
 
-**Review focus:** `config/policy/`, and the Go code that was deleted (in the diff).
+**Review focus:** the CEL policy manifests and the Go code deleted by the change.
 
 **Quiz**
 
-1. Where exactly did the boundary fall, and what is the one property of the 2.1 gate that CEL cannot
-   express?
-2. A CEL policy and a webhook both reject the same bad object. Which is better, and on what axis?
-3. What happens to a `ValidatingAdmissionPolicy` when the manager is down?
+1. Which validations can CEL express without a webhook server?
+2. Why can CEL not replace the promotion gate entirely?
+3. What operational failure disappears when a rule moves from webhook code to CEL?
 
-**Your patch:** express one more rule in CEL and delete its Go equivalent. Choose the rule yourself;
-choosing correctly is the exercise.
-
-**Acceptance criteria**
-
-- Those rules move out of Go, and the tests still pass.
-- A note on where the boundary fell, and why the gate in 2.1 could not cross it.
+**Patch/refine:** move exactly one additional simple rule to CEL, or explain why none qualifies.
 
 ### 2.3 Quota and priority as configuration
 
-**Built for you:** the two-team, two-namespace, one-cohort Kueue configuration under `config/`, the
-preemption setup, and the demonstration scripts.
+**You build, Claude reviews:** configure two teams, two namespaces, one cohort, resource flavors,
+borrowing, and preemption.
 
-**Review focus:** the `ClusterQueue` and `ResourceFlavor` manifests; no Go changes in this task.
+**Review focus:** `ClusterQueue`, `LocalQueue`, and `ResourceFlavor` manifests.
 
 **Quiz**
 
-1. This whole task is YAML. What would it have cost to build in Go? Look at `3cb8302` before
-   answering.
-2. Borrowing: team A is idle, team B exceeds its nominal quota, then team A submits. What happens to
-   team B's running job, and which setting decided it?
-3. What mechanism actually protects serving from training — priority, quota, flavors, or node
-   taints? Name it precisely.
+1. What is quota denominated in?
+2. What does borrowing allow that separate fixed queues do not?
+3. How would a user tell they are waiting on quota rather than a broken image?
 
-**Your patch:** add a third team that can borrow but never lend, and show the asymmetry in a run.
-
-**Acceptance criteria**
-
-- Two teams, two namespaces, two `LocalQueue`s, one `ClusterQueue` cohort with borrowing.
-- A high-priority job preempts a low-priority one; both outcomes are visible in `TrainingJob`
-  status.
-- Online inference is protected from training: show an experiment being refused GPUs that serving
-  needs, and explain the mechanism that did it.
+**Patch/refine:** change one priority/preemption setting and demonstrate the changed scheduling
+order.
 
 ---
 
@@ -351,68 +404,44 @@ preemption setup, and the demonstration scripts.
 
 ### 3.1 Conditions, events, and metrics
 
-**Built for you:** Events on every transition in every controller, and the domain metrics registered
-on the manager's registry.
+**You build, Claude reviews:** every state transition emits an Event, every CRD reports conditions,
+and domain metrics are registered on the manager.
 
-**Review focus:** the `Recorder` calls across `internal/controller/`, and the metric definitions.
+**Review focus:** recorder calls, condition helpers, and metric definitions.
 
 **Quiz**
 
-1. Events expire. What does that mean for using them as an incident timeline, and what compensates?
-2. Your metric is a gauge of versions by phase. Who sets it, and what goes wrong if two manager
-   replicas both do?
-3. `kubectl describe` on a stuck object explains the stall. Which field carries that, and what
-   writes it?
+1. What belongs in a condition message versus a log line?
+2. Why are Events useful during an incident even when logs exist?
+3. What metric would catch a stuck controller before users complain?
 
-**Your patch:** add the one metric you would want during an incident that is not in the list, and
-defend the choice of type — counter, gauge, or histogram.
-
-**Acceptance criteria**
-
-- Every controller emits Events on transition; `kubectl describe` tells the whole story.
-- Domain metrics on the manager's registry: versions by phase, queue depth, gate refusals, time from
-  registration to stable.
-- A `kubectl describe` of a stuck object explains the stall without a single log line being read.
+**Patch/refine:** add one missing Event and prove it appears in `kubectl describe`.
 
 ### 3.2 Alerts
 
-**Built for you:** the alert rules over 3.1's metrics, for the conditions
-[requirements.md](requirements.md) names.
+**You build, Claude reviews:** add alert rules over the metrics and conditions from 3.1.
+
+**Review focus:** alert manifests and the runbook links they carry.
 
 **Quiz**
 
-1. Each alert names a runbook section. Why is that a hard requirement and not a nicety?
-2. Pick one alert and describe its false-positive mode. What would make an on-call engineer start
-   ignoring it?
+1. Which alerts page a human, and which only create dashboard context?
+2. Why should an alert name the failed layer?
+3. How do you avoid alerting on normal queueing?
 
-**Your patch:** trigger two alerts on purpose and record the signal. Then tune one threshold and say
-what you traded.
-
-**Acceptance criteria**
-
-- Each alert names the model, the owner, and a runbook section.
-- Trigger at least two on purpose and show the signal firing.
+**Patch/refine:** tune one alert threshold after a local demonstration.
 
 ### 3.3 Run an incident
 
-**This one is yours.** Claude breaks the platform without telling you how — delete an
-`InferenceService`, point a `Release` at a version whose artifact is gone, exhaust the quota, scale
-the manager to two replicas, delete the webhook's certificate. You diagnose using only the
-platform's own surfaces.
+**You build:** intentionally break one layer — quota, KServe image pull, webhook certificate, or bad
+model gate — and diagnose it from Kubernetes objects before reading controller logs.
 
-No code is written for you here. The whole point is that the code is already written and you still
-have to understand it under pressure.
-
-**Acceptance criteria**
-
-- A written timeline: what you saw, what you checked, what the cause was, what you did.
-- One improvement that would have made it faster.
+**Deliverable:** a short incident note in [progress.md](progress.md).
 
 ### 3.4 Write the runbook
 
-**Also yours.** `docs/runbook.md`, from what you learned in 3.3. Deploy, observe, break safely,
-recover. Claude reviews it and tries to follow it literally; anywhere it cannot, the runbook is
-wrong.
+**You build:** write the operator runbook for the incidents already demonstrated. Every page should
+start with `kubectl` commands and expected symptoms.
 
 ---
 
@@ -420,170 +449,65 @@ wrong.
 
 ### 4.1 envtest for every reconciler
 
-**Built for you:** envtest coverage of every controller including failure paths, kept under sixty
-seconds.
+**You build, Claude reviews:** add fast envtest coverage for every controller failure path.
 
-**Quiz**
-
-1. envtest runs a real API server but no kubelet. Name three things that therefore cannot be tested
-   this way, and where they are covered instead.
-2. What makes a controller test flaky, and which helper in this suite exists to prevent it?
-
-**Your patch:** find the one failure path with no test and write it.
-
-**Acceptance criteria**
-
-- Each controller is tested against a real API server via envtest, including the failure paths.
-- `go test ./...` stays under sixty seconds.
+**Patch/refine:** add a regression test for one bug found during manual testing.
 
 ### 4.2 Idempotency and crash safety
 
-**Built for you:** the double-reconcile tests, the crash-mid-loop test, and the two-manager leader
-election test.
+**You build, Claude reviews:** add double-reconcile tests, crash-mid-loop tests, and leader-election
+coverage where useful.
 
-**Quiz**
-
-1. "Reconciling twice equals reconciling once." Name the operation in this codebase that would break
-   that if written naively, and how it is written instead.
-2. The manager is killed between creating the Job and updating status. What repairs it, and on what
-   trigger?
-3. Leader election excludes the second manager. What is the window in which both could act, and why
-   is it acceptable?
-
-**Your patch:** add a crash point of your own choosing to the crash test, and fix whatever it
-breaks.
-
-**Acceptance criteria**
-
-- A test proves reconciling twice equals reconciling once for every controller.
-- Kill the manager mid-loop; no duplicated `ModelVersion`, no orphaned Job, no lost artifact.
-- A test with two managers running proves leader election actually excludes one.
+**Patch/refine:** remove any code path that requires seeing the previous event.
 
 ### 4.3 Contract tests for the release path
 
-**Built for you:** the enumerated attempt table — every sequence of API calls tried against the
-release path.
+**You build, Claude reviews:** enumerate every API sequence that could try to serve an ungated model
+and prove the platform refuses it.
 
-**Quiz**
-
-1. The value is in the list, not the assertion. Which attempt in the table taught you something, and
-   what?
-2. Add one attempt to the list that is not there. Does it pass?
-
-**Your patch:** that attempt, as a test.
-
-**Acceptance criteria**
-
-- No sequence of API calls moves an unevaluated version into serving traffic. Enumerate the attempts
-  you made; the value is in the list, not the assertion.
+**Patch/refine:** add one attack sequence that was not in the first table.
 
 ### 4.4 End-to-end
 
-**Built for you:** `make e2e`.
+**You build, Claude reviews:** add `make e2e` against a live kind cluster, covering dataset
+registration through promoted release.
 
-**Quiz**
-
-1. The e2e run creates a cluster if needed. What makes that safe to run against a cluster you
-   already have, and what would make it unsafe?
-2. It exits non-zero on failure. Name the failure mode where it would exit zero and be wrong.
-
-**Your patch:** make the cleanup step survive a failure in the middle of the run.
-
-**Acceptance criteria**
-
-- `make e2e` creates a cluster if needed, runs dataset → train → evaluate → canary → promote,
-  asserts, cleans up, and exits non-zero on failure.
+**Patch/refine:** add a failure-path e2e case without making the suite flaky.
 
 ---
 
-## Level 5 — GPUs and the cloud
+## Level 5 — GPUs and cloud
 
 ### 5.1 Make the GPU request real on kind
 
-**Built for you:** the fake device plugin or dedicated `ResourceFlavor`, wired so Kueue accounts for
-the request and refuses a job when the quota is gone.
-
-**Quiz**
-
-1. An extended resource versus a `ResourceFlavor` — which did the code use, and what does the other
-   one do better?
-2. The previous platform accepted `gpus` and ignored it. What single check in this one makes that
-   impossible now?
-
-**Your patch:** make the refusal reason name the resource and the quota, and test the exact text.
-
-**Acceptance criteria**
-
-- GPUs are an extended resource advertised by a fake device plugin, or a dedicated `ResourceFlavor`;
-  either way the request is accounted for by Kueue and a job is refused when the quota is gone.
-- The refusal reason names the resource and the quota.
+**You build, Claude reviews:** use a fake device plugin or a dedicated `ResourceFlavor` so Kueue
+accounts for GPU-like quota on kind.
 
 ### 5.2 Swap the training runtime
 
-**Built for you:** the child `batch/v1` Job replaced by a `JobSet` or Kubeflow `TrainJob`, with gang
-semantics.
-
-**Quiz**
-
-1. Did `TrainingJob.spec` change? If it did, what did the original abstraction get wrong? That
-   answer is worth more than the migration — write it in `progress.md` either way.
-2. Gang semantics: all workers start or none do. Which component enforces that, and what does your
-   controller have to avoid doing to let it?
-
-**Your patch:** the runtime is now selectable. Add the validation that refuses an unknown runtime at
-admission rather than at reconcile, and say why that is better.
-
-**Acceptance criteria**
-
-- **`TrainingJob.spec` does not change.** If it has to, say so in `progress.md` and explain what the
-  original abstraction got wrong.
-- Gang semantics hold: all workers start or none do.
+**You build, Claude reviews:** replace the child `batch/v1` Job with JobSet or Kubeflow TrainJob,
+without changing the platform API.
 
 ### 5.3 Identity and ownership
 
-**Built for you:** the mutating webhook stamping owner from the authenticated identity, per-team
-RBAC, and the promotion authorization check.
-
-**Quiz**
-
-1. Owner comes from the authenticated identity, not the spec. Where does the webhook get it, and why
-   can the user not forge it?
-2. RBAC stops team A reading team B's datasets. Does it stop team A reading team B's _model
-   versions_? Should it?
-3. "Only an evaluation's owner can promote its model version" — is that RBAC, the webhook, or both?
-
-**Your patch:** add the test that proves a forged owner field is overwritten, not rejected, and say
-why overwriting is the right choice.
-
-**Acceptance criteria**
-
-- Owner comes from the authenticated identity, not the spec; a mutating webhook stamps it.
-- RBAC per team namespace; one team cannot read another's datasets.
-- Only an evaluation's owner can promote its model version.
+**You build, Claude reviews:** add owner stamping from authenticated identity and per-team RBAC.
 
 ### 5.4 Run it on a cloud cluster
 
-**Yours to run**, with Claude on hand. The overlay is written; the cluster is real and costs money,
-so the decision to run it is yours.
-
-**Acceptance criteria**
-
-- `config/overlays/cloud` deploys the same controllers against real GPU nodes with no Go changes.
-- Real GPU metrics, real node topology, and a record of which node and which GPUs a job used.
-- The delta between overlays is only flavors, storage classes, and resource names.
+**You build:** add cloud overlays for real storage, ingress, and GPU node flavors. No `if kind` in
+Go.
 
 ---
 
 ## Reviewing the work
 
-Whoever wrote it, check it the way a platform reviewer would. Use this on Claude's code as hard as
-on your own — finding a violation here is worth more than a passing quiz.
+For every review, use this checklist:
 
-- Does every object have an owner, conditions, timestamps, and a failure reason?
-- Can a user learn what went wrong from `kubectl describe` alone?
-- Is the reconciler level-triggered? What happens if it is killed halfway through?
-- Is every child object owned, so deleting the parent cleans up?
-- **Does this controller carry policy, lineage, or a stable interface — or is it a YAML
-  translator?** If the last one, delete it.
-- Did you add the metric or event you will want during the incident this feature will cause?
-- Would this survive a cloud cluster with no code change?
+- Is this adopting existing Kubernetes ecosystem behavior where possible?
+- Is the API carrying policy, lineage, or a stable abstraction rather than translating YAML?
+- Are reconcilers level-triggered and idempotent?
+- Are child objects owner-referenced?
+- Are status conditions useful from `kubectl describe`?
+- Does each error name the failed layer?
+- Are generated files regenerated and committed with the source change that caused them?
+- Can the owner explain which CLI or controller produced every generated artifact?
