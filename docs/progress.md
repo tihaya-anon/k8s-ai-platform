@@ -6,25 +6,6 @@ is next.
 
 One entry per task. Keep them short; the value is in the evidence and the surprises.
 
-## Template
-
-```markdown
-### <task id> <task name> — <date>
-
-**Goal:** one sentence.
-
-**What I changed:** files, endpoints, objects.
-
-**How I proved it:** the commands and the output that show it works, including the failure case.
-
-**What surprised me:** the thing you would tell the next maintainer.
-
-**Quiz answers:** record the answer as I gave it.
-
-**Quiz review:** correction from the reviewer/code agent. Keep the critique next to the answer it
-reviews.
-```
-
 ## Entries
 
 ### Archive before blank rebuild — 2026-10-07
@@ -124,3 +105,367 @@ Server: Docker Engine - Community
 The installed Kubebuilder is now `v4.9.0`, matching the training task. That is good: scaffolded
 output can differ between Kubebuilder releases, so this keeps the exercise aligned with the archived
 reference point.
+
+### 0.1 Repository hygiene before Go code — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.2 Initialize the Kubebuilder project — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.3 Create the `Dataset` API and learn the generators — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.4 Add API-server tests with envtest — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.5 Write the cluster setup scripts — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.6 Add development workflow after it hurts — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 1.1 Dataset lifecycle — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 1.2 TrainingJob on Kueue — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 1.3 ModelVersion and the funnel — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 1.4 Evaluation and gates — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 1.5 Release on KServe — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 2.1 The promotion gate as admission control — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 2.2 What CEL can do instead — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 2.3 Quota and priority as configuration — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 3.1 Conditions, events, and metrics — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 3.2 Alerts — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 3.3 Run an incident — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 3.4 Write the runbook — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 4.1 envtest for every reconciler — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 4.2 Idempotency and crash safety — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 4.3 Contract tests for the release path — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 4.4 End-to-end — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 5.1 Make the GPU request real on kind — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 5.2 Swap the training runtime — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 5.3 Identity and ownership — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 5.4 Run it on a cloud cluster — YYYY-MM-DD
+
+**Goal:**
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
