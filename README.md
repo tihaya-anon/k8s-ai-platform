@@ -13,12 +13,13 @@ setup scripts yourself. Generated artifacts are part of the lesson, not somethin
 
 ## Read in this order
 
-| Document                                         | What it is                                                                 |
-| ------------------------------------------------ | -------------------------------------------------------------------------- |
-| [docs/requirements.md](docs/requirements.md)     | The requirements. User stories and required behaviour. Source of truth.    |
-| [docs/architecture.md](docs/architecture.md)     | The design: what is built here, what is adopted, and where the line falls. |
-| [docs/training-tasks.md](docs/training-tasks.md) | The blank-start curriculum.                                                |
-| [docs/progress.md](docs/progress.md)             | The maintainer log.                                                        |
+| Document                                           | What it is                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------- |
+| [docs/requirements.md](docs/requirements.md)       | The requirements. User stories and required behaviour. Source of truth.    |
+| [docs/architecture.md](docs/architecture.md)       | The design: what is built here, what is adopted, and where the line falls. |
+| [docs/training-tasks.md](docs/training-tasks.md)   | The blank-start curriculum.                                                |
+| [docs/progress.md](docs/progress.md)               | The maintainer log.                                                        |
+| [docs/agent-container.md](docs/agent-container.md) | Optional agent sandbox, available but not automatically enabled.           |
 
 ## Target shape
 
@@ -48,8 +49,9 @@ five custom resources, five controllers, one webhook — will be built here as t
 Start with
 [Level 0 in docs/training-tasks.md](docs/training-tasks.md#level-0--bootstrap-from-nothing): install
 the CLI tools, then run `kubebuilder init` yourself. The repository intentionally does not currently
-contain `Makefile`, `PROJECT`, `go.mod`, `api/`, `cmd/`, `config/`, `internal/`, `hack/`, or
-generated CRD manifests.
+contain the operator scaffold: `Makefile`, `PROJECT`, `go.mod`, `api/`, `cmd/`, `config/`,
+`internal/`, or generated CRD manifests. It may contain the optional agent sandbox files documented
+in [docs/agent-container.md](docs/agent-container.md); those are not part of the operator scaffold.
 
 If you need to compare against the old generated state:
 

@@ -91,7 +91,8 @@ it is needed.
 **Acceptance criteria**
 
 - `git status --short` is clean.
-- The root has no operator scaffold yet.
+- The root has no operator scaffold yet. Optional agent-sandbox files, if present, are not the
+  operator scaffold.
 
 ### 0.2 Initialize the Kubebuilder project
 
@@ -113,10 +114,18 @@ rm -rf ../k8s-ai-platform-scaffold
 ```
 
 The `cp -a source/. .` form is intentional: it copies hidden files such as `.dockerignore` and the
-Kubebuilder-generated `.gitignore`. Inspect the diff, merge any README or `.gitignore` changes
-consciously, and commit the result before creating any API kind.
+Kubebuilder-generated `.gitignore`. Inspect the diff and merge any README or `.gitignore` changes
+consciously.
 
-**Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, and the initial `config/` tree.
+Before committing, replace Kubebuilder's generated `.devcontainer/` files with the pinned versions
+in [agent-container.md](agent-container.md). This is part of the main scaffold task because the
+generated `post-install.sh` downloads `latest` CLIs, and generator/runtime tool versions are
+load-bearing in this repository.
+
+Commit the scaffold and devcontainer adjustments together before creating any API kind.
+
+**Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, `.devcontainer/`, and the initial
+`config/` tree.
 
 **Quiz**
 
@@ -210,7 +219,7 @@ Makefile target.
 
 ### 0.5 Write the cluster setup scripts
 
-**You build:** create the `hack/` directory and write the cluster lifecycle scripts yourself:
+**You build:** add the cluster lifecycle scripts yourself under `hack/`:
 
 - `hack/set-up-cluster.sh` creates or reuses a kind cluster.
 - It installs cert-manager, KServe v0.20.0, and Kueue v0.19.5 with pinned versions.
