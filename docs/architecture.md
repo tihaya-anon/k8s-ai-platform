@@ -66,6 +66,13 @@ what they registered; in `status` they are what the controller actually found at
 rewritten artifact is only detectable because the two can disagree — which is the reason this is an
 object at all rather than a URI string on a training job.
 
+`status.phase` is only a short `kubectl get` summary; conditions remain the source of truth. The
+initial API should allow these phases:
+
+- `Pending` — accepted by the API server, but not resolved by the controller yet.
+- `Ready` — the URI was resolved and the observed metadata matches any user-provided claims.
+- `Failed` — resolution or validation failed; the condition reason names the failing layer.
+
 Immutability is enforced in a webhook, not by convention. A golden dataset is the only kind an
 `Evaluation` will score against — score a model on the data it trained on and every gate passes and
 none of them mean anything.

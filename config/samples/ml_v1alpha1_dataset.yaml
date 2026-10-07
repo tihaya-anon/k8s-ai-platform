@@ -1,0 +1,13 @@
+apiVersion: ml.aiplatform.io/v1alpha1
+kind: Dataset
+metadata:
+  labels:
+    app.kubernetes.io/name: k8s-ai-platform
+    app.kubernetes.io/managed-by: kustomize
+  name: dataset-sample
+spec:
+  uri: sample.uri
+  owner: sample.owner
+  rows: 1
+  checksum: placeholder
+  golden: false

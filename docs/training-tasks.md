@@ -159,11 +159,19 @@ kubebuilder create api \
 Allow it to create the resource and the controller scaffold when prompted, but keep the controller
 logic empty until Level 1. Then edit `api/v1alpha1/dataset_types.go` yourself:
 
-- `spec.uri`, `spec.owner`, optional expected rows/checksum, and `spec.golden`.
-- `status.conditions`, `status.phase`, observed rows/checksum, and last resolved time.
+- `spec.uri`: non-empty dataset artifact location.
+- `spec.owner`: non-empty human or team owner used for accountability and incident routing.
+- Optional `spec.rows`: claimed positive row count supplied by the registrant.
+- Optional `spec.checksum`: claimed artifact checksum supplied by the registrant.
+- `spec.golden`: whether the dataset is approved for evaluation gates; default `false`.
+- `status.conditions`: Kubernetes conditions as the source of truth for diagnosis.
+- `status.phase`: short display summary, one of `Pending`, `Ready`, or `Failed`.
+- Optional `status.observedRows` and `status.observedChecksum`: metadata resolved by the controller.
+- Optional `status.lastResolvedTime`: timestamp of the last successful metadata resolution.
 - validation markers for the user-facing contract.
 - a status subresource.
-- printcolumns for useful `kubectl get datasets` output.
+- printcolumns required by the product contract: owner, expected rows, golden flag, phase, and age.
+  Age is not a custom field; it is printed from `.metadata.creationTimestamp`.
 
 Run both generators and inspect the diff:
 
@@ -191,7 +199,8 @@ change in `config/crd/bases/`. Revert the deliberate break before committing.
 
 - `make manifests generate` is wired and its output is committed.
 - `Dataset` validation is expressed as markers, not as reconciler code.
-- `kubectl get datasets` will show owner, rows, golden, phase, and age after the CRD is installed.
+- The generated CRD defines printer columns so `kubectl get datasets` will show owner, rows, golden,
+  phase, and age after a later task installs the CRD into a cluster.
 
 ### 0.4 Add API-server tests with envtest
 

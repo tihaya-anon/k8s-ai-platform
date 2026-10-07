@@ -190,19 +190,59 @@ service account and permissions, `config/prometheus/` owns monitoring integratio
 `config/network-policy/` owns metrics access policy. Deep YAML line review belongs later when a task
 changes one of those areas.
 
-### 0.3 Create the `Dataset` API and learn the generators — YYYY-MM-DD
+### 0.3 Create the `Dataset` API and learn the generators — 2026-10-07
 
-**Goal:**
+**Goal:** add a new CRD
 
-**What I changed:**
+**What I changed:** annotations on generated api Go files
 
-**How I proved it:**
+**How I proved it:** run generate commands and get the artifacts
 
-**What surprised me:**
+**What surprised me:** the generator is really useful, it only leaves the biz logic for me
 
 **Quiz answers:**
 
-**Quiz review:**
+1. config/ belongs to manifests, internal/ belongs to generate
+2. in the `openAPIV3Schema` part of the CRD, in `./internal/controller/dataset_controller.go`
+3. i dont understand the question
+4. because they are dynamic and required to be compared with the spec fields
+5. because the k8s api will fail to distinguish each other if not
+
+**Quiz review:** Accepted after the refine pass. `make test` passes, so the generated CRD installs
+into envtest and the generated controller scaffold can create a valid sample object. The earlier
+blockers were addressed: the sample has required spec fields, the generated controller test creates
+a valid Dataset, optional claimed/observed fields use pointers where omission matters, and the
+printer column types now match their JSONPaths (`Phase` is `string`, `Age` is `date`).
+
+One small cleanup was made before commit: the generated placeholder comments at the top of
+`DatasetSpec` were removed. The remaining field comments now reflect the requirement-side meanings
+that were added to `docs/training-tasks.md`.
+
+Validation is intentionally minimal for this first API pass: URI is non-empty with a max length, and
+checksum is non-empty with a max length. Stricter URI scheme or checksum-format policy can be added
+later when the artifact resolver contract is defined.
+
+Quiz corrections:
+
+1. `make manifests` generates Kubernetes manifests under `config/`, including CRDs and RBAC.
+   `make generate` generates Go object code such as `api/v1alpha1/zz_generated.deepcopy.go`; it does
+   not generally mean `internal/`.
+2. Validation lives in the CRD OpenAPI schema under `openAPIV3Schema`, and the Kubernetes API server
+   enforces it when objects are created or updated. It is not enforced by
+   `internal/controller/dataset_controller.go`.
+3. The status subresource separates writes to `.spec` and `.status`. Normal update/patch calls own
+   spec and metadata; status updates go through `/status`. This prevents a controller status update
+   from accidentally overwriting user intent and prevents ordinary spec updates from casually
+   changing observed state.
+4. Correct direction: `observedRows` and `observedChecksum` are status because they are controller
+   observations, not user intent. They are compared with spec claims to detect drift or mismatch.
+5. The API server can distinguish full resources by group/resource, but short names affect CLI UX
+   and discovery. Reusing common aliases like `ds` conflicts with expectations around DaemonSet and
+   makes `kubectl get` commands ambiguous or surprising.
+
+The 0.3 acceptance criteria sequencing issue was fixed in `docs/training-tasks.md`: 0.3 now requires
+the generated CRD to define the printer columns, while actually observing `kubectl get datasets` is
+left until a later task installs the CRD into a live cluster.
 
 ### 0.4 Add API-server tests with envtest — YYYY-MM-DD
 
