@@ -106,11 +106,11 @@ The installed Kubebuilder is now `v4.9.0`, matching the training task. That is g
 output can differ between Kubebuilder releases, so this keeps the exercise aligned with the archived
 reference point.
 
-### 0.1 Repository hygiene before Go code — YYYY-MM-DD
+### 0.1 Repository hygiene before Go code — 2026-10-07
 
-**Goal:**
+**Goal:** maintain the repo
 
-**What I changed:**
+**What I changed:** almost nothing, just commit the repo and push to remote
 
 **How I proved it:**
 
@@ -118,7 +118,24 @@ reference point.
 
 **Quiz answers:**
 
-**Quiz review:**
+1. because kubebuilder init requires an _empty_ dir
+2. requirements.md and architecture.md, progress.md and training-tasks.md
+3. editor files
+
+**Quiz review:** Better, but still too compressed.
+
+1. Corrected: `kubebuilder init` requires a _semi-empty_ project directory. It can coexist with
+   README, docs, and hygiene files, but it refuses files or directories that would conflict with its
+   scaffold; in practice, no existing `cmd/`, `api/`, `config/`, `internal/`, `go.mod`, `go.sum`,
+   `.go`, or `.yaml` project artifacts. The reason to commit first is still diff hygiene: the next
+   commit should show exactly what Kubebuilder generated.
+2. `requirements.md` and `architecture.md` are product/design documentation. `training-tasks.md` and
+   `progress.md` are curriculum/learning records, not product requirements. Workflow files are
+   things like `.gitignore`, `.prettierrc`, `.prettierignore`, and `.markdownlint.json`.
+3. "editor files" is correct but incomplete. `.gitignore` should also cover local binaries,
+   generated test assets, coverage output, upstream reference checkouts, swap files, and agent/tool
+   caches. Adding `.idea` after the IDE produced it is a good example of the task's patch/refine
+   step.
 
 ### 0.2 Initialize the Kubebuilder project — YYYY-MM-DD
 
