@@ -133,6 +133,7 @@ type DatasetStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=dset,categories=ml
 // +kubebuilder:printcolumn:name="Owner",type=string,JSONPath=`.spec.owner`
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Rows",type=integer,JSONPath=`.status.observedRows`
 // +kubebuilder:printcolumn:name="Golden",type=boolean,JSONPath=`.spec.golden`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

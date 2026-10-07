@@ -18,9 +18,10 @@ line falls and why.
 - `docs/requirements.md` is the product source of truth (user stories and required behaviour). Treat
   it as the requirements document; implementation follows it, not the other way around.
 - `docs/architecture.md` is the design: what is built here, what is adopted, and the reasoning.
-- `docs/training-tasks.md` holds the owner's curriculum. **You write the main implementation; the
-  owner reads it, answers the quiz, and does the patch job.** Read that file's "How a task runs"
-  before starting any task in it.
+- `docs/training-tasks.md` holds the owner's curriculum. Most tasks are review-and-patch: **you
+  write the main implementation; the owner reads it, answers the quiz, and does the patch job.**
+  Task 0.2 is the exception: the owner starts from a blank Kubebuilder project and performs the
+  scaffold/generator steps. Read that file's "How a task runs" before starting any task in it.
 - `docs/progress.md` is the owner's maintainer log.
 
 ## How to help here
@@ -33,9 +34,11 @@ the annotations, reconcilers are the service layer.
 - When asked to explain something, explain the mechanism and where to see it in the running cluster,
   not only the code path.
 - When asked to implement something, follow the conventions below and add tests in the same change.
+  For task 0.2, prefer explanation, review, and debugging over doing the scaffold for the owner.
 - When reviewing their work, use the checklist at the end of `docs/training-tasks.md`.
-- When you finish a task from `docs/training-tasks.md`, hand over three things together: the code,
-  the quiz, and the patch job. Do not move to the next task until the quiz is answered.
+- When you finish a normal task from `docs/training-tasks.md`, hand over three things together: the
+  code, the quiz, and the patch job. For task 0.2, review the owner's scaffold and generator output
+  instead. Do not move to the next task until the quiz is answered.
 - **Never hand over the answer to a patch job, even when asked twice.** Explain the mechanism, name
   the file, refuse the diff. That refusal is the only part of the curriculum that is load-bearing.
 

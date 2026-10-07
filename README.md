@@ -65,8 +65,9 @@ kubectl apply -f config/samples/
 kubectl get datasets
 ```
 
-Work the levels in [docs/training-tasks.md](docs/training-tasks.md) in order. Each one arrives as
-code plus a quiz plus a patch job; the code is the least important of the three.
+Work the levels in [docs/training-tasks.md](docs/training-tasks.md) in order. Task 0.2 is a
+blank-start Kubebuilder exercise: recreate the scaffold yourself before treating the checked-in
+files as reference material. Later tasks return to the code-plus-quiz-plus-patch-job loop.
 
 Development container:
 

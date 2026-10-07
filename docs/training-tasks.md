@@ -1,25 +1,32 @@
 # Maintainer Training Tasks
 
-This platform is built for you to learn from. **Claude writes the main implementation; you read it,
-answer for it, and patch it.** The code arriving finished is not the end of the exercise — being
-able to defend it is.
+This platform is built for you to learn from. Most levels follow a review-and-patch loop, but the
+bootstrap is different: **you start from a blank operator project and run the scaffolding
+yourself.** The goal is to make the generated files feel explainable, not magical.
 
 The end state is the system in [architecture.md](architecture.md), serving the requirements in
 [requirements.md](requirements.md).
 
 ## How a task runs
 
-Each task below has four parts:
+Each task below usually has four parts, and they run in this order:
 
-1. **Built for you** — what Claude implements, with tests, in one change.
-2. **Read first** — the two or three files where the interesting decision lives. Read them before
-   the quiz; skimming is visible in the answers.
+1. **Built for you** — the implementation Claude writes for you, with tests, as the first change in
+   the task. These files do not all have to exist before the task starts.
+2. **Review focus** — the files you read after that implementation exists. This is where the
+   important design decision lives. Do not treat this section as a list of files you must create or
+   edit yourself.
 3. **Quiz** — questions you answer out loud, in the chat, before the task is closed. Wrong answers
    are the point; they show which mechanism is still a black box. Claude marks them and re-explains
    what missed.
-4. **Your patch** — a small, sharply bounded change you make yourself, in the code Claude just
-   wrote. It is small so that the compiler and the tests give you fast feedback, and chosen so that
-   doing it requires having understood the surrounding code.
+4. **Your patch** — the only required code change you make yourself for the task. It is a small,
+   sharply bounded change in the code Claude just wrote, chosen so that doing it requires having
+   understood the review focus.
+
+**Exception:** task 0.2 is a blank-start task. Claude may explain, review, and debug, but you run
+the Kubebuilder commands, inspect the diffs after every generator step, and write the first
+`Dataset` markers yourself. That bootstrap experience is load-bearing for the rest of the
+curriculum.
 
 A task is done when the acceptance criteria hold, your patch is merged and tested, and you have
 answered the quiz. Record the quiz answers you got wrong in [progress.md](progress.md) — that list
@@ -28,8 +35,8 @@ is the most useful thing in this repository for the next person, and for you in 
 Claude's side of the contract: do not hand over the patch answer, even when asked twice. Explain the
 mechanism, point at the file, refuse the diff.
 
-> The previous version of this platform — hand-written Kubernetes client, hand-written queue,
-> hand-written traffic split, no CRDs — is in git history at `3cb8302`. It is worth reading when a
+> The previous version of this platform — handwritten Kubernetes client, handwritten queue,
+> handwritten traffic split, no CRDs — is in git history at `3cb8302`. It is worth reading when a
 > task here says "Kueue does this for you", because that commit is what "this" looks like when you
 > do it yourself.
 
@@ -51,7 +58,7 @@ controller:
   on the `Workload` in which order.
 - What each project's webhooks intercept, because yours will sit next to them.
 
-**Read first:** `deps/kserve/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/`.
+**Review focus:** `deps/kserve/pkg/controller/v1beta1/inferenceservice/reconcilers/ingress/`.
 
 **Quiz**
 
@@ -65,14 +72,21 @@ controller:
 `kserve-controller-manager` does not become available. Right now the script trusts KServe's
 installer exit code and reports success for a cluster that is not ready.
 
-### 0.2 Scaffold and the first CRD
+### 0.2 Bootstrap from blank and create the first CRD
 
-**Built for you:** `kubebuilder init` and `kubebuilder create api` for `Dataset`; the `Makefile`,
-`PROJECT`, `api/v1alpha1/dataset_types.go`, generated deepcopy and CRD manifests, and an envtest
-harness that runs green.
+**You build:** start from an empty operator project, run `kubebuilder init`, then
+`kubebuilder create api` for `Dataset`. Commit or at least inspect the tree after each step so you
+can say which files Kubebuilder created and which files `controller-gen` created later. Then add the
+`Dataset` spec/status fields, validation markers, status subresource, printcolumns, sample YAML, and
+envtest coverage.
 
-**Read first:** `api/v1alpha1/dataset_types.go`, `PROJECT`, `Makefile` (the `manifests`, `generate`
-and `envtest` targets), `config/crd/bases/`.
+If this repository already contains the scaffold, do the exercise on a scratch branch or in a fresh
+copy first, then port the understood result back here. Do not continue to 1.1 until you can recreate
+0.2 without treating the existing files as a template to copy blindly.
+
+**Review focus:** `PROJECT`, `Makefile` (the `manifests`, `generate` and `envtest` targets),
+`api/v1alpha1/dataset_types.go`, `api/v1alpha1/zz_generated.deepcopy.go`, `config/crd/bases/`, and
+`config/samples/`.
 
 **Quiz**
 
@@ -88,9 +102,10 @@ and `envtest` targets), `config/crd/bases/`.
    two datasets existed, rather than reporting an ambiguity. Why? What does that tell you about how
    `kubectl` resolves a short name, and what is the rule for choosing one?
 
-**Your patch:** add a printcolumn so `kubectl get datasets` shows the phase without `-o yaml`, and
-regenerate. Then break it on purpose: change a validation marker, run `make manifests`, and find the
-resulting diff in `config/crd/bases/`.
+**Your patch:** after your scaffold works, make one deliberately small API change yourself: add or
+adjust a printcolumn so `kubectl get datasets` shows useful state without `-o yaml`, and regenerate.
+Then break it on purpose: change a validation marker, run `make manifests`, and find the resulting
+diff in `config/crd/bases/`.
 
 **Acceptance criteria**
 
@@ -105,10 +120,12 @@ resulting diff in `config/crd/bases/`.
 
 ### 1.1 Dataset lifecycle
 
-**Built for you:** the `Dataset` reconciler, the immutability webhook, and envtest coverage of both
-including the failure paths.
+**Built for you:** the `Dataset` reconciler, an immutability webhook created at
+`internal/webhook/dataset_webhook.go`, and envtest coverage of both including the failure paths.
 
-**Read first:** `internal/controller/dataset_controller.go`, `internal/webhook/dataset_webhook.go`.
+**Review focus:** `internal/controller/dataset_controller.go`,
+`internal/webhook/dataset_webhook.go`. `dataset_webhook.go` is created by the **Built for you**
+step, then read here, then changed only if the **Your patch** step asks for it.
 
 **Quiz**
 
@@ -137,8 +154,8 @@ instead — create a new `Dataset` — and add the test case that asserts the me
 labelled into a `LocalQueue`; status translation from Kueue's `Workload` conditions into the
 platform's own vocabulary; artifact writing.
 
-**Read first:** `internal/controller/trainingjob_controller.go`, and the Kueue `Workload` object in
-the live cluster during a run.
+**Review focus:** `internal/controller/trainingjob_controller.go`, and the Kueue `Workload` object
+in the live cluster during a run.
 
 **Quiz**
 
@@ -171,7 +188,7 @@ and the test that fills a `ClusterQueue` and asserts it.
 **Built for you:** the `ModelVersion` type, registration from a succeeded `TrainingJob` with
 `ownerReference` lineage, and the condition-based funnel with illegal transitions refused.
 
-**Read first:** `api/v1alpha1/modelversion_types.go`, the transition table in
+**Review focus:** `api/v1alpha1/modelversion_types.go`, the transition table in
 `internal/controller/modelversion_controller.go`.
 
 **Quiz**
@@ -198,7 +215,7 @@ dashboard rather than a list of names, and justify the choice in the PR descript
 **Built for you:** the `Evaluation` type, Kueue admission reusing 1.2's machinery, gate evaluation
 with platform defaults, and the `PromotionReady` / `PromotionBlocked` transition with a reason.
 
-**Read first:** `internal/controller/evaluation_controller.go`, the gate defaulting.
+**Review focus:** `internal/controller/evaluation_controller.go`, the gate defaulting.
 
 **Quiz**
 
@@ -223,8 +240,8 @@ not a threshold on a metric, and explain what class of failure it catches.
 **Built for you:** the `Release` type and the controller rendering an `InferenceService`, using
 whichever traffic mechanism 0.1 establishes.
 
-**Read first:** `internal/controller/release_controller.go`, and the generated `InferenceService` in
-the cluster.
+**Review focus:** `internal/controller/release_controller.go`, and the generated `InferenceService`
+in the cluster.
 
 **Quiz**
 
@@ -255,7 +272,7 @@ marker, not as Go — and the test proving the API server rejects it before your
 **Built for you:** the `ValidatingAdmissionWebhook` on `Release`, its certificate wiring, the
 failure-policy decision with the reasoning in a comment, and the bypass-attempt test table.
 
-**Read first:** `internal/webhook/release_webhook.go`, `config/webhook/`, `config/certmanager/`.
+**Review focus:** `internal/webhook/release_webhook.go`, `config/webhook/`, `config/certmanager/`.
 
 **Quiz**
 
@@ -285,7 +302,7 @@ the version promotable, and add the test that asserts the exact string.
 **Built for you:** the object-scoped rules — percent bounds, replica floors, required owner — moved
 out of Go into a `ValidatingAdmissionPolicy`, with the Go tests still passing.
 
-**Read first:** `config/policy/`, and the Go code that was deleted (in the diff).
+**Review focus:** `config/policy/`, and the Go code that was deleted (in the diff).
 
 **Quiz**
 
@@ -307,7 +324,7 @@ choosing correctly is the exercise.
 **Built for you:** the two-team, two-namespace, one-cohort Kueue configuration under `config/`, the
 preemption setup, and the demonstration scripts.
 
-**Read first:** the `ClusterQueue` and `ResourceFlavor` manifests; no Go changes in this task.
+**Review focus:** the `ClusterQueue` and `ResourceFlavor` manifests; no Go changes in this task.
 
 **Quiz**
 
@@ -337,7 +354,7 @@ preemption setup, and the demonstration scripts.
 **Built for you:** Events on every transition in every controller, and the domain metrics registered
 on the manager's registry.
 
-**Read first:** the `Recorder` calls across `internal/controller/`, and the metric definitions.
+**Review focus:** the `Recorder` calls across `internal/controller/`, and the metric definitions.
 
 **Quiz**
 

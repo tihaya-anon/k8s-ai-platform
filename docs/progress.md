@@ -26,10 +26,10 @@ One entry per task. Keep them short; the value is in the evidence and the surpri
 
 ### 0.0 Platform handover — 2026-09-17
 
-> Archived. This entry describes the hand-written first version, replaced by the rebuild described
-> in [architecture.md](architecture.md). The code and its `mvp.md` are in git history at `3cb8302`.
+> Archived. This entry describes the handwritten first version, replaced by the rebuild described in
+> [architecture.md](architecture.md). The code and its `mvp.md` are in git history at `3cb8302`.
 
-**Goal:** stand up the hand-written MVP from the requirements in [requirements.md](requirements.md).
+**Goal:** stand up the handwritten MVP from the requirements in [requirements.md](requirements.md).
 
 **What I changed:** initial implementation — control plane API and reconcile loop, gateway, model
 server, training and evaluation workers, CLI, kind cluster, manifests, unit tests.
@@ -38,7 +38,7 @@ server, training and evaluation workers, CLI, kind cluster, manifests, unit test
 registration to a promoted stable version.
 
 **What surprised me:** the release path is not the hard part — the gate that refuses an unevaluated
-model is what separates a platform from a deploy script, and it is four lines of code in one
+model is what separates a platform from a deployment script, and it is four lines of code in one
 handler.
 
 **Left undone:** everything in [training-tasks.md](training-tasks.md). That is the point.
@@ -69,8 +69,8 @@ applies Kueue. Every step checks for its own result first, so it is safe to re-r
 
 **Pinned versions:** kind node v1.36.1 · cert-manager v1.17.0 · KServe v0.20.0 · Kueue v0.19.5.
 
-**How I proved it:** `kind delete cluster` then `./hack/set-up-cluster.sh` from nothing; all three
-controllers reach Available.
+**How I proved it:** `./hack/shutdown-cluster.sh stop` or `./hack/shutdown-cluster.sh delete` then
+`./hack/set-up-cluster.sh` from nothing; all three controllers reach Available.
 
 **What surprised me:**
 
@@ -95,6 +95,11 @@ traffic-split one blocks task 1.5.
 
 **Goal:** a kubebuilder project and a `Dataset` CRD whose validation lives in markers, not in Go.
 
+**Course correction:** the first scaffold was produced by the coding agent. Before continuing to
+1.1, redo 0.2 from a blank scratch project or scratch branch: run `kubebuilder init`, run
+`kubebuilder create api`, inspect the tree after each step, then run `make manifests` and
+`make generate` and identify exactly which generated files changed.
+
 **What I changed:** kubebuilder v4.9.0 scaffold; API group `ml.aiplatform.io`, module
 `github.com/tihaya-anon/k8s-ai-platform`. `api/v1alpha1/dataset_types.go`, generated deepcopy and
 CRD manifests, `config/samples/`, and `internal/controller/dataset_api_test.go` — 19 envtest specs,
@@ -114,4 +119,5 @@ server with both offending fields named.
 
 **Quiz answers:** _to fill in — record the ones I got wrong, not the ones I got right._
 
-**Left undone:** the phase printcolumn (my patch job), and the reconciler itself, which is 1.1.
+**Left undone:** redo the scaffold from blank as a learning exercise, finish the phase printcolumn
+patch job, and then start the reconciler in 1.1.

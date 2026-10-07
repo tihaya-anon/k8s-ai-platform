@@ -14,6 +14,7 @@
       <w>ServiceMonitor</w>
       <w>aiplatform</w>
       <w>apiserver</w>
+      <w>cainjector</w>
       <w>certmanager</w>
       <w>clusterrolebinding</w>
       <w>controller-runtime</w>
@@ -50,6 +51,7 @@
       <w>ownerreference</w>
       <w>prealloc</w>
       <w>prettierignore</w>
+      <w>printcolumn</w>
       <w>reconciler</w>
       <w>reconcilers</w>
       <w>revive</w>

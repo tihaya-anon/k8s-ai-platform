@@ -167,9 +167,11 @@ now and an object-store implementation later.
 
 ## Layout
 
-Standard kubebuilder, because deviating from it costs you every tool that assumes it. Scaffolded
-with kubebuilder v4.9.0; API group `ml.aiplatform.io`, module
-`github.com/tihaya-anon/k8s-ai-platform`. Directories marked _later_ do not exist yet.
+Standard kubebuilder, because deviating from it costs you every tool that assumes it. The checked-in
+scaffold uses kubebuilder v4.9.0; API group `ml.aiplatform.io`, module
+`github.com/tihaya-anon/k8s-ai-platform`. In the training plan, task 0.2 is intentionally redone
+from a blank project so the generated layout is learned before it is trusted. Directories marked
+_later_ do not exist yet.
 
 ```text
 api/v1alpha1/          CRD types and kubebuilder markers
