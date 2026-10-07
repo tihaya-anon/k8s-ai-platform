@@ -78,8 +78,13 @@ verbose=0
 # is public module source, and --no-host-mods turns it off.
 use_host_mods=1
 
-# Filled by --mount, for the credential files a session is explicitly given. Kept as a flag rather
-# than an environment variable so the boundary is visible in the command that opened the shell.
+# Host-backed session directories are mounted by default. They are conversation/history state, not
+# provider credentials; auth files still require --creds and are mounted read-only. Creating the
+# directories on the host avoids Docker creating them as root when the first session starts.
+session_mounts=()
+
+# Filled by --mount, for extra files a session is explicitly given. Kept as a flag rather than an
+# environment variable so the boundary is visible in the command that opened the shell.
 extra_mounts=()
 # Filled by --creds, from the registry above. Same reasoning, one flag shorter to type.
 cred_mounts=()
@@ -178,6 +183,18 @@ parse_options() {
 # The two halves are deliberately asymmetric. A named credential that is absent is an error,
 # because `--creds codex` silently opening a shell without it is exactly the failure worth an
 # error message. A bare --creds takes whatever is there and says what it took.
+resolve_sessions() {
+  local pi_sessions codex_sessions
+  pi_sessions=${PI_SESSIONS_DIR:-$HOME/.pi/agent/sessions}
+  codex_sessions=${CODEX_SESSIONS_DIR:-${CODEX_HOME:-$HOME/.codex}/sessions}
+
+  mkdir -p "$pi_sessions" "$codex_sessions"
+  session_mounts=(
+    --mount "type=bind,src=$pi_sessions,dst=/home/agent/.pi/agent/sessions"
+    --mount "type=bind,src=$codex_sessions,dst=/home/agent/.codex/sessions"
+  )
+}
+
 resolve_credentials() {
   ((creds)) || return 0
 
@@ -219,8 +236,22 @@ build_image() {
   git_sha=$(git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit')
   commit_image="$image_repo:$git_sha"
 
+  local node_image go_image node_digest go_digest
+  node_image=${AGENT_NODE_IMAGE:-node:24-bookworm}
+  go_image=${AGENT_GO_IMAGE:-golang:1.25-bookworm}
+
+  # Resolve moving tags to immutable digests before the build. BuildKit otherwise checks Docker Hub
+  # for node:24-bookworm/golang:1.25-bookworm on every cold builder and may pull a different base
+  # even when an older agent image exists locally.
+  run_step docker pull "$node_image"
+  run_step docker pull "$go_image"
+  node_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$node_image")
+  go_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$go_image")
+
   local build_flags=(--network "${AGENT_BUILD_NETWORK:-host}")
   local build_args=(
+    --build-arg NODE_IMAGE="$node_digest"
+    --build-arg GO_IMAGE="$go_digest"
     --build-arg USER_UID="$(id -u)"
     --build-arg USER_GID="$(id -g)"
     --build-arg NPM_REGISTRY="$npm_registry"
@@ -321,6 +352,7 @@ agent_run() {
     "${mount_flags[@]}" \
     "${caches[@]}" \
     "${claude_volume[@]}" \
+    "${session_mounts[@]}" \
     "${home_mounts[@]}" \
     ${cred_mounts[@]+"${cred_mounts[@]}"} \
     "${extra_mounts[@]}" \
@@ -365,6 +397,12 @@ Options:
 
 Environment:
   CODEX_HOME     codex configuration directory --creds reads (default: ~/.codex)
+  PI_SESSIONS_DIR
+                 host directory mounted at /home/agent/.pi/agent/sessions by default
+                 (default: ~/.pi/agent/sessions)
+  CODEX_SESSIONS_DIR
+                 host directory mounted at /home/agent/.codex/sessions by default
+                 (default: $CODEX_HOME/sessions or ~/.codex/sessions)
   AGENT_IMAGE    image tag to use and update during image builds (default: k8s-ai-platform-agent:latest)
   AGENT_IMAGE_REPOSITORY
                  image repository for commit-tagged builds (default: k8s-ai-platform-agent)
@@ -393,6 +431,7 @@ main() {
   local command=${1:-help}
   [[ $# -gt 0 ]] && shift
   parse_options "$@"
+  resolve_sessions
   # Before prepare_volumes, so `--creds codx` fails in a second instead of after an image build.
   resolve_credentials
 

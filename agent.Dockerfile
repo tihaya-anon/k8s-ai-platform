@@ -3,9 +3,13 @@
 # This is intentionally separate from the product Dockerfile. The product image stays scratch and
 # offline; this image is only for editing, building, and testing this repository in a bounded
 # workspace.
-FROM node:24-bookworm AS node
+# Defaults are human-readable tags; hack/agent.sh resolves them to immutable RepoDigests before
+# building so a moving Docker Hub tag does not silently change the sandbox.
+ARG NODE_IMAGE=node:24-bookworm
+ARG GO_IMAGE=golang:1.25-bookworm
+FROM ${NODE_IMAGE} AS node
 
-FROM golang:1.25-bookworm
+FROM ${GO_IMAGE}
 
 ARG USERNAME=agent
 ARG USER_UID=1000

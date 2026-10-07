@@ -139,6 +139,17 @@ module proxy. Runtime containers also pass through the host proxy environment va
 networking by default, so a proxy bound to `127.0.0.1` on the WSL host still works for model calls;
 set `AGENT_RUN_NETWORK=bridge` only if the session does not need a localhost proxy.
 
+To pre-pull the large base images before the first build:
+
+```bash
+docker pull node:24-bookworm
+docker pull golang:1.25-bookworm
+```
+
+`hack/agent.sh image` pulls those tags too, then resolves them to immutable RepoDigests and passes
+the digest references into `agent.Dockerfile`. That keeps readable defaults in the Dockerfile while
+preventing a moving Docker Hub tag from silently changing the build.
+
 To build only the agent image:
 
 ```bash
@@ -149,6 +160,12 @@ The build passes your UID/GID into the image so files created by the container b
 user. It also passes the host's `go env GOPROXY` and `npm config get registry` through, so the build
 uses whatever mirrors the host already trusts; `APT_MIRROR` and `GITHUB_MIRROR` are build args on
 the same footing.
+
+To override the base images deliberately:
+
+```bash
+AGENT_NODE_IMAGE=node:24-bookworm AGENT_GO_IMAGE=golang:1.25-bookworm hack/agent.sh image
+```
 
 Expect around 3GB and a slow first build. `codex` and `claude-code` are thin npm wrappers around
 per-platform native binaries pulled in as optional dependencies -- roughly 570MB unpacked between
@@ -273,6 +290,17 @@ The image also bakes in this maintainer's usual Pi extension packages under the 
 `@inobit/pi-reader` and `pi-background-tasks` with its packaged background-task and
 Anthropic-attribution extensions. This makes the extensions available in a fresh container, but does
 not mount or copy any provider credentials.
+
+Pi and Codex session history is host-backed by default, without mounting credentials:
+
+```text
+~/.pi/agent/sessions       -> /home/agent/.pi/agent/sessions
+~/.codex/sessions          -> /home/agent/.codex/sessions
+```
+
+Override those host paths with `PI_SESSIONS_DIR` and `CODEX_SESSIONS_DIR` if needed. The script
+creates the directories before `docker run` so Docker does not create them as root. These mounts are
+for conversation/session continuity; auth remains opt-in.
 
 Pi stores its credential in `~/.pi/agent/auth.json` and Codex in `~/.codex/auth.json`
 (`$CODEX_HOME/auth.json` when that is set). `--creds` mounts whichever of them this host has,
