@@ -138,19 +138,57 @@ reference point.
    caches. Kubebuilder generates its own `.gitignore` during 0.2, so Go/Kubebuilder-specific ignores
    should be merged from that generated file instead of guessed too early.
 
-### 0.2 Initialize the Kubebuilder project — YYYY-MM-DD
+### 0.2 Initialize the Kubebuilder project — 2026-10-07
 
-**Goal:**
+**Goal:** build the scaffold using kubebuilder cli
 
-**What I changed:**
+**What I changed:** just move the generated files here
 
-**How I proved it:**
+**How I proved it:** `go test ./...` passes and `make help` shows the help messages
 
 **What surprised me:**
 
 **Quiz answers:**
 
-**Quiz review:**
+1. only `./cmd/main.go` is the source code
+2. to get type definitions so the schema are guaranteed during compiling
+3. manifests and generate, Deployment
+4. versions and metadata, maybe for compatibility?
+
+**three most-used Makefile targets:**
+
+1. manifests
+2. generate
+3. build
+
+**Quiz review:** Good scaffold evidence: `go test ./...` passing proves the generated Go module
+compiles and the empty test packages are valid, and `make help` proves the generated Makefile
+targets are wired.
+
+1. `cmd/main.go` is source code, but it is not the only source-like scaffold. `test/`, `go.mod`,
+   `go.sum`, and `hack/boilerplate.go.txt` are also code/build inputs. Deployment configuration is
+   mainly under `config/`, plus `Dockerfile`/`.dockerignore` for the manager image and `.github/`
+   for generated workflow examples. `PROJECT` is Kubebuilder metadata, not runtime deployment YAML.
+2. `controller-runtime` is not mainly about compile-time schemas. It is the controller framework:
+   manager lifecycle, shared cache/informers, Kubernetes client, scheme registration, leader
+   election, probes, metrics, and webhook integration. A handwritten REST client would make the
+   project rebuild those operator mechanics by hand.
+3. Generator targets are `manifests` and `generate`; targets such as `build`, `run`, `test`, and
+   `deploy` call them as dependencies. Live-cluster targets include `install`, `uninstall`,
+   `deploy`, `undeploy`, and the e2e kind targets. The target name is `deploy`, while `Deployment`
+   is the Kubernetes object rendered under `config/manager/`.
+4. `PROJECT` records the Kubebuilder CLI version, plugin/layout, project name, repo/module path, API
+   domain, and config version. Kubebuilder uses it so later scaffold commands know how to extend
+   this project consistently.
+
+The three most-used targets are reasonable for this point. After the first API exists, expect
+`make manifests generate` while changing markers/types, and `make fmt vet test` as the local gate.
+
+`config/` review should stay structural for 0.2. It is enough to know that `config/default/`
+composes the deployment, `config/manager/` owns the manager `Deployment`, `config/rbac/` owns
+service account and permissions, `config/prometheus/` owns monitoring integration, and
+`config/network-policy/` owns metrics access policy. Deep YAML line review belongs later when a task
+changes one of those areas.
 
 ### 0.3 Create the `Dataset` API and learn the generators — YYYY-MM-DD
 

@@ -1,63 +1,135 @@
 # k8s-ai-platform
 
-An internal AI model operations platform on Kubernetes: register a dataset version, train a model,
-evaluate it against a golden set, and only then let it take production traffic.
+// TODO(user): Add simple overview of use/purpose
 
-It is also a training environment. The repository has been reset to a blank-start curriculum: you
-will install the tools, run Kubebuilder yourself, generate the CRDs yourself, and write the cluster
-setup scripts yourself. Generated artifacts are part of the lesson, not something to hide.
+## Description
 
-> **Status: blank rebuild.** The previous generated Kubebuilder scaffold was archived in commit
-> `131697f` before this reset. Use it as a reference only after attempting the task from the blank
-> state.
+// TODO(user): An in-depth paragraph about your project and overview of use
 
-## Read in this order
+## Getting Started
 
-| Document                                           | What it is                                                                 |
-| -------------------------------------------------- | -------------------------------------------------------------------------- |
-| [docs/requirements.md](docs/requirements.md)       | The requirements. User stories and required behaviour. Source of truth.    |
-| [docs/architecture.md](docs/architecture.md)       | The design: what is built here, what is adopted, and where the line falls. |
-| [docs/training-tasks.md](docs/training-tasks.md)   | The blank-start curriculum.                                                |
-| [docs/progress.md](docs/progress.md)               | The maintainer log.                                                        |
-| [docs/agent-container.md](docs/agent-container.md) | Optional agent sandbox, available but not automatically enabled.           |
+### Prerequisites
 
-## Target shape
+- go version v1.24.0+
+- docker version 17.03+.
+- kubectl version v1.11.3+.
+- Access to a Kubernetes v1.11.3+ cluster.
 
-```mermaid
-flowchart TB
-    DS[Dataset] --> TJ[TrainingJob]
-    TJ --> MV[ModelVersion]
-    MV --> EV[Evaluation]
-    EV --> RL[Release]
+### To Deploy on the cluster
 
-    KUEUE([Kueue<br/>quota, queue,<br/>preemption])
-    KUEUE -. admits .-> TJ
-    KUEUE -. admits .-> EV
+**Build and push your image to the location specified by `IMG`:**
 
-    GATE{{admission<br/>webhook}}
-    MV -- gate status --> GATE
-    GATE -- refuses an<br/>ungated version --> RL
-
-    RL -. renders .-> KSERVE([KServe<br/>stable / canary])
+```sh
+make docker-build docker-push IMG=<some-registry>/k8s-ai-platform:tag
 ```
 
-Kueue and KServe are other people's operators, configured well. Everything else in that diagram —
-five custom resources, five controllers, one webhook — will be built here as the levels progress.
+**NOTE:** This image ought to be published in the personal registry you specified. And it is
+required to have access to pull the image from the working environment. Make sure you have the
+proper permission to the registry if the above commands don’t work.
 
-## Getting started
+**Install the CRDs into the cluster:**
 
-Start with
-[Level 0 in docs/training-tasks.md](docs/training-tasks.md#level-0--bootstrap-from-nothing): install
-the CLI tools, then run `kubebuilder init` yourself. The repository intentionally does not currently
-contain the operator scaffold: `Makefile`, `PROJECT`, `go.mod`, `api/`, `cmd/`, `config/`,
-`internal/`, or generated CRD manifests. It may contain the optional agent sandbox files documented
-in [docs/agent-container.md](docs/agent-container.md); those are not part of the operator scaffold.
-
-If you need to compare against the old generated state:
-
-```bash
-git show --stat 131697f
-git show 131697f:PROJECT
+```sh
+make install
 ```
 
-Do that after trying the exercise first.
+**Deploy the Manager to the cluster with the image specified by `IMG`:**
+
+```sh
+make deploy IMG=<some-registry>/k8s-ai-platform:tag
+```
+
+> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin privileges or
+> be logged in as admin.
+
+**Create instances of your solution** You can apply the samples (examples) from the config/sample:
+
+```sh
+kubectl apply -k config/samples/
+```
+
+> **NOTE**: Ensure that the samples has default values to test it out.
+
+### To Uninstall
+
+**Delete the instances (CRs) from the cluster:**
+
+```sh
+kubectl delete -k config/samples/
+```
+
+**Delete the APIs(CRDs) from the cluster:**
+
+```sh
+make uninstall
+```
+
+**UnDeploy the controller from the cluster:**
+
+```sh
+make undeploy
+```
+
+## Project Distribution
+
+Following the options to release and provide this solution to the users.
+
+### By providing a bundle with all YAML files
+
+1. Build the installer for the image built and published in the registry:
+
+```sh
+make build-installer IMG=<some-registry>/k8s-ai-platform:tag
+```
+
+**NOTE:** The makefile target mentioned above generates an 'install.YAML' file in the dist
+directory. This file contains all the resources built with Kustomize, which are necessary to install
+this project without its dependencies.
+
+1. Using the installer
+
+Users can just run `kubectl apply -f URL_FOR_YAML_BUNDLE` to install the project, i.e.:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/<org>/k8s-ai-platform/<tag or branch>/dist/install.yaml
+```
+
+### By providing a Helm Chart
+
+1. Build the chart using the optional helm plugin
+
+```sh
+kubebuilder edit --plugins=helm/v1-alpha
+```
+
+1. See that a chart was generated under 'dist/chart', and users can obtain this solution from there.
+
+**NOTE:** If you change the project, you need to update the Helm Chart using the same command above
+to sync the latest changes. Furthermore, if you create webhooks, you need to use the above command
+with the '--force' flag and manually ensure that any custom configuration previously added to
+'dist/chart/values.YAML' or 'dist/chart/manager/manager.YAML' is manually re-applied afterwards.
+
+## Contributing
+
+// TODO(user): Add detailed information on how you would like others to contribute to this project
+
+**NOTE:** Run `make help` for more information on all potential `make` targets
+
+More information can be found via the
+[Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+
+## License
+
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in
+compliance with the License. You may obtain a copy of the License at
+
+```text
+http://www.apache.org/licenses/LICENSE-2.0
+```
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+implied. See the License for the specific language governing permissions and limitations under the
+License.

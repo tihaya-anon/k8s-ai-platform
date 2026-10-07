@@ -124,8 +124,10 @@ load-bearing in this repository.
 
 Commit the scaffold and devcontainer adjustments together before creating any API kind.
 
-**Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, `.devcontainer/`, and the initial
-`config/` tree.
+**Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, `.devcontainer/`, and a structural
+pass over the initial `config/` tree. For `config/`, list the generated directories, identify each
+kustomize entry point, and explain which Kubernetes object family each directory owns; do not
+line-review every generated YAML field yet.
 
 **Quiz**
 
