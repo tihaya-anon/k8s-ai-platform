@@ -133,10 +133,10 @@ reference point.
 2. `requirements.md` and `architecture.md` are product/design documentation. `training-tasks.md` and
    `progress.md` are curriculum/learning records, not product requirements. Workflow files are
    things like `.gitignore`, `.prettierrc`, `.prettierignore`, and `.markdownlint.json`.
-3. "editor files" is correct but incomplete. `.gitignore` should also cover local binaries,
-   generated test assets, coverage output, upstream reference checkouts, swap files, and agent/tool
-   caches. Adding `.idea` after the IDE produced it is a good example of the task's patch/refine
-   step.
+3. "editor files" is correct for the pre-scaffold baseline, and the important refinement is timing:
+   before generators run, ignore only artifacts already observed locally, such as `.idea` and tool
+   caches. Kubebuilder generates its own `.gitignore` during 0.2, so Go/Kubebuilder-specific ignores
+   should be merged from that generated file instead of guessed too early.
 
 ### 0.2 Initialize the Kubebuilder project — YYYY-MM-DD
 
