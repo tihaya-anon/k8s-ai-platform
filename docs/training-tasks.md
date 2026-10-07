@@ -93,15 +93,24 @@ it is needed.
 
 ### 0.2 Initialize the Kubebuilder project
 
-**You build:** run Kubebuilder from the blank repository:
+**You build:** Kubebuilder v4.9.0 is stricter than "docs are okay": it refuses to initialize in a
+directory containing non-scaffold entries such as `docs/`. Keep this repository as the committed
+learning baseline, but run Kubebuilder in a temporary empty directory and copy the generated
+scaffold back:
 
 ```bash
+mkdir -p ../k8s-ai-platform-scaffold
+cd ../k8s-ai-platform-scaffold
 kubebuilder init \
   --domain aiplatform.io \
-  --repo github.com/tihaya-anon/k8s-ai-platform
+  --repo github.com/tihaya-anon/k8s-ai-platform \
+  --project-name k8s-ai-platform
+cd ../k8s-ai-platform
+mv ../k8s-ai-platform-scaffold/* .
+rm -rf ../k8s-ai-platform-scaffold
 ```
 
-Then inspect and commit the result before creating any API kind.
+Then inspect the diff and commit the result before creating any API kind.
 
 **Review focus:** `PROJECT`, `go.mod`, `Makefile`, `cmd/main.go`, and the initial `config/` tree.
 

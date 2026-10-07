@@ -124,11 +124,12 @@ reference point.
 
 **Quiz review:** Better, but still too compressed.
 
-1. Corrected: `kubebuilder init` requires a _semi-empty_ project directory. It can coexist with
-   README, docs, and hygiene files, but it refuses files or directories that would conflict with its
-   scaffold; in practice, no existing `cmd/`, `api/`, `config/`, `internal/`, `go.mod`, `go.sum`,
-   `.go`, or `.yaml` project artifacts. The reason to commit first is still diff hygiene: the next
-   commit should show exactly what Kubebuilder generated.
+1. Corrected again after trying the real CLI: Kubebuilder v4.9.0 requires a stricter _empty scaffold
+   directory_ than expected. It refused existing `cmd/`, and it also refused `docs/`. The safe
+   workflow is to commit this repository as the learning baseline, run `kubebuilder init` in a
+   temporary empty directory with `--project-name k8s-ai-platform`, then copy the generated scaffold
+   back here. The reason to commit first is still diff hygiene: the next commit should show exactly
+   what Kubebuilder generated.
 2. `requirements.md` and `architecture.md` are product/design documentation. `training-tasks.md` and
    `progress.md` are curriculum/learning records, not product requirements. Workflow files are
    things like `.gitignore`, `.prettierrc`, `.prettierignore`, and `.markdownlint.json`.
