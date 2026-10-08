@@ -1,0 +1,9 @@
+# The agent image only needs the files copied by agent.Dockerfile.
+**
+
+!hack/
+!hack/agent-home/
+!hack/agent-home/**
+!hack/agent-bin/
+!hack/agent-bin/**
+!hack/agent-entrypoint.sh
