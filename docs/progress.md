@@ -244,19 +244,39 @@ The 0.3 acceptance criteria sequencing issue was fixed in `docs/training-tasks.m
 the generated CRD to define the printer columns, while actually observing `kubectl get datasets` is
 left until a later task installs the CRD into a live cluster.
 
-### 0.4 Add API-server tests with envtest — YYYY-MM-DD
+### 0.4 Add API-server tests with envtest — 2026-10-09
 
-**Goal:**
+**Goal:** test api server behaviour on our CRD
 
-**What I changed:**
+**What I changed:** add a new test file `dataset_api_test.go`
 
-**How I proved it:**
+**How I proved it:** `make test` passes
 
 **What surprised me:**
 
 **Quiz answers:**
 
-**Quiz review:**
+1. Set up the mock api server to test the behaviour
+2. This only test the static behaviour, mainly config validation
+3. It proves that those validations indeed accepts the legal ones and reject the opposite
+
+**Quiz review:** The answers need correction and more precise terminology.
+
+1. Envtest is not a mock API server. It starts a real Kubernetes API server and etcd, loads the
+   generated CRD, and lets the test client exercise API-server behavior without starting the
+   controller manager or reconciler.
+2. The purpose is not only static configuration validation. Testing the API contract before writing
+   reconciliation separates admission/schema failures from controller business-logic failures and
+   confirms that invalid resources cannot enter the cluster.
+3. The answer has the right direction but is incomplete. Marker-generated validation becomes OpenAPI
+   schema in the CRD, and the Kubernetes API server enforces that schema at create/update time. The
+   tests prove that the generated schema rejects invalid values and accepts valid ones; they do not
+   prove reconciler behavior.
+
+The implementation currently covers valid creation, defaulting, and invalid URI/owner/rows/checksum
+inputs. The task also requires tests for status-subresource writes and for normal spec updates
+preserving status; those cases are not present in `dataset_api_test.go` yet. The defaulting test
+also leaves its resource behind, so cleanup would make the suite more isolated.
 
 ### 0.5 Write the cluster setup scripts — YYYY-MM-DD
 
