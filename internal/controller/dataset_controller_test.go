@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/tihaya-anon/k8s-ai-platform/internal/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -46,19 +47,17 @@ var _ = Describe("Dataset Controller", func() {
 			By("creating the custom resource for the Kind Dataset")
 			err := k8sClient.Get(ctx, typeNamespacedName, dataset)
 			if err != nil && errors.IsNotFound(err) {
-				rows := 1
-				checksum := "placeholder"
 				resource := &mlv1alpha1.Dataset{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
 					Spec: mlv1alpha1.DatasetSpec{
-						Uri:      "sample.uri",
-						Owner:    "sample.owner",
-						Rows:     &rows,
-						Checksum: &checksum,
-						Golden:   false,
+						Uri:      utils.Ptr("sample.uri"),
+						Owner:    utils.Ptr("sample.owner"),
+						Rows:     utils.Ptr(1),
+						Checksum: utils.Ptr("placeholder"),
+						Golden:   utils.Ptr(false),
 					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())

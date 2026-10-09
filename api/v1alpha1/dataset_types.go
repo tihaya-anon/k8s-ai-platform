@@ -26,13 +26,13 @@ type DatasetSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
-	Uri string `json:"uri"`
+	Uri *string `json:"uri"`
 
 	// Owner non-empty human or team owner used for accountability and incident routing
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
-	Owner string `json:"owner"`
+	Owner *string `json:"owner"`
 
 	// Rows claimed positive row count supplied by the registrant
 	// +kubebuilder:validation:Minimum=1
@@ -47,8 +47,7 @@ type DatasetSpec struct {
 
 	// Golden whether the dataset is approved for evaluation gates; default false
 	// +default=false
-	// +required
-	Golden bool `json:"golden"`
+	Golden *bool `json:"golden"`
 }
 
 type DatasetPhase string
