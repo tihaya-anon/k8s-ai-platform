@@ -24,7 +24,15 @@ for f in "${files[@]}"; do
   case $f in
   *.md) md+=("$f") prettier+=("$f") ;;
   *.json | *.jsonc | *.yaml | *.yml) prettier+=("$f") ;;
-  *.go) go+=("$f") ;;
+  *.go)
+    # controller-gen rewrites its own output on every `make generate`, so formatting
+    # it just produces a diff the next generator run reverts. golangci-lint skips
+    # these too (`exclusions: generated` in .golangci.yml); staying in step with it
+    # is the point. The marker is the Go convention, not a path pattern, so a
+    # renamed generated file is still skipped.
+    if grep -qE '^// Code generated .* DO NOT EDIT\.$' "$f"; then continue; fi
+    go+=("$f")
+    ;;
   esac
 done
 
@@ -40,11 +48,23 @@ if [[ ${#prettier[@]} -gt 0 ]] && have prettier; then
   prettier --write --ignore-unknown --log-level warn "${prettier[@]}" || status=1
 fi
 
+# goimports is a superset of gofmt -- it applies the same formatting and also adds
+# and regroups imports -- so it replaces gofmt rather than running alongside it.
+# Grouping must stay in step with the goimports settings in .golangci.yml, or
+# `make lint` will flag what this script just wrote.
 if [[ ${#go[@]} -gt 0 ]]; then
-  if have gofmt; then
+  if [[ -x $repo_root/bin/goimports ]]; then
+    "$repo_root/bin/goimports" -w "${go[@]}" || status=1
+  elif have goimports; then
+    goimports -w "${go[@]}" || status=1
+  elif have gofmt; then
+    # Loud, because gofmt leaves imports untouched: the file looks formatted while
+    # still failing `make lint`. A silent skip here is what makes that confusing.
+    echo "format.sh: goimports not found, falling back to gofmt; imports not regrouped (run 'make goimports')" >&2
     gofmt -w "${go[@]}" || status=1
-  elif have go; then
-    go fmt "${go[@]}" >/dev/null || status=1
+  else
+    echo "format.sh: no Go formatter found; install goimports with 'make goimports'" >&2
+    status=1
   fi
 fi
 
