@@ -278,19 +278,148 @@ inputs. The task also requires tests for status-subresource writes and for norma
 preserving status; those cases are not present in `dataset_api_test.go` yet. The defaulting test
 also leaves its resource behind, so cleanup would make the suite more isolated.
 
-### 0.5 Write the cluster setup scripts — YYYY-MM-DD
+### 0.5 Write the cluster setup scripts — 2026-10-10
 
-**Goal:**
+**Goal:** set up the cluster from zero and shutdown it idempotently
 
-**What I changed:**
+**What I changed:** two scripts, `hack/set-up-cluster.sh` and `hack/shutdown-cluster.sh`
 
-**How I proved it:**
+**How I proved it:** ran them
 
-**What surprised me:**
+**What surprised me:** shouldn't rely on script itself to ensure idempotency since these resources
+are manged by k8s and helm, should use helm cli instead
 
 **Quiz answers:**
 
-**Quiz review:**
+1. install ends when deployments are **CREATED**, not **READY**, while `kubectl wait` can specify
+   the status
+2. the later one. former one will install several resources at least under the situation that
+   current resource's version mismatches the desired one
+3. idk
+4. objects are in the cluster, etcd. use `kubectl get <resource>` to inspect
+
+**Quiz review:** Strong on 1 and 4. The "what surprised me" note is the real lesson of this task and
+is correct: idempotency belongs to the tool that owns the state, not to a guard clause in the
+script.
+
+1. Correct. Two refinements. Without `--wait`, `helm install` returns once the API server has
+   _accepted_ the manifests, which only proves they are schema-valid. With `--wait`, Helm blocks on
+   readiness but only for resources in its own chart, so cross-chart ordering (KServe's webhooks
+   needing cert-manager to actually answer) still needs an explicit `kubectl wait`. An exit code
+   reports "manifests accepted", never "controllers working".
+2. Right choice, wrong villain. Plain `helm install` does not quietly drift — it fails loudly on the
+   second run with "cannot re-use a name". The silent drift came from the `helm status`
+   skip-if-exists guard in the first version of this script: it made a changed `--version` or
+   `--set` a no-op, so the script stopped being the source of truth without ever failing.
+   `helm upgrade --install` converges because it re-renders the chart and diffs against the stored
+   release.
+3. Helm records ownership on every object it creates: the label `app.kubernetes.io/managed-by=Helm`
+   plus annotations `meta.helm.sh/release-name` and `meta.helm.sh/release-namespace`. If adoption
+   were allowed, two releases would each believe they own the same object — `helm uninstall` on
+   either would delete it out from under the other, and their upgrades would overwrite each other's
+   config in whatever order they ran. This is the error hit during this task: a stale
+   `kserve-resources` release owned `ServiceAccount/kserve-controller-manager` while the script
+   asked for a release named `kserve`. The refusal is correct behavior and should not be bypassed
+   with `--force` or by editing the annotations by hand.
+4. Correct. Worth adding: Helm also stores the rendered manifest _itself_ in the cluster, as a
+   Secret of type `helm.sh/release.v1` in the release namespace. That is how `helm list` and
+   `helm get manifest` work without the chart. See it with
+   `kubectl get secret -n kserve -l owner=helm` and `helm get manifest kserve -n kserve`.
+
+**Evidence to add:** "ran them" is thin for the acceptance criteria. The criteria are (a) from no
+kind cluster, (b) re-running is safe, (c) shutdown works. During this task the cluster was deleted
+and rebuilt from scratch, which covers (a); record the second consecutive run for (b) and one
+`hack/shutdown-cluster.sh` invocation for (c).
+
+**Script failures worth remembering:** the first run exited `141` (SIGPIPE) with no error message,
+because `awk '{ print $2; exit }'` closed the pipe while `helm status` was still writing, and
+`pipefail` plus `errexit` turned that into a silent death inside a command substitution. Same shape
+as `kind get clusters | grep -q`. A pipeline can fail because the _reader_ finished early.
+
+### 0.5a Read the admission webhooks you just installed — 2026-10-10
+
+**Quiz answers:**
+
+1. to prevent malformed actions? but is https safe enough?
+2. idk
+3. KServe has one, Kueue issues its own. I ran
+   `kubectl get -n kserve certificate serving-cert -o yaml` but didn't find failure modes
+4. idk
+
+patch error:
+
+```shell
+kubectl get validatingwebhookconfiguration cert-manager-webhook -o yaml > /tmp/test.yml
+```
+
+then change the caBundle in `test.yml`
+
+```shell
+kubectl apply -f /tmp/test.yml
+Warning: resource validatingwebhookconfigurations/cert-manager-webhook is missing the kubectl.kubernetes.io/last-applied-configuration annotation which is required by kubectl apply. kubectl apply should only be used on resources created declaratively by either kubectl create --save-config or kubectl apply. The missing annotation will be patched automatically.
+validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook configured
+```
+
+it seems no error occurred
+
+**Quiz review:** Answer 3's first half is right; the rest needs the mechanism. "idk" recorded
+honestly is the correct move — these are the questions to re-answer after task 2.1.
+
+1. Not about malformed actions — the API server does schema validation itself, before admission. TLS
+   is about confidentiality and authentication. The API server ships the _entire object_ to the
+   webhook, which may include Secret data, and accepts back a verdict that decides whether the write
+   lands. Over plain HTTP, anyone on the network path could read the object or forge an "allow". "Is
+   HTTPS safe enough?" is the right instinct: the API server authenticates the _server_ against
+   `clientConfig.caBundle`, and a webhook that needs to authenticate the _caller_ configures client
+   certificates via the API server's `--admission-control-config-file`. Most webhooks, including the
+   ones you will write, rely on the fact that only the API server can reach them in-cluster.
+2. Two independent things: **(a)** the TLS chain verifies — the serving certificate is signed by the
+   CA in `caBundle`, is valid for the Service's in-cluster DNS name, and has not expired; and
+   **(b)** the server is actually answering — the pod is Ready, the Service has endpoints, and it
+   returns a well-formed `AdmissionReview` within `timeoutSeconds`. Distinct symptoms: (a) fails
+   with `x509: certificate signed by unknown authority`, (b) fails with `connection refused`,
+   `no endpoints available for service`, or `context deadline exceeded`. Same user-visible outcome —
+   the write is rejected — but completely different fixes.
+3. Correct on which is which. The failure modes are operational, not fields in the YAML:
+   - **KServe / cert-manager:** a `Certificate` issues a Secret, and cert-manager's `cainjector`
+     watches the `cert-manager.io/inject-ca-from` annotation on the webhook configuration and
+     patches `caBundle` in. Failure modes: cainjector down or not yet reconciled when the webhook
+     configuration appears leaves `caBundle` empty, so every guarded write fails with x509; and a
+     renewed certificate needs the controller pod to pick up the new mounted Secret, which is not
+     instant. The dependency is external and can be broken by a cert-manager outage.
+   - **Kueue:** generates and rotates a self-signed CA in its own controller process and patches the
+     webhook configurations itself. Failure modes: certs are regenerated on restart, so there is a
+     startup window where the configuration carries a stale `caBundle`; with multiple replicas they
+     must agree on one CA. No external dependency, but also nothing your organization's PKI can
+     audit or rotate. Verify with `kubectl get certificate -A` (expect entries for
+     KServe/cert-manager, none for Kueue) and by diffing the annotations on each
+     `ValidatingWebhookConfiguration`.
+4. `failurePolicy: Fail` is correct when the webhook enforces an invariant that must never be
+   bypassed — the promotion gate in task 2.1 is exactly this: an ungated `ModelVersion` must not
+   reach serving, and "the gate was down" is not an acceptable reason to allow it. It becomes a
+   self-inflicted outage when the webhook guards high-churn core resources and the cluster needs
+   those writes to heal itself. The classic deadlock is a `Fail` webhook on Pods whose own pods
+   cannot be scheduled: nothing can start, including the webhook. The standard guards are a
+   `namespaceSelector` excluding `kube-system` and the webhook's own namespace, and `Ignore` for
+   anything that is advisory rather than a safety invariant.
+
+**On the patch experiment — "it seems no error occurred" is the finding, not a failed test.** Two
+reasons nothing broke, both worth knowing:
+
+1. **A webhook is only called for the resources its `rules` match.** `cert-manager-webhook` guards
+   cert-manager's own API — `Certificate`, `Issuer`, `ClusterIssuer`, and so on. Corrupting its
+   `caBundle` changes nothing until something creates or updates one of _those_. Admission is
+   per-resource, not global. Re-run the experiment as: break the `caBundle`, then immediately
+   `kubectl apply` a trivial self-signed `Issuer`, and read the x509 error.
+2. **cainjector put it back.** That configuration carries `cert-manager.io/inject-ca-from`, so
+   cert-manager's cainjector reconciles the field within seconds — the same level-triggered behavior
+   this repository's own controllers are required to have. Check with
+   `kubectl get validatingwebhookconfiguration cert-manager-webhook -o jsonpath='{...caBundle}'`
+   before and a few seconds after the edit.
+
+Also: `kubectl apply` on a Helm-created object produced the `last-applied-configuration` warning for
+a real reason — the object was created by Helm, not by `apply`, and applying to it adds a competing
+source of truth. Use `kubectl patch` for a deliberate one-off edit like this.
 
 ### 0.6 Add development workflow after it hurts — YYYY-MM-DD
 

@@ -245,11 +245,14 @@ and CRDs they install.
 
 **Quiz**
 
-1. Why does the API server refuse to call a webhook over plain HTTP?
-2. What two separate things must be true before an admission webhook call succeeds?
-3. Kueue and KServe manage webhook serving certificates differently. What are the failure modes of
-   each approach?
-4. Why should the script wait for deployments instead of trusting installer exit codes?
+1. Why should the script wait for deployments instead of trusting installer exit codes?
+2. `helm install` and `helm upgrade --install` are both "idempotent" in some sense. Which one keeps
+   the cluster converged when you change a pinned version, and why does the other quietly stop being
+   the source of truth?
+3. Helm refuses to adopt an object annotated with a different `meta.helm.sh/release-name`. What
+   would go wrong if it allowed it?
+4. A Helm chart is not saved to disk by `helm install`. Where do the objects it describes actually
+   live afterwards, and which command shows you them?
 
 **Patch/refine:** add one missing readiness check after you observe a real race or failure.
 
@@ -259,6 +262,48 @@ and CRDs they install.
   Available.
 - Re-running the script is safe.
 - The shutdown script can stop or delete the cluster.
+
+### 0.5a Read the admission webhooks you just installed
+
+Tasks 1.1 and 2.1 ask you to write admission webhooks. Before writing one, read the three that
+cert-manager, KServe, and Kueue already registered in your cluster. This task is inspection only —
+no files change.
+
+**You build:** nothing. Answer the questions from live objects.
+
+```bash
+kubectl get validatingwebhookconfiguration
+kubectl get mutatingwebhookconfiguration
+kubectl get validatingwebhookconfiguration <name> -o yaml
+kubectl get certificate -A
+```
+
+Admission is the step between authorization and the write to etcd: the API server calls a Service in
+the cluster over HTTPS, hands it the object, and waits for a verdict. Mutating webhooks run first
+and may rewrite the object; validating webhooks run second and may only accept or reject.
+
+**Review focus:** in one `ValidatingWebhookConfiguration`, locate `rules`, `clientConfig.service`,
+`clientConfig.caBundle`, `failurePolicy`, and `timeoutSeconds`, and say what each one decides.
+
+**Quiz**
+
+1. Why does the API server refuse to call a webhook over plain HTTP?
+2. What two separate things must be true before an admission webhook call succeeds? Name the
+   distinct symptom each one produces when it is the broken half.
+3. Kueue and KServe manage webhook serving certificates differently. Which one has a `Certificate`
+   object, which one issues its own, and what are the failure modes of each approach?
+4. `failurePolicy: Fail` on a webhook that is down blocks writes to the resources it guards. When is
+   that the correct behavior, and when is it an outage you caused yourself?
+
+**Patch/refine:** break one on purpose — overwrite a `caBundle` with garbage, try to create the
+guarded resource, read the error, then restore it. Record the exact error text in
+[progress.md](progress.md) so you recognize it during an incident.
+
+**Acceptance criteria**
+
+- You can name the Service each webhook configuration points at.
+- You can explain where its `caBundle` came from.
+- You have seen one real admission rejection and can read the error.
 
 ### 0.6 Add development workflow after it hurts
 
