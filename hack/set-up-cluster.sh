@@ -25,6 +25,8 @@ readonly KSERVE_DEPLOYMENTS=(kserve-controller-manager)
 readonly KUEUE_DEPLOYMENTS=(kueue-controller-manager)
 
 readonly WAIT_TIMEOUT="300s"
+readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly HELM_CACHE_DIR="${HELM_CACHE_DIR:-$REPO_ROOT/.cache/helm}"
 
 log() {
   printf '==> %s\n' "$*"
@@ -35,11 +37,27 @@ fail() {
   exit 1
 }
 
+normalize_proxy_env() {
+  # Some Linux desktops export uppercase proxy variables for containers as
+  # host.docker.internal while lowercase variables point at the host loopback.
+  # Host tools such as helm cannot resolve host.docker.internal, so prefer the
+  # lowercase value when the uppercase one has that Docker Desktop hostname.
+  if [[ "${HTTP_PROXY:-}" == *host.docker.internal* && -n "${http_proxy:-}" ]]; then
+    export HTTP_PROXY="$http_proxy"
+  fi
+  if [[ "${HTTPS_PROXY:-}" == *host.docker.internal* && -n "${https_proxy:-}" ]]; then
+    export HTTPS_PROXY="$https_proxy"
+  fi
+  if [[ "${ALL_PROXY:-}" == *host.docker.internal* && -n "${all_proxy:-}" ]]; then
+    export ALL_PROXY="$all_proxy"
+  fi
+}
+
 ensure_cli_tools() {
   local cmd
   local missing=0
 
-  for cmd in docker kubectl kind helm; do
+  for cmd in docker kubectl kind helm curl; do
     if command -v "$cmd" >/dev/null 2>&1; then
       printf '  %-8s ok\n' "$cmd"
     else
@@ -79,12 +97,124 @@ ensure_cluster() {
   fi
 }
 
+# Download an OCI chart once and reuse the pinned archive on later runs. The cache is deliberately
+# outside Git: charts are reproducible inputs, not source files, and can be reacquired from their
+# pinned upstream versions when the cache is removed.
+helm_chart() {
+  local chart="$1" version="$2"
+  local name="${chart##*/}"
+  local cached="$HELM_CACHE_DIR/${name}-${version}.tgz"
+
+  if [ -s "$cached" ]; then
+    printf '%s\n' "$cached"
+    return
+  fi
+
+  mkdir -p "$HELM_CACHE_DIR"
+  local temporary archive
+  temporary="$(mktemp -d "$HELM_CACHE_DIR/.download.XXXXXX")"
+  log "caching Helm chart $name $version" >&2
+  helm pull "$chart" --version "$version" --destination "$temporary" >/dev/null
+  archive="$(find "$temporary" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+  if [ -z "$archive" ]; then
+    rm -rf "$temporary"
+    fail "helm pull produced no chart archive for $chart@$version"
+  fi
+  mv "$archive" "$cached"
+  rm -rf "$temporary"
+  printf '%s\n' "$cached"
+}
+
+# Load chart images into the kind node before Kubernetes schedules pods. In this
+# development setup the host Docker daemon can reach registries, while the kind
+# node may inherit a proxy that points at host.docker.internal, which Linux kind
+# nodes cannot resolve by default. Preloading keeps the cluster setup independent
+# of in-node registry access.
+preload_image() {
+  local image="$1"
+
+  log "preloading image $image into kind cluster"
+  docker pull "$image" >/dev/null
+
+  if docker save "$image" \
+    | docker exec -i "${CLUSTER_NAME}-control-plane" \
+        ctr --namespace=k8s.io images import - >/dev/null; then
+    return
+  fi
+
+  # Docker's containerd image store can export an incomplete archive for some
+  # OCI-indexed images. Fall back to flattening the image filesystem while
+  # preserving the runtime fields Kubernetes needs to start the container.
+  log "docker save could not be imported for $image; flattening local image"
+  local entrypoint cmd user workdir container
+  local -a changes envs
+  changes=()
+  entrypoint="$(docker image inspect "$image" --format '{{json .Config.Entrypoint}}')"
+  cmd="$(docker image inspect "$image" --format '{{json .Config.Cmd}}')"
+  user="$(docker image inspect "$image" --format '{{.Config.User}}')"
+  workdir="$(docker image inspect "$image" --format '{{.Config.WorkingDir}}')"
+  mapfile -t envs < <(docker image inspect "$image" --format '{{range .Config.Env}}{{println .}}{{end}}')
+
+  if [ "$entrypoint" != "null" ]; then
+    changes+=(--change "ENTRYPOINT $entrypoint")
+  fi
+  if [ "$cmd" != "null" ]; then
+    changes+=(--change "CMD $cmd")
+  fi
+  if [ -n "$user" ]; then
+    changes+=(--change "USER $user")
+  fi
+  if [ -n "$workdir" ]; then
+    changes+=(--change "WORKDIR $workdir")
+  fi
+  local env
+  for env in "${envs[@]}"; do
+    if [ -n "$env" ]; then
+      changes+=(--change "ENV $env")
+    fi
+  done
+
+  container="$(docker create "$image")"
+  docker export "$container" | docker import "${changes[@]}" - "$image" >/dev/null
+  docker rm "$container" >/dev/null
+  docker save "$image" \
+    | docker exec -i "${CLUSTER_NAME}-control-plane" \
+        ctr --namespace=k8s.io images import - >/dev/null
+}
+
+preload_helm_images() {
+  local release="$1" chart="$2" namespace="$3"
+  shift 3
+
+  local images image
+  mapfile -t images < <(
+    helm template "$release" "$chart" --namespace "$namespace" "$@" \
+      | sed -n -E \
+        -e 's/^[[:space:]]*image:[[:space:]]*"?([^" #]+)"?.*/\1/p' \
+        -e 's/^[[:space:]]*-[[:space:]]*--[^=]*image=([^" ]+).*/\1/p' \
+      | sort -u
+  )
+
+  if [ "${#images[@]}" -eq 0 ]; then
+    return
+  fi
+
+  for image in "${images[@]}"; do
+    if docker exec "${CLUSTER_NAME}-control-plane" crictl inspecti "$image" >/dev/null 2>&1; then
+      continue
+    fi
+    preload_image "$image"
+  done
+}
+
 # Upsert a Helm release. `helm upgrade --install` installs when the release is
 # absent and converges it when it is present, so a changed version or value here
 # is applied on the next run instead of being silently skipped.
 helm_release() {
-  local release="$1" chart="$2" namespace="$3"
-  shift 3
+  local release="$1" chart="$2" namespace="$3" version="$4"
+  shift 4
+  chart="$(helm_chart "$chart" "$version")"
+  preload_helm_images "$release" "$chart" "$namespace" "$@"
 
   # `helm status` exits 0 even for a half-installed release. An interrupted
   # install leaves `pending-install`, which `helm upgrade` refuses to touch, so
@@ -133,17 +263,25 @@ wait_for_deployments() {
 ensure_gateway_api() {
   # KServe's Standard deployment mode programs Gateway API objects, and the API
   # server rejects those if the CRDs are absent. Gateway API ships as plain
-  # manifests, not a chart; `kubectl apply` is already idempotent.
+  # manifests, not a chart; cache it for repeatable local setup.
+  local manifest="$HELM_CACHE_DIR/gateway-api-${GATEWAY_API_VERSION}.yaml"
+  mkdir -p "$HELM_CACHE_DIR"
+  if [ ! -s "$manifest" ]; then
+    local temporary="${manifest}.tmp.$$"
+    log "caching Gateway API CRDs $GATEWAY_API_VERSION"
+    curl --fail --location --silent --show-error \
+      "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml" \
+      -o "$temporary"
+    mv "$temporary" "$manifest"
+  fi
   log "applying Gateway API CRDs $GATEWAY_API_VERSION"
-  kubectl apply -f \
-    "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"
+  kubectl apply -f "$manifest"
 }
 
 ensure_cert_manager() {
   # KServe generates its webhook serving certificates through cert-manager, so
   # cert-manager must be answering before KServe's webhooks are registered.
-  helm_release cert-manager oci://quay.io/jetstack/charts/cert-manager cert-manager \
-    --version "$CERT_MANAGER_VERSION" \
+  helm_release cert-manager oci://quay.io/jetstack/charts/cert-manager cert-manager "$CERT_MANAGER_VERSION" \
     --set crds.enabled=true
   wait_for_deployments cert-manager "${CERT_MANAGER_DEPLOYMENTS[@]}"
 }
@@ -152,12 +290,11 @@ ensure_kserve() {
   # CRDs first, as their own release: Helm never upgrades CRDs that live in a
   # chart's crds/ directory, which is exactly why KServe publishes them as a
   # separate chart whose CRDs are ordinary templates.
-  helm_release kserve-crd oci://ghcr.io/kserve/charts/kserve-crd kserve \
-    --version "$KSERVE_VERSION"
+  helm_release kserve-crd oci://ghcr.io/kserve/charts/kserve-crd kserve "$KSERVE_VERSION"
 
-  helm_release kserve oci://ghcr.io/kserve/charts/kserve-resources kserve \
-    --version "$KSERVE_VERSION" \
+  helm_release kserve oci://ghcr.io/kserve/charts/kserve-resources kserve "$KSERVE_VERSION" \
     --set kserve.controller.deploymentMode=Standard \
+    --set kserve.controller.imagePullPolicy=IfNotPresent \
     --set kserve.controller.gateway.ingressGateway.enableGatewayApi=true \
     --set kserve.controller.gateway.ingressGateway.kserveGateway=kserve/kserve-ingress-gateway
 
@@ -165,12 +302,12 @@ ensure_kserve() {
 }
 
 ensure_kueue() {
-  helm_release kueue oci://registry.k8s.io/kueue/charts/kueue kueue-system \
-    --version "$KUEUE_VERSION"
+  helm_release kueue oci://registry.k8s.io/kueue/charts/kueue kueue-system "$KUEUE_VERSION"
   wait_for_deployments kueue-system "${KUEUE_DEPLOYMENTS[@]}"
 }
 
 main() {
+  normalize_proxy_env
   ensure_cli_tools
   ensure_cluster
   ensure_gateway_api
