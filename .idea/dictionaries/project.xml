@@ -3,6 +3,8 @@
     <words>
       <w>BUILDPLATFORM</w>
       <w>CRDs</w>
+      <w>CustomResourceDefinition</w>
+      <w>CustomResourceDefinitions</w>
       <w>Ginkgo</w>
       <w>Gomega</w>
       <w>JSONPath</w>
@@ -15,16 +17,21 @@
       <w>ServiceMonitor</w>
       <w>aiplatform</w>
       <w>akinomyoga</w>
+      <w>apiextensions</w>
+      <w>apimachinery</w>
       <w>apiserver</w>
       <w>blerc</w>
       <w>cainjector</w>
       <w>certmanager</w>
+      <w>clientgo</w>
       <w>clusterrolebinding</w>
       <w>controller-runtime</w>
       <w>controllergen</w>
       <w>copyloopvar</w>
       <w>crds</w>
       <w>creds</w>
+      <w>customresourcedefinition</w>
+      <w>customresourcedefinitions</w>
       <w>dset</w>
       <w>dupl</w>
       <w>envtest</w>
@@ -46,6 +53,7 @@
       <w>kustomize</w>
       <w>lll</w>
       <w>markdownlint</w>
+      <w>metav1</w>
       <w>misspell</w>
       <w>mmdc</w>
       <w>modelversion</w>

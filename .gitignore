@@ -1,6 +1,13 @@
 # Generated agent guidance (AGENTS.md is the source of truth)
 /CLAUDE.md
 
+# Locally cached Helm charts and Gateway API manifests
+/.cache/
+
+# Local Pi state
+/.pi/tasks/
+/.pi/extensions/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
