@@ -55,7 +55,10 @@ home_mounts=(
 # in the k8s-ai-claude volume, so there is nothing on the host to mount and nothing to revoke
 # beyond the volume. CODEX_HOME is honoured because codex documents it; pi has no equivalent.
 credentials=(
-  "pi:${HOME}/.pi/agent/auth.json:/home/agent/.pi/agent/auth.json"
+  # Pi rewrites auth.json when OAuth-backed providers refresh or when provider attribution metadata
+  # changes. Mount the host secret somewhere inert and let the entrypoint copy it into the
+  # container's writable Pi home; otherwise Pi fails with EROFS on a read-only bind mount.
+  "pi:${HOME}/.pi/agent/auth.json:/run/agent-creds/pi-auth.json"
   "codex:${CODEX_HOME:-$HOME/.codex}/auth.json:/home/agent/.codex/auth.json"
 )
 

@@ -304,7 +304,9 @@ for conversation/session continuity; auth remains opt-in.
 
 Pi stores its credential in `~/.pi/agent/auth.json` and Codex in `~/.codex/auth.json`
 (`$CODEX_HOME/auth.json` when that is set). `--creds` mounts whichever of them this host has,
-read-only, and nothing at all without it:
+read-only, and nothing at all without it. The Pi credential is mounted at `/run/agent-creds` and
+copied into the container's writable Pi home by the entrypoint, because Pi may rewrite `auth.json`
+while refreshing OAuth-backed providers; the host file is still only read:
 
 ```bash
 hack/agent.sh shell --creds
@@ -326,9 +328,9 @@ hack/agent.sh review --creds codex
 
 The two halves behave differently on purpose. A credential named explicitly must exist, because
 `--creds codex` quietly opening a shell without it is the failure worth an error message; one that
-is simply absent under a bare `--creds` is skipped. Both are read-only without exception -- the
-container has no business rewriting a token the host owns, and a refresh written inside it would die
-with `--rm` anyway.
+is simply absent under a bare `--creds` is skipped. The host credentials are read-only without
+exception -- the container has no business rewriting a token the host owns, and a Pi refresh written
+inside it dies with `--rm` anyway.
 
 `--mount` remains for anything `--creds` does not know about:
 

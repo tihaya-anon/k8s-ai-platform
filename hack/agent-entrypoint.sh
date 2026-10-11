@@ -11,6 +11,15 @@ set -uo pipefail
 
 repo=/workspace/k8s-ai-platform
 
+# hack/agent.sh mounts the host Pi credential read-only at this neutral path, not directly over
+# ~/.pi/agent/auth.json. Pi is allowed to rewrite its own credential store during refresh, so copy
+# the mounted secret into the container's writable layer before starting the requested command.
+if [[ -r /run/agent-creds/pi-auth.json ]]; then
+  mkdir -p /home/agent/.pi/agent
+  cp /run/agent-creds/pi-auth.json /home/agent/.pi/agent/auth.json
+  chmod 0600 /home/agent/.pi/agent/auth.json 2>/dev/null || true
+fi
+
 if [[ -d $repo/.git ]]; then
   # The mount is owned by the host UID. It matches ${USER_UID} for the person who built the
   # image, but not for anyone else, and git then refuses the repo outright.
