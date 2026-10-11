@@ -1,8 +1,9 @@
 # Agent guidance
 
 `AGENTS.md` is the source of truth for agent guidance. `CLAUDE.md` is an ignored, generated copy for
-Claude; edit this file, not the copy. The pre-commit hook refreshes it after formatting, including
-on commits with no staged guidance changes. Enable hooks in a fresh clone with
+Claude; always edit `AGENTS.md`, never `CLAUDE.md`, even when reading this guidance from
+`CLAUDE.md`. The pre-commit hook refreshes `CLAUDE.md` after formatting, including on commits with
+no staged guidance changes. Enable hooks in a fresh clone with
 `git config core.hooksPath hack/git-hooks`; to refresh the copy before committing (or after a
 checkout), run `cp AGENTS.md CLAUDE.md`.
 
