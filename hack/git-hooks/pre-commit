@@ -12,6 +12,10 @@ set -uo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root" || exit 1
 
+# Claude reads a generated worktree copy, never a second tracked source of truth.
+# Run after formatting, even on early exits or lint failures; never stage the copy.
+trap 'cp -- "$repo_root/AGENTS.md" "$repo_root/CLAUDE.md" || exit 1' EXIT
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # Only files staged as added/copied/modified/renamed; a deleted path has nothing

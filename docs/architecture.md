@@ -182,7 +182,7 @@ Current files are documentation and project policy only:
 
 ```text
 README.md
-CLAUDE.md
+AGENTS.md
 docs/
 .markdownlint.json
 .prettierrc

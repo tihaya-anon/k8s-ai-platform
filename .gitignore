@@ -1,3 +1,6 @@
+# Generated agent guidance (AGENTS.md is the source of truth)
+/CLAUDE.md
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
