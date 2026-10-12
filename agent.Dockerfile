@@ -235,7 +235,15 @@ RUN set -eu; \
 # below shadow `claude` and `codex`. Set here, in the image, rather than in .bashrc: a session is
 # also started non-interactively -- `hack/agent.sh shell -- claude -p ...` from a hook or CI reads
 # no rc file -- and the two must not disagree about which binary runs.
+#
+# DISABLE_AUTOUPDATER for the same reason, and because the update cannot succeed by design: the
+# CLIs are installed into the root-owned /opt/agent-cli and the session runs as ${USERNAME}, so
+# Claude Code's updater only reaches "no write permission to npm prefix" and warns on every start.
+# The version is pinned by CLAUDE_VERSION above; an in-place self-update would defeat that pin, so
+# the right answer is to switch the updater off, not to make the prefix writable. Bump the ARG and
+# rebuild to move versions.
 ENV CLAUDE_CONFIG_DIR=/home/agent/.claude \
+    DISABLE_AUTOUPDATER=1 \
     LANG=C.UTF-8 \
     PATH=/usr/local/libexec/agent-bin:/opt/agent-cli/bin:${PATH}
 
