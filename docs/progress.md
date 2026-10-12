@@ -295,7 +295,7 @@ are manged by k8s and helm, should use helm cli instead
    the status
 2. the later one. former one will install several resources at least under the situation that
    current resource's version mismatches the desired one
-3. idk
+3. IDK
 4. objects are in the cluster, etcd. use `kubectl get <resource>` to inspect
 
 **Quiz review:** Strong on 1 and 4. The "what surprised me" note is the real lesson of this task and
@@ -336,15 +336,29 @@ because `awk '{ print $2; exit }'` closed the pipe while `helm status` was still
 `pipefail` plus `errexit` turned that into a silent death inside a command substitution. Same shape
 as `kind get clusters | grep -q`. A pipeline can fail because the _reader_ finished early.
 
-### 0.5a Read the admission webhooks you just installed — 2026-10-10
+### 0.5a Learn certificates before you read a webhook — YYYY-MM-DD
+
+**Goal:** inspect the certificate configs in kind cluster
+
+**What I changed:**
+
+**How I proved it:**
+
+**What surprised me:**
+
+**Quiz answers:**
+
+**Quiz review:**
+
+### 0.5b Read the admission webhooks you just installed — 2026-10-10
 
 **Quiz answers:**
 
 1. to prevent malformed actions? but is https safe enough?
-2. idk
+2. IDK
 3. KServe has one, Kueue issues its own. I ran
    `kubectl get -n kserve certificate serving-cert -o yaml` but didn't find failure modes
-4. idk
+4. IDK
 
 patch error:
 
@@ -362,7 +376,7 @@ validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook
 
 it seems no error occurred
 
-**Quiz review:** Answer 3's first half is right; the rest needs the mechanism. "idk" recorded
+**Quiz review:** Answer 3's first half is right; the rest needs the mechanism. "IDK" recorded
 honestly is the correct move — these are the questions to re-answer after task 2.1.
 
 1. Not about malformed actions — the API server does schema validation itself, before admission. TLS

@@ -263,11 +263,92 @@ and CRDs they install.
 - Re-running the script is safe.
 - The shutdown script can stop or delete the cluster.
 
-### 0.5a Read the admission webhooks you just installed
+### 0.5a Learn certificates before you read a webhook
+
+Everything the cluster does internally is TLS, and in Kubernetes a certificate is an identity
+document before it is an encryption key. Task 0.5b and task 2.1 both fail in ways you cannot read
+without this. Build a throwaway certificate authority first, then find the same structure in the
+cluster you just installed.
+
+**You build:** a CA of your own, outside the repository. Nothing here is committed.
+
+```bash
+mkdir -p /tmp/pki && cd /tmp/pki
+
+openssl genrsa -out ca.key 2048
+openssl req -x509 -new -key ca.key -days 3650 -out ca.crt \
+  -subj "/CN=my-ca/O=training" -addext "basicConstraints=critical,CA:TRUE"
+
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr -subj "/CN=webhook.default.svc"
+printf '%s\n' \
+  'basicConstraints=CA:FALSE' \
+  'extendedKeyUsage=serverAuth' \
+  'subjectAltName=DNS:webhook.default.svc' > san.ext
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -days 365 -extfile san.ext -out server.crt
+
+openssl x509 -in server.crt -noout -subject -issuer -dates -ext subjectAltName
+openssl verify -CAfile ca.crt server.crt
+openssl verify server.crt
+openssl verify -CAfile ca.crt -verify_hostname wrong.svc server.crt
+```
+
+Then find the same three parts — a CA, a signed certificate, a client that needs the CA — in the
+running cluster:
+
+```bash
+kubectl auth whoami
+kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' |
+  base64 -d | openssl x509 -noout -subject -issuer -dates
+kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' |
+  base64 -d | openssl x509 -noout -subject -issuer
+
+docker exec k8s-ai-platform-control-plane ls -R /etc/kubernetes/pki
+docker exec k8s-ai-platform-control-plane \
+  openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -subject -ext subjectAltName -dates
+docker exec k8s-ai-platform-control-plane kubeadm certs check-expiration
+
+kubectl get configmap -A --field-selector metadata.name=kube-root-ca.crt
+```
+
+**Review focus:** the two independent checks a TLS client makes — that the chain reaches a CA it
+trusts, and that the name it dialed appears in the certificate's `subjectAltName`. The last two
+`openssl verify` commands above fail one check each. Read both errors and keep them apart; they have
+different fixes and are the two halves of question 2 in 0.5b.
+
+**Quiz**
+
+1. `kubectl auth whoami` reports a username and a list of groups. Which field of your client
+   certificate became each one? What would someone holding `ca.key` be able to do, and what does
+   that say about where that file may live?
+2. The API server's serving certificate carries several `subjectAltName` entries. Name a client that
+   reaches it by each one, and explain why this is one certificate rather than several.
+3. Nothing you ran created the `kube-root-ca.crt` ConfigMap, and it exists in every namespace
+   including ones you made yourself. What puts it there, what does it contain, and which path inside
+   a pod does it become?
+4. Kubernetes implements no certificate revocation. Which choices elsewhere in the cluster — in
+   certificate lifetimes, in rotation, in which identities get certificates at all — follow from
+   that?
+
+**Patch/refine:** serve the throwaway certificate with
+`openssl s_server -cert server.crt -key server.key -accept 8443 -www`, then reach it with `curl`
+three times: once failing the trust check, once failing the name check, and once succeeding. Record
+the three error strings in [progress.md](progress.md).
+
+**Acceptance criteria**
+
+- You can state which x509 field the API server turns into a username and which into groups.
+- You can name the two independent checks above and the distinct error text each produces.
+- You can point at where the cluster CA certificate is stored for three different clients: your
+  kubeconfig, a running pod, and a webhook configuration.
+
+### 0.5b Read the admission webhooks you just installed
 
 Tasks 1.1 and 2.1 ask you to write admission webhooks. Before writing one, read the three that
 cert-manager, KServe, and Kueue already registered in your cluster. This task is inspection only —
-no files change.
+no files change. Do 0.5a first: questions 1 and 2 below are certificate questions wearing webhook
+clothes.
 
 **You build:** nothing. Answer the questions from live objects.
 
@@ -442,6 +523,9 @@ and failure policy.
 1. Why does this policy belong at admission time instead of only in the reconciler?
 2. What does `failurePolicy` mean during a webhook outage?
 3. Which bypass attempts does the webhook catch, and which are handled by RBAC or API validation?
+4. Your serving certificate must carry one particular `subjectAltName`, and the API server must be
+   handed one particular CA. Name both, say which tool produces each, and give the error text that
+   appears when each one is wrong. This is 0.5a applied to code you wrote.
 
 **Patch/refine:** improve one denial message so a user knows what to fix next.
 
