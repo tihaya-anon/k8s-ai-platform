@@ -242,10 +242,16 @@ RUN set -eu; \
 # The version is pinned by CLAUDE_VERSION above; an in-place self-update would defeat that pin, so
 # the right answer is to switch the updater off, not to make the prefix writable. Bump the ARG and
 # rebuild to move versions.
+#
+# TERM because `docker run -t` falls back to plain `xterm` when the image leaves it unset, and
+# `xterm` advertises 8 colours: Neovim's colourscheme, starship and ble.sh highlighting all degrade.
+# Docker only fills in that fallback when TERM is absent from the image config, so setting it here
+# wins. xterm-256color's terminfo entry ships in ncurses-base, already in the base image.
 ENV CLAUDE_CONFIG_DIR=/home/agent/.claude \
     DISABLE_AUTOUPDATER=1 \
     LANG=C.UTF-8 \
-    PATH=/usr/local/libexec/agent-bin:/opt/agent-cli/bin:${PATH}
+    PATH=/usr/local/libexec/agent-bin:/opt/agent-cli/bin:${PATH} \
+    TERM=xterm-256color
 
 RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
     && useradd \
