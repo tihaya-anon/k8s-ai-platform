@@ -32,6 +32,7 @@
       <w>creds</w>
       <w>customresourcedefinition</w>
       <w>customresourcedefinitions</w>
+      <w>datasetlog</w>
       <w>dset</w>
       <w>dupl</w>
       <w>envtest</w>

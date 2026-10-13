@@ -19,6 +19,9 @@ package controller
 import (
 	"context"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +35,12 @@ type DatasetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
+
+const (
+	typeAvailableDataset   = "Available"
+	typeProgressingDataset = "Progressing"
+	typeDegradedDataset    = "Degraded"
+)
 
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets/status,verbs=get;update;patch
@@ -47,9 +56,36 @@ type DatasetReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
 func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
+	var dataset mlv1alpha1.Dataset
 
-	// TODO(user): your logic here
+	// Cannot get the object
+	if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("Dataset not found. Ignoring since the object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Fail to get Dataset")
+		return ctrl.Result{}, err
+	}
+
+	// Initialize status
+	if len(dataset.Status.Conditions) == 0 {
+		meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+			Type:    typeProgressingDataset,
+			Status:  metav1.ConditionUnknown,
+			Reason:  "Reconciling",
+			Message: "Starting reconciliation",
+		})
+		if err := r.Status().Update(ctx, &dataset); err != nil {
+			log.Error(err, "Failed to update Dataset status")
+			return ctrl.Result{}, err
+		}
+		if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil {
+			log.Error(err, "Failed to re-fetch Dataset")
+			return ctrl.Result{}, err
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
