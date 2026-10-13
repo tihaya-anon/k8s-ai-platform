@@ -458,19 +458,71 @@ Also: `kubectl apply` on a Helm-created object produced the `last-applied-config
 a real reason — the object was created by Helm, not by `apply`, and applying to it adds a competing
 source of truth. Use `kubectl patch` for a deliberate one-off edit like this.
 
-### 0.6 Add development workflow after it hurts — YYYY-MM-DD
+### 0.6 Add development workflow after it hurts — 2026-10-13
 
-**Goal:**
+> **Written by Claude, not by the maintainer.** The work below was already in the tree; this entry
+> was reconstructed from the repository and the commits named in it, at the maintainer's request.
+> The quiz answers are Claude's, so they do not record what the learner knew before reading the
+> files — re-answer them from memory if you want that signal.
 
-**What I changed:**
+**Goal:** add workflow helpers only where a real mistake had already been repeated, and keep one
+owner per formatting concern.
 
-**How I proved it:**
+**What I changed:** three helpers, each from a different commit and for a different reason.
 
-**What surprised me:**
+- `hack/format.sh` (`91ce02f`) — one entry point that dispatches by extension: markdownlint `--fix`
+  for Markdown structure, then Prettier for wrapping and whitespace, then goimports for Go. The tree
+  already had `.markdownlint.json` and `.prettierrc` that nothing ran and that disagreed with each
+  other; MD013 is now off because Prettier owns wrapping.
+- `hack/git-hooks/pre-commit` (`91ce02f`) — formats staged files, restages them, then gates the
+  commit on markdownlint. It also regenerates `CLAUDE.md` from `AGENTS.md` in an `EXIT` trap, so the
+  generated copy is never stale and never staged. Opt-in via
+  `git config core.hooksPath hack/git-hooks`.
+- `agent.Dockerfile` plus `hack/agent-*` (`9ca95a2`) — the development container, added last and
+  only after host setup became a real source of drift. Documented in
+  [agent-container.md](agent-container.md).
+
+`611ea8b` later switched the Go half from `gofmt` to goimports, because `gofmt` leaves imports
+untouched: a file looked formatted while still failing `make lint`.
+
+**How I proved it:** every commit since `91ce02f` has gone through the hook, which prints its
+markdownlint summary (`Summary: 0 issues in 0 files`) as it runs. `bash hack/format.sh` with no
+arguments formats every git-tracked file and exits 0 on a clean tree. `make fmt vet test` is the Go
+gate.
+
+**What surprised me:** the formatter cannot be the gate. Formatting is silent and automatic, but
+markdownlint failures — a skipped heading level, a fence with no language — need a human, so they
+block. Two different jobs that look like one command. The second surprise is the opposite of
+automation: `format.sh` with no arguments uses `git ls-files`, so a brand-new untracked file is
+silently skipped until it is staged.
 
 **Quiz answers:**
 
-**Quiz review:**
+1. `hack/format.sh`. Not the hook, not the Makefile, not an editor setting — those all call it. The
+   point is that the Claude Code hook, the git pre-commit hook, and a human running it by hand apply
+   exactly the same rules; a formatter that disagrees with itself depending on who invoked it is
+   worse than none. Within that script each concern still has exactly one owner: markdownlint for
+   Markdown structure, Prettier for wrapping, goimports for Go.
+2. Anything a generator owns, because formatting it produces a diff the next generator run reverts.
+   Go files carrying the `// Code generated ... DO NOT EDIT.` marker are skipped by `format.sh` —
+   the marker is the Go convention, so a renamed file is still skipped — and `.golangci.yml` matches
+   that with `exclusions: generated`. On the YAML side, `.prettierignore` excludes
+   `config/crd/bases/` (controller-gen), `dist/`, `bin/`, and `hack/agent-home/`, which lazy.nvim
+   writes. `CLAUDE.md` is a third case: generated from `AGENTS.md`, gitignored, and refreshed by the
+   hook rather than formatted as a source file.
+3. Because a wrapper you cannot run by hand is a wrapper you cannot debug. The evidence rule in the
+   task is the same idea from the other end: a helper added before the mistake it prevents has
+   actually happened encodes a guess, and each one is a place where the real command can drift out
+   of sight. `611ea8b` is the case in point — the `gofmt` fallback was only understood as wrong
+   after seeing a formatted file still fail `make lint`.
+
+**Outstanding:** the patch/refine step is not done. No helper prints the command it is about to run;
+`format.sh` is silent on success and the pre-commit hook prints only its warnings. The acceptance
+criterion "workflow files are documented in README or progress notes" is met for the container by
+[agent-container.md](agent-container.md) and for the rest by this entry, but README still does not
+mention `hack/format.sh` or how to enable the hooks.
+
+**Quiz review:** not applicable — Claude wrote the answers above.
 
 ### 1.1 Dataset lifecycle — YYYY-MM-DD
 
