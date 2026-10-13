@@ -265,126 +265,36 @@ and CRDs they install.
 
 ### 0.5a Learn certificates before you read a webhook
 
-Everything the cluster does internally is TLS, and in Kubernetes a certificate is an identity
-document before it is an encryption key. Task 0.5b and task 2.1 both fail in ways you cannot read
-without this. Build a throwaway certificate authority first, then find the same structure in the
-cluster you just installed.
+**Moved:**
+[tls-and-admission.md](tls-and-admission.md#05a-learn-certificates-before-you-read-a-webhook).
+Certificates come before Kubernetes here, so the openssl walkthrough lives in its own document.
 
-**You build:** a CA of your own, outside the repository. Nothing here is committed.
-
-```bash
-mkdir -p /tmp/pki && cd /tmp/pki
-
-openssl genrsa -out ca.key 2048
-openssl req -x509 -new -key ca.key -days 3650 -out ca.crt \
-  -subj "/CN=my-ca/O=training" -addext "basicConstraints=critical,CA:TRUE"
-
-openssl genrsa -out server.key 2048
-openssl req -new -key server.key -out server.csr -subj "/CN=webhook.default.svc"
-printf '%s\n' \
-  'basicConstraints=CA:FALSE' \
-  'extendedKeyUsage=serverAuth' \
-  'subjectAltName=DNS:webhook.default.svc' > san.ext
-openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
-  -days 365 -extfile san.ext -out server.crt
-
-openssl x509 -in server.crt -noout -subject -issuer -dates -ext subjectAltName
-openssl verify -CAfile ca.crt server.crt
-openssl verify server.crt
-openssl verify -CAfile ca.crt -verify_hostname wrong.svc server.crt
-```
-
-Then find the same three parts — a CA, a signed certificate, a client that needs the CA — in the
-running cluster:
-
-```bash
-kubectl auth whoami
-kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' |
-  base64 -d | openssl x509 -noout -subject -issuer -dates
-kubectl config view --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' |
-  base64 -d | openssl x509 -noout -subject -issuer
-
-docker exec k8s-ai-platform-control-plane ls -R /etc/kubernetes/pki
-docker exec k8s-ai-platform-control-plane \
-  openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -subject -ext subjectAltName -dates
-docker exec k8s-ai-platform-control-plane kubeadm certs check-expiration
-
-kubectl get configmap -A --field-selector metadata.name=kube-root-ca.crt
-```
-
-**Review focus:** the two independent checks a TLS client makes — that the chain reaches a CA it
-trusts, and that the name it dialed appears in the certificate's `subjectAltName`. The last two
-`openssl verify` commands above fail one check each. Read both errors and keep them apart; they have
-different fixes and are the two halves of question 2 in 0.5b.
-
-**Quiz**
-
-1. `kubectl auth whoami` reports a username and a list of groups. Which field of your client
-   certificate became each one? What would someone holding `ca.key` be able to do, and what does
-   that say about where that file may live?
-2. The API server's serving certificate carries several `subjectAltName` entries. Name a client that
-   reaches it by each one, and explain why this is one certificate rather than several.
-3. Nothing you ran created the `kube-root-ca.crt` ConfigMap, and it exists in every namespace
-   including ones you made yourself. What puts it there, what does it contain, and which path inside
-   a pod does it become?
-4. Kubernetes implements no certificate revocation. Which choices elsewhere in the cluster — in
-   certificate lifetimes, in rotation, in which identities get certificates at all — follow from
-   that?
-
-**Patch/refine:** serve the throwaway certificate with
-`openssl s_server -cert server.crt -key server.key -accept 8443 -www`, then reach it with `curl`
-three times: once failing the trust check, once failing the name check, and once succeeding. Record
-the three error strings in [progress.md](progress.md).
+Build a throwaway CA outside the repository, make verification fail once for an untrusted chain and
+once for a name mismatch, then find the same three parts — a CA, a signed certificate, a client that
+needs the CA — in the running cluster. Tasks 0.5b and 2.1 fail in ways you cannot read without this.
 
 **Acceptance criteria**
 
-- You can state which x509 field the API server turns into a username and which into groups.
-- You can name the two independent checks above and the distinct error text each produces.
-- You can point at where the cluster CA certificate is stored for three different clients: your
-  kubeconfig, a running pod, and a webhook configuration.
+- You can say which x509 field becomes a username and which becomes groups.
+- You can name the two independent TLS checks and the distinct error text each produces.
+- You can point at where the cluster CA certificate is stored for your kubeconfig, a running pod,
+  and a webhook configuration.
 
 ### 0.5b Read the admission webhooks you just installed
 
-Tasks 1.1 and 2.1 ask you to write admission webhooks. Before writing one, read the three that
-cert-manager, KServe, and Kueue already registered in your cluster. This task is inspection only —
-no files change. Do 0.5a first: questions 1 and 2 below are certificate questions wearing webhook
-clothes.
+**Moved:**
+[tls-and-admission.md](tls-and-admission.md#05b-read-the-admission-webhooks-you-just-installed).
 
-**You build:** nothing. Answer the questions from live objects.
-
-```bash
-kubectl get validatingwebhookconfiguration
-kubectl get mutatingwebhookconfiguration
-kubectl get validatingwebhookconfiguration <name> -o yaml
-kubectl get certificate -A
-```
-
-Admission is the step between authorization and the write to etcd: the API server calls a Service in
-the cluster over HTTPS, hands it the object, and waits for a verdict. Mutating webhooks run first
-and may rewrite the object; validating webhooks run second and may only accept or reject.
-
-**Review focus:** in one `ValidatingWebhookConfiguration`, locate `rules`, `clientConfig.service`,
-`clientConfig.caBundle`, `failurePolicy`, and `timeoutSeconds`, and say what each one decides.
-
-**Quiz**
-
-1. Why does the API server refuse to call a webhook over plain HTTP?
-2. What two separate things must be true before an admission webhook call succeeds? Name the
-   distinct symptom each one produces when it is the broken half.
-3. Kueue and KServe manage webhook serving certificates differently. Which one has a `Certificate`
-   object, which one issues its own, and what are the failure modes of each approach?
-4. `failurePolicy: Fail` on a webhook that is down blocks writes to the resources it guards. When is
-   that the correct behavior, and when is it an outage you caused yourself?
-
-**Patch/refine:** break one on purpose — overwrite a `caBundle` with garbage, try to create the
-guarded resource, read the error, then restore it. Record the exact error text in
-[progress.md](progress.md) so you recognize it during an incident.
+Inspection only. Read the webhook configurations cert-manager, KServe, and Kueue registered in your
+cluster — `rules`, `clientConfig.service`, `clientConfig.caBundle`, `failurePolicy`,
+`timeoutSeconds` — and find out which mechanism filled each `caBundle`. Do 0.5a first. This is the
+reading half of the webhooks you write in tasks 1.1 and 2.1.
 
 **Acceptance criteria**
 
 - You can name the Service each webhook configuration points at.
 - You can explain where its `caBundle` came from.
-- You have seen one real admission rejection and can read the error.
+- You have seen one real admission rejection and recorded its error text.
 
 ### 0.6 Add development workflow after it hurts
 
@@ -525,7 +435,9 @@ and failure policy.
 3. Which bypass attempts does the webhook catch, and which are handled by RBAC or API validation?
 4. Your serving certificate must carry one particular `subjectAltName`, and the API server must be
    handed one particular CA. Name both, say which tool produces each, and give the error text that
-   appears when each one is wrong. This is 0.5a applied to code you wrote.
+   appears when each one is wrong. This is
+   [0.5a](tls-and-admission.md#05a-learn-certificates-before-you-read-a-webhook) applied to code you
+   wrote.
 
 **Patch/refine:** improve one denial message so a user knows what to fix next.
 

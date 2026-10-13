@@ -1,0 +1,384 @@
+# Tasks 0.5a and 0.5b — TLS and admission webhooks
+
+These two tasks are split out of [training-tasks.md](training-tasks.md) because they teach
+certificates and TLS verification before they teach Kubernetes, and at a level of command-by-command
+detail the main curriculum does not carry. Run them between task 0.5 and task 0.6, against the kind
+cluster `hack/set-up-cluster.sh` built.
+
+Read ["How a task runs now"](training-tasks.md#how-a-task-runs-now) first if you have not. The same
+loop applies here: you build, Claude reviews, you answer the quiz in [progress.md](progress.md),
+then you do the patch/refine step. Both tasks are feeders for task 2.1, where you write an admission
+webhook of your own.
+
+## 0.5a Learn certificates before you read a webhook
+
+Everything the cluster does internally is TLS, and in Kubernetes a certificate is an identity
+document before it is an encryption key. Task 0.5b and task 2.1 both fail in ways you cannot read
+without this.
+
+This task is three short steps. Each step ends in a checkpoint: one sentence you should be able to
+say out loud. If a step will not run, stop there and bring the error — do not skip ahead.
+
+**You build:** a throwaway certificate authority outside the repository. Nothing here is committed.
+
+### The `openssl` vocabulary you need first
+
+`openssl` is not one command; it is a toolbox where the first word picks the tool. Four appear in
+this task, and nearly every flag below belongs to one of them.
+
+| Subcommand       | What it operates on            | Used here to                                    |
+| ---------------- | ------------------------------ | ----------------------------------------------- |
+| `openssl genrsa` | a private key                  | create a new RSA private key                    |
+| `openssl req`    | a certificate signing request  | make a CSR, or self-sign one straight to a cert |
+| `openssl x509`   | an existing certificate        | sign a CSR into a cert, and print a cert        |
+| `openssl verify` | a certificate plus a trust set | run the checks a TLS client would run           |
+
+Four flags recur and mean the same thing everywhere: `-out` writes the result to a file, `-in` reads
+an input file, `-noout` suppresses the base64 blob so only the human-readable parts print, and
+`-key`/`-CAkey` name a private key to sign with.
+
+One distinction to hold on to, because everything else follows from it: a **key** is a secret you
+keep, a **CSR** is a public request ("please vouch that this public key belongs to this name"), and
+a **certificate** is that request plus a signature from someone else. A CA is not a kind of file —
+it is whoever holds a key that other parties have agreed to trust.
+
+### Step 1 — make a CA and sign one certificate
+
+First the CA. A root CA signs its own certificate, because there is nobody above it to ask.
+
+```bash
+mkdir -p /tmp/pki && cd /tmp/pki
+
+openssl genrsa -out ca.key 2048
+```
+
+- `genrsa` — generate an RSA private key. `2048` is the key size in bits.
+- The file now holds both halves of the keypair; the public half is derived from it on demand.
+- This one file is the entire authority. Anyone holding it can mint a certificate for any name.
+
+```bash
+openssl req -x509 -new -key ca.key -days 3650 -out ca.crt \
+  -subj "/CN=my-ca/O=training" -addext "basicConstraints=critical,CA:TRUE"
+```
+
+- `req` normally produces a CSR; `-x509` says skip the request and emit a finished, self-signed
+  certificate instead. That shortcut is what makes this a root CA.
+- `-new` means build a fresh request rather than reading one from disk.
+- `-key ca.key` is both the key being certified and the key doing the signing — the definition of
+  self-signed.
+- `-days 3650` is the validity window. Ten years is normal for a CA and wrong for a server.
+- `-subj "/CN=my-ca/O=training"` fills the subject non-interactively. `CN` is the common name, `O`
+  the organization. Omit `-subj` and `openssl` prompts you for these field by field.
+- `-addext "basicConstraints=critical,CA:TRUE"` is the extension that makes this certificate
+  _allowed to sign others_. Without it, verification of anything it signs fails. `critical` means a
+  client that does not understand this extension must reject the certificate rather than ignore it.
+
+Now the server certificate, in three moves: key, request, signature.
+
+```bash
+openssl genrsa -out server.key 2048
+openssl req -new -key server.key -out server.csr -subj "/CN=webhook.default.svc"
+```
+
+- Same `genrsa` as before; this key belongs to the server and never leaves it.
+- `req -new` without `-x509` stops at the CSR: a document saying "this public key goes with
+  `CN=webhook.default.svc`", signed by `server.key` to prove the requester holds that key.
+- The CSR carries no authority. It is worth nothing until a CA signs it.
+
+```bash
+printf '%s\n' \
+  'basicConstraints=CA:FALSE' \
+  'extendedKeyUsage=serverAuth' \
+  'subjectAltName=DNS:webhook.default.svc' > san.ext
+```
+
+- A plain text file of extensions the CA will stamp into the certificate. The CA decides these, not
+  the requester — that is the point of the signature.
+- `basicConstraints=CA:FALSE` — this certificate may not sign others. The opposite of the CA's.
+- `extendedKeyUsage=serverAuth` — usable to prove server identity in TLS, not for client auth or
+  code signing.
+- `subjectAltName=DNS:webhook.default.svc` — the names this certificate may answer to. Modern
+  clients check this list and ignore `CN` entirely, which is why the name appears twice.
+
+```bash
+openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -days 365 -extfile san.ext -out server.crt
+```
+
+- `x509 -req` — read a CSR and turn it into a certificate. This is the signing step.
+- `-CA ca.crt -CAkey ca.key` — the issuer's certificate (copied into the `issuer` field) and the key
+  that signs. This is the only command here that uses the CA key.
+- `-CAcreateserial` — every certificate a CA issues carries a unique serial; this creates `ca.srl`
+  to track them on first use.
+- `-extfile san.ext` — apply the extensions written above.
+- `-days 365` — a server certificate's lifetime, deliberately much shorter than the CA's.
+
+Now read what you made:
+
+```bash
+openssl x509 -in server.crt -noout -subject -issuer -dates -ext subjectAltName
+```
+
+- No `-req` this time, so `x509` is in print mode rather than signing mode.
+- `-subject -issuer -dates` print those fields; `-ext subjectAltName` prints one named extension.
+
+Expect `subject=CN=webhook.default.svc`, `issuer=CN=my-ca, O=training`, two dates, and one DNS
+entry. **Checkpoint:** the subject is who the certificate claims to be; the issuer is who vouched
+for it; `subjectAltName` is the list of names it is allowed to answer to.
+
+### Step 2 — make verification fail on purpose, one reason at a time
+
+A TLS client runs two independent checks. These three commands separate them.
+
+```bash
+openssl verify -CAfile ca.crt server.crt                               # passes
+openssl verify server.crt                                              # fails check 1
+openssl verify -CAfile ca.crt -verify_hostname wrong.svc server.crt    # fails check 2
+```
+
+- `verify` walks the chain from the certificate up to a trusted root and reports the first problem.
+- `-CAfile ca.crt` supplies the trust set for this one command. Leave it out and `openssl` falls
+  back to the system trust store, which has never heard of `my-ca` — that is check 1 failing.
+- `-verify_hostname wrong.svc` asks the second question: does that name appear in `subjectAltName`?
+  The chain is still perfectly valid here, which is the lesson.
+
+Copy the exact text of the two failures into [progress.md](progress.md). The first says the chain
+does not reach a trusted CA; the second says the name does not match. **Checkpoint:** you can state
+which of the two failed from the error text alone, without guessing.
+
+### Step 3 — find the same three parts in the cluster
+
+The same three roles — a CA, a signed certificate, a client that needs the CA — are already in your
+cluster. One command each. Run them one at a time and read the output before moving on.
+
+**(a) Your identity: the client certificate in your kubeconfig.**
+
+```bash
+kubectl config view --raw -o jsonpath='{.users[0].user.client-certificate-data}' |
+  base64 -d | openssl x509 -noout -subject -issuer -dates
+```
+
+- `config view` prints the merged kubeconfig; `--raw` keeps the secrets in it instead of printing
+  `DATA+OMITTED`.
+- `-o jsonpath=...` pulls one field out of that YAML. `users[0]` is the first user entry — if you
+  have several contexts, index the one you are using.
+- The field is base64-encoded PEM, so `base64 -d` decodes it back to a certificate, and the
+  `openssl x509` from step 1 prints it. Same print command, a real certificate this time.
+
+**(b) What the API server presents, and the names it may answer to.**
+
+```bash
+docker exec k8s-ai-platform-control-plane \
+  openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -subject -ext subjectAltName
+```
+
+- `docker exec` runs inside the kind node container, because that file lives on the node's
+  filesystem, not yours. kind nodes are containers, so `docker exec` is the way in.
+- `/etc/kubernetes/pki` is kubeadm's certificate directory. `apiserver.crt` is the serving
+  certificate every client in the cluster checks.
+- Expect several `subjectAltName` entries — a Service IP, a node name, `kubernetes`,
+  `kubernetes.default.svc`. Each is one way something dials the API server.
+
+**(c) The CA certificate, handed to every pod in every namespace.**
+
+```bash
+kubectl get configmap kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' |
+  openssl x509 -noout -subject -issuer
+```
+
+- A ConfigMap, not a Secret: a CA certificate is public. Only `ca.key` is secret.
+- The backslash in `{.data.ca\.crt}` escapes the dot inside the key name, so jsonpath reads the key
+  `ca.crt` rather than descending into a field named `crt`.
+- No `base64 -d` here, because ConfigMap `data` holds plain text while Secret `data` is base64.
+- Compare this issuer with (b)'s issuer. They should match: this is the CA a pod uses to decide
+  whether it is really talking to the API server.
+
+Notes on these commands, since they are the ones that usually break:
+
+- `k8s-ai-platform-control-plane` is the container name only because the kind cluster is named
+  `k8s-ai-platform` in `hack/set-up-cluster.sh`. Confirm with `docker ps --format '{{.Names}}'`.
+- If `docker` is not on your `PATH` in the shell you are in, run (b) from the host shell.
+- `kubectl auth whoami` also works on this cluster version and prints the same identity as (a) in
+  plain text. Use it to check your reading of the certificate, not instead of reading it. plain
+  text. Use it to check your reading of the certificate, not instead of reading it.
+
+**Checkpoint:** in (a) the subject has a `CN=` and an `O=`; one became your username and one became
+a group. In (b) the certificate lists several names. In (c) the issuer is the same cluster CA that
+signed (b).
+
+**Quiz** — answer these two from what you just ran:
+
+1. In (a), which part of the subject became your username and which became your groups? Check it
+   against `kubectl auth whoami`.
+2. Name the two checks from step 2 and the error text each one produced. For each, say what you
+   would fix.
+
+**Stretch** — optional, and fine to answer later with task 2.1:
+
+1. Nothing you ran created `kube-root-ca.crt`, yet it exists in every namespace. What puts it there,
+   and which path inside a pod does it become?
+2. Kubernetes implements no certificate revocation. What does that imply about certificate lifetimes
+   and rotation?
+
+**Patch/refine:** serve the throwaway certificate and reach it three ways.
+
+```bash
+cd /tmp/pki
+openssl s_server -cert server.crt -key server.key -accept 8443 -www   # leave running
+```
+
+- `s_server` is a throwaway TLS server built into `openssl` — no web server to install.
+- `-cert`/`-key` are the pair it presents to clients: exactly what a webhook pod mounts from its
+  Secret. `-accept 8443` is the port, `-www` makes it answer HTTP requests with a status page.
+
+In a second shell, dial it three ways. Each `curl` fails one check, fails the other, then passes
+both.
+
+```bash
+curl https://localhost:8443/                                  # fails: untrusted CA
+curl --cacert ca.crt https://localhost:8443/                  # fails: name mismatch
+curl --cacert ca.crt --resolve webhook.default.svc:8443:127.0.0.1 \
+  https://webhook.default.svc:8443/                           # succeeds
+```
+
+- First: no `--cacert`, so `curl` checks the chain against the system trust store and never reaches
+  `my-ca`. This is check 1 — the same failure as bare `openssl verify`.
+- Second: the chain now verifies, but you dialed `localhost` and the certificate only lists
+  `webhook.default.svc`. This is check 2, with the trust question already settled.
+- Third: `--resolve name:port:address` tells `curl` to use the certificate's name in the URL while
+  connecting to `127.0.0.1` anyway. Both checks pass. This is what a cluster DNS name does for a
+  real webhook — the Service name in `clientConfig.service` is why the certificate lists it.
+
+Record the two `curl` error strings in [progress.md](progress.md) next to the `openssl verify` ones.
+They are the same two checks seen through a different client.
+
+**Acceptance criteria**
+
+- You can say which x509 field becomes a username and which becomes groups.
+- You can name the two independent checks and the distinct error text each produces.
+- You ran all three commands in step 3 and can say which part each one showed.
+
+## 0.5b Read the admission webhooks you just installed
+
+Tasks 1.1 and 2.1 ask you to write admission webhooks. Before writing one, read the ones already
+running in your cluster. This task is inspection only — no files change. Do 0.5a first.
+
+**You build:** nothing. Answer from live objects.
+
+### Step 1 — list them, then read one closely
+
+```bash
+kubectl get validatingwebhookconfiguration
+kubectl get mutatingwebhookconfiguration
+kubectl get validatingwebhookconfiguration cert-manager-webhook -o yaml
+```
+
+- These are cluster-scoped objects with no namespace: a webhook configuration is a rule the API
+  server itself follows, not a workload.
+- The `WEBHOOKS` column in the list output counts the entries inside one configuration. One
+  configuration can register several webhooks, each with its own `rules` and its own `caBundle`.
+
+Admission is the step between authorization and the write to etcd: the API server calls a Service in
+the cluster over HTTPS, hands it the object, and waits for a verdict. Mutating webhooks run first
+and may rewrite the object; validating webhooks run second and may only accept or reject.
+
+In that YAML, find these five fields and say in one phrase what each decides:
+
+| Field                   | Decides                                         |
+| ----------------------- | ----------------------------------------------- |
+| `rules`                 | which API calls are sent to this webhook at all |
+| `clientConfig.service`  | which Service the API server dials              |
+| `clientConfig.caBundle` | which CA the API server will trust on that dial |
+| `failurePolicy`         | what happens when the call does not succeed     |
+| `timeoutSeconds`        | how long the write waits before that applies    |
+
+**Checkpoint:** you can name the Service each configuration points at, and say which resources it
+guards.
+
+### Step 2 — see where each `caBundle` comes from
+
+```bash
+kubectl get certificate -A
+kubectl get validatingwebhookconfiguration -o custom-columns=\
+NAME:.metadata.name,INJECT:.metadata.annotations.cert-manager\\.io/inject-ca-from
+```
+
+- `certificate` here is cert-manager's CRD, not a core Kubernetes kind — it exists only because
+  cert-manager is installed. `-A` lists every namespace.
+- `-o custom-columns=HEADER:.path,HEADER:.path` builds a table from jsonpath expressions. The
+  escaped dots in `cert-manager\\.io/inject-ca-from` are the same escaping as `ca\.crt` in 0.5a: the
+  dot is part of the annotation's name.
+- A blank `INJECT` column means nothing injects that `caBundle` — something else wrote it.
+
+cert-manager and KServe have `Certificate` objects, and cert-manager's cainjector writes the
+`caBundle` for anything carrying the `inject-ca-from` annotation. Kueue has no `Certificate`: its
+controller generates a CA in-process and patches its own webhook configurations.
+
+**Checkpoint:** for each configuration you can say which of the two mechanisms filled its
+`caBundle`.
+
+**Quiz** — answer these two:
+
+1. What two separate things must be true before an admission webhook call succeeds? Name the symptom
+   each one produces when it is the broken half. (This is 0.5a step 2, one layer up.)
+2. Why does the API server refuse to call a webhook over plain HTTP? The answer is not "to reject
+   malformed objects" — the API server already validates schema before admission.
+
+**Stretch** — optional:
+
+1. Which failure modes does a cert-manager-issued `caBundle` have that a self-issued one does not,
+   and vice versa?
+2. When is `failurePolicy: Fail` the correct choice, and when is it an outage you caused yourself?
+
+**Patch/refine:** break one on purpose, and this time make the break visible. Corrupting a
+`caBundle` changes nothing until something creates a resource that webhook's `rules` match — and
+cainjector will repair the field within seconds, so do the next step immediately.
+
+```bash
+# 1. Corrupt it. Use patch, not apply: this object belongs to Helm.
+kubectl patch validatingwebhookconfiguration cert-manager-webhook --type=json \
+  -p='[{"op":"replace","path":"/webhooks/0/clientConfig/caBundle","value":"Zm9v"}]'
+
+# 2. Immediately create a resource the webhook guards.
+kubectl apply -f - <<'YAML'
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: broken-webhook-probe
+  namespace: default
+spec:
+  selfSigned: {}
+YAML
+
+# 3. Watch cainjector put it back.
+kubectl get validatingwebhookconfiguration cert-manager-webhook \
+  -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | head -c 40; echo
+
+# 4. Clean up.
+kubectl delete issuer broken-webhook-probe -n default --ignore-not-found
+```
+
+How these four commands work:
+
+- `kubectl patch --type=json` sends a JSON Patch: a list of operations with an explicit `path` into
+  the object. `/webhooks/0/clientConfig/caBundle` is the `caBundle` of the first webhook entry. Use
+  patch rather than `apply` because this object was created by Helm, and applying to it adds a
+  second source of truth — that is what produced the `last-applied-configuration` warning last time.
+- `"Zm9v"` is base64 for `foo`. The field must stay valid base64 or the API server rejects the edit
+  for the wrong reason; it just must not decode to a usable CA certificate.
+- The heredoc creates an `Issuer`, which is a cert-manager resource, which is what
+  `cert-manager-webhook`'s `rules` match. A webhook is only consulted for the resources it guards —
+  this is why the previous attempt looked like nothing happened.
+- Step 3 prints the first 40 characters of the live `caBundle`. Run it twice, a few seconds apart,
+  and watch cainjector restore the real value: the same level-triggered reconciliation your own
+  controllers are required to have.
+
+Record the exact error from step 2 in [progress.md](progress.md) so you recognize it during an
+incident. If the create succeeded instead, cainjector won the race — repeat steps 1 and 2 as a
+single pasted block.
+
+**Acceptance criteria**
+
+- You can name the Service each webhook configuration points at.
+- You can explain where its `caBundle` came from.
+- You have seen one real admission rejection and recorded its error text.

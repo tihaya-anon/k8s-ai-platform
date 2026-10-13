@@ -336,7 +336,7 @@ because `awk '{ print $2; exit }'` closed the pipe while `helm status` was still
 `pipefail` plus `errexit` turned that into a silent death inside a command substitution. Same shape
 as `kind get clusters | grep -q`. A pipeline can fail because the _reader_ finished early.
 
-### 0.5a Learn certificates before you read a webhook — YYYY-MM-DD
+### 0.5a Learn certificates before you read a webhook — 2026-10-13
 
 **Goal:** inspect the certificate configs in kind cluster
 
@@ -348,7 +348,30 @@ as `kind get clusters | grep -q`. A pipeline can fail because the _reader_ finis
 
 **Quiz answers:**
 
-**Quiz review:**
+1. CN becomes username, O becomes groups
+2. error 1: unable to get local issuer certificate, should provide a CA. error 2: hostname mismatch,
+   whether add the hostname or correct the hostname
+
+**Quiz review:** Both correct, including the two error strings and both fixes. Nothing to re-answer.
+
+1. Right. Two details worth carrying into task 5.3. A certificate may carry several `O` values and
+   each becomes a separate group, so group membership is plural by design; the kubeadm admin
+   certificate uses this (`CN=kubernetes-admin`, `O=kubeadm:cluster-admins`, older clusters
+   `O=system:masters`). And the mapping is done by the API server's x509 authenticator, not by
+   anything in the certificate: x509 has no concept of a Kubernetes group. It also adds
+   `system:authenticated` to every successful authentication, which is why `kubectl auth whoami`
+   lists a group your certificate does not contain.
+2. Right, and the second half is the part most people miss: the two fixes live on different sides.
+   Check 1 is fixed on the _client_ — give it the CA it should trust, which in a webhook is
+   `clientConfig.caBundle`. Check 2 is fixed on the _server_ — re-issue the certificate with the
+   name in `subjectAltName` — or by dialing a name already in the list, which is what `--resolve`
+   does in the patch step. A certificate that fails check 2 is still perfectly valid; that is why
+   the errors must stay apart.
+
+**Evidence to add:** the quiz is done, but `What I changed`, `How I proved it`, and
+`What surprised me` are empty, and the acceptance criteria ask for the step 3 output and the `curl`
+error strings alongside the `openssl verify` ones. Record those three `curl` lines when you run the
+patch/refine step; the stretch questions stay optional until task 2.1.
 
 ### 0.5b Read the admission webhooks you just installed — 2026-10-10
 

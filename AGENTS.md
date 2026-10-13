@@ -43,6 +43,8 @@ lineage, and promotion gate. See [docs/architecture.md](docs/architecture.md).
 - `docs/training-tasks.md` is the blank-start curriculum. Read its "How a task runs now" section
   before starting any task.
 - `docs/progress.md` is the maintainer log.
+- `docs/tls-and-admission.md` holds tasks 0.5a and 0.5b in full; `docs/training-tasks.md` keeps only
+  a stub and a link for those two.
 
 ## How to help here
 
