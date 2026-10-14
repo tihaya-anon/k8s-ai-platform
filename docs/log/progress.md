@@ -1,8 +1,8 @@
 # Maintainer Log
 
-Your own log for [training-tasks.md](training-tasks.md). Keep it in the repository so the work is
-portable: someone reading this file should be able to see what was built, what was learned, and what
-is next.
+Your own log for [training-tasks.md](../curriculum/training-tasks.md). Keep it in the repository so
+the work is portable: someone reading this file should be able to see what was built, what was
+learned, and what is next.
 
 One entry per task. Keep them short; the value is in the evidence and the surprises.
 
@@ -480,7 +480,7 @@ owner per formatting concern.
   `git config core.hooksPath hack/git-hooks`.
 - `agent.Dockerfile` plus `hack/agent-*` (`9ca95a2`) — the development container, added last and
   only after host setup became a real source of drift. Documented in
-  [agent-container.md](agent-container.md).
+  [agent-container.md](../tooling/agent-container.md).
 
 `611ea8b` later switched the Go half from `gofmt` to goimports, because `gofmt` leaves imports
 untouched: a file looked formatted while still failing `make lint`.
@@ -519,8 +519,8 @@ silently skipped until it is staged.
 **Outstanding:** the patch/refine step is not done. No helper prints the command it is about to run;
 `format.sh` is silent on success and the pre-commit hook prints only its warnings. The acceptance
 criterion "workflow files are documented in README or progress notes" is met for the container by
-[agent-container.md](agent-container.md) and for the rest by this entry, but README still does not
-mention `hack/format.sh` or how to enable the hooks.
+[agent-container.md](../tooling/agent-container.md) and for the rest by this entry, but README still
+does not mention `hack/format.sh` or how to enable the hooks.
 
 **Quiz review:** not applicable — Claude wrote the answers above.
 

@@ -9,10 +9,10 @@ checkout), run `cp AGENTS.md CLAUDE.md`.
 
 ## Training-task reviews
 
-When reviewing an entry in `docs/progress.md`, treat the `Quiz answers` section as the learner's
+When reviewing an entry in `docs/log/progress.md`, treat the `Quiz answers` section as the learner's
 answer being graded. The assistant is the critic: assess each answer against the questions in
-`docs/training-tasks.md`, explain corrections briefly, and identify any unanswered or misunderstood
-question.
+`docs/curriculum/training-tasks.md`, explain corrections briefly, and identify any unanswered or
+misunderstood question.
 
 Do not ask the learner to refine or add to their answer merely because the implementation is
 incomplete. Only request an answer revision when the learner misunderstood a question or omitted one
@@ -36,17 +36,24 @@ Use those commits as references only after the owner has tried the current task 
 
 The direction remains **compose the ecosystem, own the policy**. Kueue does queueing and quota,
 KServe does serving and traffic, and this repository contributes the custom resources, controllers,
-lineage, and promotion gate. See [docs/architecture.md](docs/architecture.md).
+lineage, and promotion gate. See [docs/product/architecture.md](docs/product/architecture.md).
 
-- `docs/requirements.md` is the product source of truth.
-- `docs/architecture.md` is the design.
-- `docs/training-tasks.md` is the blank-start curriculum. Read its "How a task runs now" section
-  before starting any task.
-- `docs/progress.md` is the maintainer log.
-- `docs/tls-and-admission.md` holds tasks 0.5a and 0.5b in full; `docs/training-tasks.md` keeps only
-  a stub and a link for those two.
-- `docs/reconciler-walkthrough.md` is task 1.1. Part one is a taught walkthrough and deliberately
-  contains working code; part two is the owner's to build.
+`docs/` is split by purpose, and [docs/README.md](docs/README.md) is its index:
+
+- `docs/product/` — `requirements.md` is the product source of truth, `architecture.md` is the
+  design.
+- `docs/curriculum/` — `training-tasks.md` is the blank-start curriculum; read its "How a task runs
+  now" section before starting any task. Alongside it, one file per task that needs more room than
+  the list allows, named for its task number: `0.5-tls-and-admission.md`,
+  `1.1-dataset-reconciler.md`, `1.2-kueue-and-jobs.md`. A task with such a file keeps only a summary
+  and a link in `training-tasks.md`.
+- `docs/log/progress.md` — the maintainer log, one entry per task.
+- `docs/tooling/` — `agent-container.md` and anything else about the development environment rather
+  than the platform.
+
+Every task has two halves: **Learn** (read the mechanism, inspect it running, no files change) and
+**You build** (the feature). Keep them apart when writing or reviewing a task — an unfinished
+implementation is not a reason to send the owner back to the Learn half.
 
 ## How to help here
 
@@ -57,13 +64,13 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - Explain the mechanism and where to see it in the running cluster, not only the code path.
 - The owner now builds the scaffold, scripts, and first implementation. Prefer guidance, review,
   debugging, and small examples over pasting complete task solutions.
-- One exception, by the owner's decision: task 1.1 part one in `docs/reconciler-walkthrough.md` is a
-  taught walkthrough. Showing and explaining that code is the point. The exception stops at part two
-  — drift detection and the immutability webhook are the owner's to write, and the usual refusal
-  applies there.
+- One exception, by the owner's decision: task 1.1 part one in
+  `docs/curriculum/1.1-dataset-reconciler.md` is a taught walkthrough. Showing and explaining that
+  code is the point. The exception stops at part two — drift detection and the immutability webhook
+  are the owner's to write, and the usual refusal applies there.
 - When a task involves generated files, make the owner identify which tool generated each file:
   Kubebuilder, `controller-gen`, `kustomize`, or a handwritten script.
-- When reviewing work, use the checklist at the end of `docs/training-tasks.md`.
+- When reviewing work, use the checklist at the end of `docs/curriculum/training-tasks.md`.
 - Do not move to the next task until the quiz is answered and missed answers are recorded.
 - Never hand over the answer to a patch/refine step when the task is meant to teach the mechanism.
   Explain the mechanism, name the file, and refuse the diff.
@@ -101,7 +108,11 @@ Repository guidance and documentation:
 README.md
 AGENTS.md             canonical agent guidance
 CLAUDE.md             generated, gitignored copy
-docs/
+docs/README.md        index: what each document is for
+docs/product/         requirements.md, architecture.md
+docs/curriculum/      training-tasks.md and one file per deep-taught task
+docs/log/             progress.md
+docs/tooling/         agent-container.md
 .markdownlint.json
 .prettierrc
 .prettierignore

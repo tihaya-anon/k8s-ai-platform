@@ -1,10 +1,27 @@
 # k8s-ai-platform
 
-// TODO(user): Add simple overview of use/purpose
+An internal AI model operations platform on Kubernetes, and the training environment in which it is
+being built.
 
 ## Description
 
-// TODO(user): An in-depth paragraph about your project and overview of use
+The platform composes the ecosystem and owns the policy: Kueue does queueing and quota, KServe does
+serving and traffic, and this repository contributes the custom resources, controllers, lineage, and
+the promotion gate that decides whether a model version may serve traffic.
+
+It is also a curriculum. The repository starts blank on purpose and is rebuilt task by task, so
+every generated file, script, and reconciler is something its maintainer can account for.
+
+## Documentation
+
+[docs/README.md](docs/README.md) is the map. In short:
+
+- [docs/product/requirements.md](docs/product/requirements.md) — what the platform is for.
+- [docs/product/architecture.md](docs/product/architecture.md) — the design and the five custom
+  resources.
+- [docs/curriculum/training-tasks.md](docs/curriculum/training-tasks.md) — the task list, each task
+  in two halves: learn the mechanism, then build the feature.
+- [docs/log/progress.md](docs/log/progress.md) — what has been built so far.
 
 ## Getting Started
 

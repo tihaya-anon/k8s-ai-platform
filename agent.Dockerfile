@@ -283,7 +283,7 @@ COPY hack/agent-entrypoint.sh /usr/local/bin/agent-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-entrypoint
 
 # The agent CLIs' own permission prompts are turned off by these wrappers, because the container
-# is already the boundary -- see docs/agent-container.md. Baked in, not mounted: the read-only
+# is already the boundary -- see docs/tooling/agent-container.md. Baked in, not mounted: the read-only
 # targets mount only the workspace, and an agent whose launcher disappears under --read-only is
 # not usable. Root-owned and 0755, so the agent user cannot edit its own leash.
 COPY hack/agent-bin/ /usr/local/libexec/agent-bin/

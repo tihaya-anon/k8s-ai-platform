@@ -49,7 +49,7 @@ home_mounts=(
 
 # The credential files the agent CLIs read, as name:host:container. Opt-in through --creds and
 # never mounted otherwise, because "no host secrets unless you asked for one" is the property the
-# container is for -- see docs/agent-container.md.
+# container is for -- see docs/tooling/agent-container.md.
 #
 # Claude Code is deliberately absent: one `claude /login` inside the container puts its credential
 # in the k8s-ai-claude volume, so there is nothing on the host to mount and nothing to revoke

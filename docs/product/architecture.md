@@ -3,7 +3,7 @@
 What this platform builds, and — more importantly — what it refuses to build.
 
 The requirements are in [requirements.md](requirements.md). This document is how they are met. The
-exercises that get you there are in [training-tasks.md](training-tasks.md).
+exercises that get you there are in [training-tasks.md](../curriculum/training-tasks.md).
 
 ---
 
