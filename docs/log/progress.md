@@ -6,6 +6,23 @@ learned, and what is next.
 
 One entry per task. Keep them short; the value is in the evidence and the surprises.
 
+## Entry shape
+
+Tasks from level 1 on run in two halves, so entries have two halves too:
+
+- **Learn — what I saw** — the half that changes no files. What the live objects actually showed,
+  the command whose output surprised you, the error text worth recognizing later. Fill this in
+  before starting the build; it is the part you cannot reconstruct afterwards.
+- **Goal / What I changed / How I proved it** — the build half: what you set out to do, what landed
+  in the tree, and the evidence that it works. "Ran it" is not evidence; name the command and what
+  it printed.
+- **What surprised me** — one line, and the most valuable line in the entry.
+- **Quiz answers** then **Quiz review** — your answers first, Claude's grading after. Keep wrong
+  answers; they are the record of what to re-ask later.
+
+Level 0 entries predate this shape and have no Learn section. Entries written by Claude rather than
+by the maintainer say so at the top, so the quiz answers in them are not mistaken for recall.
+
 ## Entries
 
 ### Archive before blank rebuild — 2026-10-07
@@ -526,6 +543,10 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 1.1 Dataset lifecycle — YYYY-MM-DD
 
+**Learn — what I saw:** typing [1.1-dataset-reconciler.md](../curriculum/1.1-dataset-reconciler.md)
+part one. Which step's reason you had not expected, and which of the three Kubebuilder-book patterns
+you would have written yourself.
+
 **Goal:**
 
 **What I changed:**
@@ -539,6 +560,11 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
+
+**Learn — what I saw:** driving Kueue by hand per
+[1.2-Kueue-and-jobs.md](../curriculum/1.2-kueue-and-jobs.md). Record the `Workload` conditions in
+the order they appeared, and the exact refusal message when the `ClusterQueue` ran out — that string
+is what your controller has to translate.
 
 **Goal:**
 
@@ -554,6 +580,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 1.3 ModelVersion and the funnel — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -567,6 +595,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 1.4 Evaluation and gates — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -582,6 +612,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 1.5 Release on KServe — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -595,6 +627,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 2.1 The promotion gate as admission control — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -610,6 +644,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 2.2 What CEL can do instead — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -623,6 +659,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 2.3 Quota and priority as configuration — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -638,6 +676,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 3.1 Conditions, events, and metrics — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -651,6 +691,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 3.2 Alerts — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -666,19 +708,25 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 3.3 Run an incident — YYYY-MM-DD
 
-**Goal:**
+This entry is an incident note, not a build entry.
 
-**What I changed:**
+**What I broke:**
 
-**How I proved it:**
+**Symptom a user would have reported:**
 
-**What surprised me:**
+**Where I looked, in order:** own CRD, conditions, events, upstream object, logs — and where the
+truth actually was.
 
-**Quiz answers:**
+**Which layer I blamed first, and whether that was right:**
 
-**Quiz review:**
+**What would have told me sooner:** the condition, event, or alert that does not exist yet.
+
+**Fix applied:**
 
 ### 3.4 Write the runbook — YYYY-MM-DD
+
+**Learn — what I saw:** re-reading the incident note above and the error strings recorded in 0.5a
+and 0.5b. Which symptoms were unambiguous, and which needed a second command to tell apart.
 
 **Goal:**
 
@@ -694,6 +742,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 4.1 envtest for every reconciler — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -707,6 +757,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 4.2 Idempotency and crash safety — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -722,6 +774,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 4.3 Contract tests for the release path — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -735,6 +789,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 4.4 End-to-end — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -750,6 +806,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 5.1 Make the GPU request real on kind — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -763,6 +821,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 5.2 Swap the training runtime — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 
@@ -778,6 +838,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 ### 5.3 Identity and ownership — YYYY-MM-DD
 
+**Learn — what I saw:**
+
 **Goal:**
 
 **What I changed:**
@@ -791,6 +853,8 @@ does not mention `hack/format.sh` or how to enable the hooks.
 **Quiz review:**
 
 ### 5.4 Run it on a cloud cluster — YYYY-MM-DD
+
+**Learn — what I saw:**
 
 **Goal:**
 

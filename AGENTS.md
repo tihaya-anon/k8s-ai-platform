@@ -53,7 +53,9 @@ lineage, and promotion gate. See [docs/product/architecture.md](docs/product/arc
 
 Every task has two halves: **Learn** (read the mechanism, inspect it running, no files change) and
 **You build** (the feature). Keep them apart when writing or reviewing a task — an unfinished
-implementation is not a reason to send the owner back to the Learn half.
+implementation is not a reason to send the owner back to the Learn half. `docs/log/progress.md`
+mirrors that shape: its entries open with **Learn — what I saw** before the build fields, and its
+"Entry shape" section is the template to follow when adding one.
 
 ## How to help here
 
