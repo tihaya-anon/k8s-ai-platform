@@ -8,8 +8,70 @@ unimplemented for you to build alone.
 Type each step into the real file rather than pasting the whole thing at the end. The steps compile
 in order, and the point of each one is the sentence that follows it.
 
-Start from the Kubebuilder scaffold. `internal/controller/dataset_controller.go` should still have
-`// TODO(user): your logic here` in it; if yours does not, `git show 382a03d` is the scaffold blob.
+Start from the Kubebuilder scaffold — the file as `kubebuilder create api` wrote it, with
+`// TODO(user): your logic here` still in `Reconcile`. If yours has more than that in it, the
+generated blob is `git show 382a03d`.
+
+## Three patterns from the Kubebuilder book, and why this walkthrough differs
+
+The book's operator tutorial is the obvious place to start, and following it produces a reconciler
+shaped differently from the one below. The differences are the lesson, so they are worth naming
+before you type anything. None of the three is wrong in the book's context.
+
+**The book checks `apierrors.IsNotFound` explicitly and logs:**
+
+```go
+	if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("Dataset not found. Ignoring since the object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Fail to get Dataset")
+		return ctrl.Result{}, err
+	}
+```
+
+This is correct, and it is exactly what `client.IgnoreNotFound(err)` does in one line. Write it out
+once so you know what the helper hides, then use the helper. The `log.Error` on the second branch is
+redundant: controller-runtime already logs an error returned from `Reconcile`, with the object's
+identity attached, so logging it here yields two lines for one failure.
+
+**The book names its conditions `Available`, `Progressing`, and `Degraded`.** Those come from
+Deployment, where they describe a workload's rollout. A `Dataset` has no rollout. Condition types
+are a vocabulary you are defining for your users, and the useful question is always "what would a
+human want to know?" — here that is _was the artifact resolved, and does it match what you claimed_.
+This walkthrough uses one condition, `Resolved`, and part two adds the second one. Copying the
+Deployment vocabulary onto a domain that does not have rollouts gives a user three conditions that
+cannot be acted on.
+
+**The book initializes status on the first reconcile and then re-reads the object:**
+
+```go
+	if len(dataset.Status.Conditions) == 0 {
+		meta.SetStatusCondition(&dataset.Status.Conditions, metav1.Condition{
+			Type: typeProgressingDataset, Status: metav1.ConditionUnknown,
+			Reason: "Reconciling", Message: "Starting reconciliation",
+		})
+		if err := r.Status().Update(ctx, &dataset); err != nil { ... }
+		if err := r.Get(ctx, req.NamespacedName, &dataset); err != nil { ... }
+	}
+```
+
+This is the one to be careful with. Two separate things are happening:
+
+- The `if len(...) == 0` guard is a **first-pass branch**, and any real work placed inside it runs
+  once in the lifetime of the object and never again. That is the level-triggered mistake described
+  below, and it is easy to grow into: the status seeding is harmless there, but the next line you
+  add inside the same block is usually not.
+- The `Get` after the `Status().Update` is a **re-fetch**, and it is needed for a real reason: your
+  in-memory copy's `resourceVersion` is stale the moment the write lands, so any later write using
+  that copy fails with a conflict. The walkthrough below avoids the problem instead of paying for it
+  — it computes the whole status, writes once at the end, and returns. One write per reconcile needs
+  no re-fetch.
+
+An `Unknown` placeholder condition is worth writing when reconciliation is long and a user would
+otherwise see an empty status for minutes. Resolving a URI is not that; by the time anyone looks,
+the real condition is already there.
 
 ## What a reconcile is
 
