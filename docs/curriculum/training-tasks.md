@@ -380,8 +380,9 @@ That comparison is yours.
    alone cannot?
 3. The webhook rejects spec changes after creation. Name two ways a user could try to change the
    stored object anyway, and say which of them the webhook catches.
-4. What happens if the reconciler returns an error? What happens if it returns `Requeue: true`? What
-   happens with `RequeueAfter`? When is each correct?
+4. What happens if the reconciler returns an error, and what happens with `RequeueAfter`? When is
+   each correct? `Result.Requeue` is deprecated as of controller-runtime v0.22 — read its
+   deprecation note and say which two things it was conflating.
 5. Your immutability rule compares the old object with the new one. Name the one thing the webhook
    can do here that a `+kubebuilder:validation` marker cannot, and say which part of your rule could
    have been a marker all along. Task 2.2 revisits this.
