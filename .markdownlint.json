@@ -4,6 +4,9 @@
   "default": true,
 
   "MD013": false,
+
+  "_comment_md010": "Go code is tab-indented; converting tabs to spaces inside a fence makes copied code non-gofmt.",
+  "MD010": { "code_blocks": false },
   "MD036": false,
 
   "MD024": { "siblings_only": true },

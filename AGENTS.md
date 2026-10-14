@@ -45,6 +45,8 @@ lineage, and promotion gate. See [docs/architecture.md](docs/architecture.md).
 - `docs/progress.md` is the maintainer log.
 - `docs/tls-and-admission.md` holds tasks 0.5a and 0.5b in full; `docs/training-tasks.md` keeps only
   a stub and a link for those two.
+- `docs/reconciler-walkthrough.md` is task 1.1. Part one is a taught walkthrough and deliberately
+  contains working code; part two is the owner's to build.
 
 ## How to help here
 
@@ -55,6 +57,10 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - Explain the mechanism and where to see it in the running cluster, not only the code path.
 - The owner now builds the scaffold, scripts, and first implementation. Prefer guidance, review,
   debugging, and small examples over pasting complete task solutions.
+- One exception, by the owner's decision: task 1.1 part one in `docs/reconciler-walkthrough.md` is a
+  taught walkthrough. Showing and explaining that code is the point. The exception stops at part two
+  — drift detection and the immutability webhook are the owner's to write, and the usual refusal
+  applies there.
 - When a task involves generated files, make the owner identify which tool generated each file:
   Kubebuilder, `controller-gen`, `kustomize`, or a handwritten script.
 - When reviewing work, use the checklist at the end of `docs/training-tasks.md`.

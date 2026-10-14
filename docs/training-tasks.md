@@ -327,25 +327,65 @@ command you cannot run directly.
 
 ### 1.1 Dataset lifecycle
 
-**You build, Claude reviews:** implement the `Dataset` reconciler, an immutability webhook, and
-envtest coverage of both including failure paths.
+The first reconciler is taught, not assigned. A reconciler carries too many conventions to
+rediscover by guessing — level-triggered reads, the status subresource, `observedGeneration`,
+conditions, events on transitions, the three meanings of a return value — so this one task hands you
+the code with the reasons attached, and then leaves a feature unimplemented.
+
+**You type:**
+[reconciler-walkthrough.md](reconciler-walkthrough.md#task-11-part-one--write-the-dataset-reconciler-by-hand)
+— nine steps from the Kubebuilder scaffold to a `Dataset` that resolves its artifact, reports what
+it found in conditions, emits events on transitions, and is covered by envtest. Type each step into
+the file; the point of each one is the sentence after it.
+
+**You build:** [part two](reconciler-walkthrough.md#part-two--the-part-that-is-yours) — drift
+detection, the immutability webhook, and tests for both. The walkthrough resolves the artifact but
+never compares what it found against the user's claim, which is the entire reason this CRD exists.
+That comparison is yours.
 
 **Review focus:** `internal/controller/dataset_controller.go`,
-`internal/webhook/dataset_webhook.go`, conditions, events, and status updates.
+`internal/webhook/v1alpha1/dataset_webhook.go`, conditions, events, and status updates.
+
+**Design notes** — two decisions the walkthrough does not make for you:
+
+- **Marker or webhook?** A Kubebuilder marker becomes OpenAPI schema inside the CRD, so the _API
+  server_ enforces it: on every client, with no certificate, no pod, and no availability risk. Reach
+  for the webhook only when the rule needs something the schema cannot see — another object, the
+  previous version of this one, or a computed value. Schema defaults also apply on read, so changing
+  a `+kubebuilder:default` retroactively changes objects already in etcd; webhook defaulting only
+  ever touches an object on its way in.
+- **Uniqueness is `metadata.name`, and nothing else.** Kubernetes has no unique index on a spec
+  field. A webhook that lists existing `Dataset`s to reject a duplicate `uri` races against a
+  concurrent create and reads a cache that may be stale, so it can only ever be advisory — which is
+  what the `admission.Warnings` return value is for. Two registrations of the same URI with
+  different checksums is a signal worth keeping, not an error.
 
 **Quiz**
 
-1. The reconciler is level-triggered. Point at the line that would be wrong if it assumed it had
-   seen the previous event, and say what would go wrong.
+1. The reconciler is level-triggered. Point at the line in your own file that would be wrong if it
+   assumed it had seen the previous event, and say what would go wrong.
 2. `observedGeneration` on a condition — what question does it let a user answer that the condition
    alone cannot?
 3. The webhook rejects spec changes after creation. Name two ways a user could try to change the
    stored object anyway, and say which of them the webhook catches.
-4. What happens if the reconciler returns an error? What happens if it returns `Requeue: true`? When
-   is each correct?
+4. What happens if the reconciler returns an error? What happens if it returns `Requeue: true`? What
+   happens with `RequeueAfter`? When is each correct?
+5. Your immutability rule compares the old object with the new one. Name the one thing the webhook
+   can do here that a `+kubebuilder:validation` marker cannot, and say which part of your rule could
+   have been a marker all along. Task 2.2 revisits this.
+6. The walkthrough injects `artifact.Resolver` instead of calling the store directly. Name two
+   things that become testable because of that seam, and one cost the indirection adds.
 
 **Patch/refine:** make the immutability error message tell the user to create a new `Dataset`, and
 add the assertion for that message.
+
+**Acceptance criteria**
+
+- A resync moves a `Ready` `Dataset` to `Failed` when its artifact content changed, with no user
+  edit involved.
+- The condition reason distinguishes an unreachable artifact from one that contradicts the claim.
+- The immutability webhook rejects a `spec.uri` edit, and a test asserts the message.
+- `make fmt vet test` passes.
 
 ### 1.2 TrainingJob on Kueue
 
