@@ -243,6 +243,29 @@ hack/agent.sh fmt
 hack/agent.sh lint
 ```
 
+## Git identity for commits made inside the container
+
+A container commit must still be attributable to a person, and the image cannot bake in an identity.
+It is resolved on the host and carried in, in git's own order of precedence:
+
+1. `AGENT_GIT_USER_NAME` / `AGENT_GIT_USER_EMAIL`, if set.
+2. This repository's `.git/config` — a per-repository identity, the usual way to keep a personal
+   address off work commits, or the reverse.
+3. The host's `--global` config.
+4. `AI Platform Agent <agent@k8s-ai-platform.local>`, a deliberately synthetic fallback. Seeing it
+   in `git log` means the host had no identity configured at all.
+
+`hack/agent.sh` resolves those four and passes the result as environment variables;
+`hack/agent-entrypoint.sh` writes them into `.git/config` on entry, next to `core.hooksPath`.
+
+Two consequences worth knowing:
+
+- `.git/config` is inside the bind-mounted checkout, so that write lands on the host and outlives
+  the container. The container does not write `~/.gitconfig`, because only `~/.claude` is a named
+  volume and anything else in the home directory dies with `--rm`.
+- Commit signing is not carried in. A host configured with `commit.gpgsign = true` globally will
+  produce unsigned commits inside the container.
+
 ## The shell inside the container
 
 The container is meant to be lived in, not only shelled into, so it gets the shell the host runs:

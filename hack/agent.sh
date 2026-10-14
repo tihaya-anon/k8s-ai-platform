@@ -23,8 +23,13 @@ npm_registry=${NPM_REGISTRY:-$(npm config get registry 2>/dev/null || printf 'ht
 
 # Give throwaway containers a Git identity for commits. Prefer the host's configured identity so
 # commits remain attributable; fall back to a clearly synthetic project-local identity.
-git_user_name=${AGENT_GIT_USER_NAME:-$(git config --global user.name 2>/dev/null || git config user.name 2>/dev/null || printf 'AI Platform Agent')}
-git_user_email=${AGENT_GIT_USER_EMAIL:-$(git config --global user.email 2>/dev/null || git config user.email 2>/dev/null || printf 'agent@k8s-ai-platform.local')}
+#
+# Precedence is git's own, in git's own order: this repository's .git/config first, then the user's
+# global config, then the fallback. Reading --global first would mean a per-repository identity --
+# the usual way to keep a personal address off work commits -- was silently ignored in the
+# container while being honored on the host.
+git_user_name=${AGENT_GIT_USER_NAME:-$(git config --local user.name 2>/dev/null || git config --global user.name 2>/dev/null || printf 'AI Platform Agent')}
+git_user_email=${AGENT_GIT_USER_EMAIL:-$(git config --local user.email 2>/dev/null || git config --global user.email 2>/dev/null || printf 'agent@k8s-ai-platform.local')}
 
 # Named volumes for everything expensive to rebuild and pointless to keep in the image.
 caches=(
