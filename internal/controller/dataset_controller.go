@@ -18,11 +18,19 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"github.com/tihaya-anon/k8s-ai-platform/internal/artifact"
+	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 )
@@ -30,28 +38,89 @@ import (
 // DatasetReconciler reconciles a Dataset object
 type DatasetReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
+	Resolver       artifact.Resolver
+	ResyncInterval time.Duration
 }
 
+// ensure interface implementation
+var _ reconcile.Reconciler = (*DatasetReconciler)(nil)
+
+const defaultResyncInterval = 10 * time.Minute
+const typeResolvedDataset = "Resolved"
+
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Dataset object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
 func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var dset mlv1alpha1.Dataset
+	if err := r.Get(ctx, req.NamespacedName, &dset); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	previousPhase := dset.Status.Phase
+
+	condition := metav1.Condition{
+		Type:               typeResolvedDataset,
+		ObservedGeneration: dset.Generation,
+	}
+
+	found, resolveErr := r.Resolver.Resolve(ctx, *dset.Spec.Uri)
+	if resolveErr != nil {
+		log.Info("artifact resolution failed", "uri", *dset.Spec.Uri, "error", resolveErr)
+		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
+		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
+			Type:               typeResolvedDataset,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: dset.Generation,
+			Reason:             "ArtifactUnreachable",
+			Message:            fmt.Sprintf("artifact store: %v", resolveErr),
+		})
+	} else {
+		dset.Status.ObservedRows = &found.Rows
+		dset.Status.ObservedChecksum = &found.Checksum
+		dset.Status.LastResolvedTime = metav1.Now()
+		dset.Status.Phase = mlv1alpha1.DatasetPhaseReady
+		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
+			Type:               typeResolvedDataset,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: dset.Generation,
+			Reason:             "ArtifactResolved",
+			Message:            fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri),
+		})
+	}
+
+	if err := r.Status().Update(ctx, &dset); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if dset.Status.Phase != previousPhase {
+		eventType := corev1.EventTypeNormal
+		if dset.Status.Phase == mlv1alpha1.DatasetPhaseFailed {
+			eventType = corev1.EventTypeWarning
+		}
+		r.Recorder.Eventf(&dset, eventType, string(dset.Status.Phase), "Dataset %s: %s", dset.Status.Phase, condition.Message)
+		return ctrl.Result{RequeueAfter: r.resyncInterval()}, nil
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *DatasetReconciler) resyncInterval() time.Duration {
+	if r.ResyncInterval > 0 {
+		return r.ResyncInterval
+	}
+	return defaultResyncInterval
 }
 
 // SetupWithManager sets up the controller with the Manager.

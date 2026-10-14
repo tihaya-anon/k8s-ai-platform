@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 
+	"github.com/tihaya-anon/k8s-ai-platform/internal/artifact"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -180,8 +181,10 @@ func main() {
 	}
 
 	if err := (&controller.DatasetReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("dataset-controller"),
+		Resolver: artifact.FileResolver{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Dataset")
 		os.Exit(1)
