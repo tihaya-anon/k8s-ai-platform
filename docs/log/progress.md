@@ -559,6 +559,53 @@ you would have written yourself.
 
 **Quiz review:**
 
+**Part two review — in progress (written by Claude, 2026-10-22):** notes on the drift work as it
+stands in `internal/controller/dataset_controller.go`, kept here so the device change does not lose
+them. Mechanisms and symptoms only; the fixes are still the build half.
+
+_On the question that prompted this:_ a `ConditionFalse` is data, not a failure. The API server
+validates the conditions list structurally — the `listMapKey=type` uniqueness, the
+`True`/`False`/`Unknown` enum, the `reason` regex, the message length — and has no idea that `False`
+means something went wrong. `Status().Update` errors only for transport reasons: `409` on a stale
+`resourceVersion`, `403` on RBAC, `422` when the object violates the schema (for instance
+`observedRows: 0` against the `Minimum=1` marker). "Report badness" and "the write failed" are
+independent axes, which is why step 4 computes the whole status in memory and step 5 writes once.
+
+_Observations:_
+
+- `detectDrift` dereferences `status.observedRows` and `status.observedChecksum` unconditionally,
+  but the resolve-failure branch never sets them. First failing reconcile is a nil dereference in a
+  worker goroutine — a restart, not a test failure. The semantic question behind it: when the store
+  is unreachable, is comparing the claim against a stale earlier observation meaningful at all?
+- Drift currently overwrites the `Resolved` condition with `Reason: DriftDetected`, but `Resolved`
+  is still factually true — the artifact was reached and read. A consumer filtering on
+  `Resolved=False` cannot separate "the store is down" (retry) from "your checksum is wrong" (do not
+  retry). Part one says part two adds the second condition type; _errors name the layer at fault_ is
+  the test. Either answer is defensible, but it has to be a decision.
+- The return contract changed: `RequeueAfter` now fires only on a phase transition. In the steady
+  state a `Ready` Dataset whose artifact is rewritten overnight gets no watch event and is never
+  re-resolved, so acceptance criterion one cannot pass.
+- The `condition` value is still built at the top and still feeds the event message, but the real
+  conditions are now written inline in each branch, so `condition.Message` is empty and the event
+  text stops after `Dataset Failed:` with nothing behind the colon. This is the trap step 4's second
+  bullet describes, arrived at from the other direction.
+- Smaller: `strings.Compare(a, b) != 0` is `a != b` for Go strings; `fmt.Sprintf("%v", []string)`
+  renders Go syntax into a message a human reads in `kubectl describe`; and "expect/get" names the
+  spec as the truth when the spec is the _claim_ and the artifact is the truth.
+
+_On sharing the check with the webhook:_ they are not the same check. `ValidateUpdate` compares
+`oldObj.Spec` to `newObj.Spec` and asks whether the user changed an immutable field; it never reads
+`status` and cannot reach the artifact store, since it runs inside the API request path under a
+timeout. The reconciler compares the claim in `spec` to what it just observed. What is genuinely
+shared is the pointer comparison and the vocabulary, not the rule. `ptr.Equal` from `k8s.io/utils`
+(already in the module graph) collapses the both-nil / one-nil / equal-value cases that `*a != *b`
+gets wrong. For structure, the Kubernetes idiom is a pure function returning `field.ErrorList` from
+`k8s.io/apimachinery/pkg/util/validation/field`: the webhook renders it with `apierrors.NewInvalid`
+and gets a structured 422, the reconciler renders `errs.ToAggregate()` into a condition message. It
+has to live in a package both can import downward — methods on the type in `api/v1alpha1`, or a
+small `internal/` rules package — with no `client.Client` and no `context` in it. The test that the
+boundary is right: that package is testable with table-driven unit tests and no envtest.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per

@@ -108,6 +108,7 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 	datasetlog.Info("Validation for Dataset upon update", "name", dataset.GetName())
 
 	// TODO(user): fill in your validation logic upon object update.
+	// just copy the logic from dataset_controller.go ?
 
 	return nil, nil
 }

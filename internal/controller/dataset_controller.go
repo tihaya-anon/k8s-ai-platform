@@ -100,6 +100,8 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		})
 	}
 
+	r.detectDrift(ctx, &dset)
+
 	if err := r.Status().Update(ctx, &dset); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -121,6 +123,27 @@ func (r *DatasetReconciler) resyncInterval() time.Duration {
 		return r.ResyncInterval
 	}
 	return defaultResyncInterval
+}
+
+func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) {
+	var driftErrors []string
+	if dset.Spec.Rows != nil && *dset.Spec.Rows != *dset.Status.ObservedRows {
+		driftErrors = append(driftErrors, fmt.Sprintf("rows set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows))
+	}
+	if dset.Spec.Checksum != nil && *dset.Spec.Checksum != *dset.Status.ObservedChecksum {
+		driftErrors = append(driftErrors, fmt.Sprintf("checksum set but mismatched, expect %v, get %v", *dset.Spec.Checksum, *dset.Status.ObservedChecksum))
+	}
+	if len(driftErrors) == 0 {
+		return
+	}
+	dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
+	apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
+		Type:               typeResolvedDataset,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: dset.Generation,
+		Reason:             "DriftDetected",
+		Message:            fmt.Sprintf("drifts: %v", driftErrors),
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager.
