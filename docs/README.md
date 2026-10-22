@@ -1,6 +1,6 @@
 # Documentation map
 
-Four kinds of document, kept apart because they answer different questions and change at different
+Five kinds of document, kept apart because they answer different questions and change at different
 rates.
 
 | Directory     | Answers                                 | Changes when                               |
@@ -9,6 +9,7 @@ rates.
 | `curriculum/` | what to build next, and how to learn it | a task is rewritten or a new one is taught |
 | `log/`        | what was built, and what was learned    | after every task                           |
 | `tooling/`    | how the development environment works   | the environment changes                    |
+| `reference/`  | how Kubernetes itself works             | rarely; it is background, not a task       |
 
 ## Read in this order
 
@@ -20,6 +21,22 @@ rates.
    repository. Start with "How a task runs now".
 4. [log/progress.md](log/progress.md) — one entry per task: what changed, how it was proved, the
    quiz, and the review.
+
+If a task assumes a Kubernetes mechanism you have not met yet, look in `reference/` first.
+
+## Kubernetes background
+
+Platform-independent background, safe to read at any point and not tied to a task.
+
+- [reference/cluster-components.md](reference/cluster-components.md) — the control plane, the node
+  components, and the two rules that shape every convention here: only the API server talks to
+  `etcd`, and controllers only meet in the API.
+- [reference/api-machinery.md](reference/api-machinery.md) — groups, versions, kinds and resources;
+  the `get`/`list`/`watch` verbs; `resourceVersion`, pagination and bookmarks; how list-watch
+  becomes an informer cache and a workqueue.
+- [reference/objects-and-controllers.md](reference/objects-and-controllers.md) — `spec` versus
+  `status`, owner references, finalizers and conditions; the admission path a write takes; the
+  level-triggered reconcile loop.
 
 ## Deep-taught tasks
 
