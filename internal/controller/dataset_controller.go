@@ -143,28 +143,33 @@ func (r *DatasetReconciler) resyncInterval() time.Duration {
 
 func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) errors.Aggregate {
 	var driftErrors field.ErrorList
-	var details []string
 	if !ptr.Equal(dset.Spec.Rows, dset.Status.ObservedRows) {
-		detail := fmt.Sprintf("rows set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows)
-		driftErrors = append(driftErrors, &field.Error{
-			Type:     field.ErrorTypeInternal,
-			Field:    "rows",
-			BadValue: dset.Status.ObservedRows,
-			Detail:   detail,
-		})
-		details = append(details, detail)
+		driftErrors = append(driftErrors, field.Invalid(
+			field.NewPath("spec", "rows"),
+			optional(dset.Status.ObservedRows),
+			fmt.Sprintf("artifact resolved to %s rows, spec claims %s",
+				optional(dset.Status.ObservedRows), optional(dset.Spec.Rows)),
+		))
 	}
 	if !ptr.Equal(dset.Spec.Checksum, dset.Status.ObservedChecksum) {
-		detail := fmt.Sprintf("checksum set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows)
-		driftErrors = append(driftErrors, &field.Error{
-			Type:     field.ErrorTypeInternal,
-			Field:    "checksum",
-			BadValue: dset.Status.ObservedChecksum,
-			Detail:   detail,
-		})
-		details = append(details, detail)
+		driftErrors = append(driftErrors, field.Invalid(
+			field.NewPath("spec", "checksum"),
+			optional(dset.Status.ObservedChecksum),
+			fmt.Sprintf("artifact resolved to checksum %s, spec claims %s",
+				optional(dset.Status.ObservedChecksum), optional(dset.Spec.Checksum)),
+		))
 	}
 	return driftErrors.ToAggregate()
+}
+
+// optional renders an optional field for a human-readable message. Formatting
+// the pointer itself would print an address, and a dereference would panic on
+// the branch where resolution failed and nothing was observed.
+func optional[T any](p *T) string {
+	if p == nil {
+		return "unset"
+	}
+	return fmt.Sprintf("%v", *p)
 }
 
 // SetupWithManager sets up the controller with the Manager.

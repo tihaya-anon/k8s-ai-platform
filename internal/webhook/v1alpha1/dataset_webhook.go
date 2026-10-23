@@ -21,10 +21,9 @@ import (
 	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -111,37 +110,30 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 	}
 	datasetlog.Info("Validation for Dataset upon update", "name", dataset.GetName())
 
-	oldDset, _ := oldObj.(*mlv1alpha1.Dataset)
-	var driftErrors field.ErrorList
-	var details []string
-	frozenFiledMsg := "%v is not allowed to be modified once set"
-	if !ptr.Equal(dataset.Spec.Rows, oldDset.Spec.Rows) {
-		errorField := "rows"
-		detail := fmt.Sprintf(frozenFiledMsg, errorField)
-		driftErrors = append(driftErrors, &field.Error{
-			Type:     field.ErrorTypeInternal,
-			Field:    errorField,
-			BadValue: dataset.Spec.Rows,
-			Detail:   detail,
-		})
-		details = append(details, errorField, detail)
+	oldDataset, ok := oldObj.(*mlv1alpha1.Dataset)
+	if !ok {
+		return nil, fmt.Errorf("expected a Dataset object for the oldObj but got %T", oldObj)
 	}
-	if !ptr.Equal(dataset.Spec.Checksum, oldDset.Spec.Checksum) {
-		errorField := "rows"
-		detail := fmt.Sprintf(frozenFiledMsg, errorField)
-		driftErrors = append(driftErrors, &field.Error{
-			Type:     field.ErrorTypeInternal,
-			Field:    "checksum",
-			BadValue: dataset.Spec.Checksum,
-			Detail:   detail,
-		})
-		details = append(details, errorField, detail)
+
+	// A Dataset is lineage: what a model was trained on must still be true after
+	// the fact, so the registered artifact and the claims about it are frozen.
+	// Everything else about the object stays editable.
+	var frozen field.ErrorList
+	frozen = append(frozen, apivalidation.ValidateImmutableField(
+		dataset.Spec.Uri, oldDataset.Spec.Uri, field.NewPath("spec", "uri"))...)
+	frozen = append(frozen, apivalidation.ValidateImmutableField(
+		dataset.Spec.Rows, oldDataset.Spec.Rows, field.NewPath("spec", "rows"))...)
+	frozen = append(frozen, apivalidation.ValidateImmutableField(
+		dataset.Spec.Checksum, oldDataset.Spec.Checksum, field.NewPath("spec", "checksum"))...)
+
+	if len(frozen) == 0 {
+		return nil, nil
 	}
-	err := driftErrors.ToAggregate()
-	if err != nil {
-		datasetlog.Error(err, "Readonly fields modified", details)
-	}
-	return nil, apierrors.NewInvalid(schema.GroupKind{}, "Readonly fields modified", driftErrors)
+
+	// NewInvalid carries APIStatus, which controller-runtime turns into a 422 with
+	// one cause per field. A bare aggregate would reach the user as a flat 403.
+	return nil, apierrors.NewInvalid(
+		mlv1alpha1.GroupVersion.WithKind("Dataset").GroupKind(), dataset.Name, frozen)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Dataset.

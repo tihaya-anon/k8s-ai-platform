@@ -630,6 +630,25 @@ problem. The short version, so the log stands alone:
   (`self == oldSelf`) in the CRD, with no webhook at all — with a caveat for optional fields. The
   webhook is still the right exercise here, because the admission path is what 1.1 teaches.
 
+**Mechanical pass applied by Claude, 2026-10-23, at the owner's request:** the items above that were
+wrong rather than undecided — the `*dset.Spec.Rows` copy-paste in the checksum branch, the
+`errorField := "rows"` twin in the webhook, bare string field names, `field.ErrorTypeInternal` on a
+user error, the discarded `oldObj` type assertion, the unconditional `NewInvalid` with an empty
+`GroupKind`, the dead `details` slices, the odd logr arguments, and `spec.uri` going unchecked. The
+webhook now calls `apivalidation.ValidateImmutableField` for the three frozen fields. Three
+decisions were deliberately left open, because they are the lesson:
+
+1. whether drift should fire when the user claimed nothing — `ptr.Equal` currently says a `nil`
+   claim differs from an observation;
+2. which condition type carries drift, `Resolved` or a second one;
+3. whether the drift path returns an error from `Reconcile` at all, and where the status write sits
+   relative to that return.
+
+`make test` is still red, and now for a readable reason rather than a panic: the store-unreachable
+spec fails with `spec.rows: Invalid value: "unset": artifact resolved to unset rows, spec claims 1`.
+Nothing was observed on that branch, so decisions 1 and 3 are exactly what the test is asking for.
+Controller coverage went from 71.7% to 86.4% in passing.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per
