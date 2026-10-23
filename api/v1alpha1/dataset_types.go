@@ -20,6 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	DatasetKind     = "Dataset"
+	DatasetListKind = "DatasetList"
+)
+
 // DatasetSpec defines the desired state of Dataset.
 type DatasetSpec struct {
 	// Uri non-empty dataset artifact location

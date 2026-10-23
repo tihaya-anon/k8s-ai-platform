@@ -133,7 +133,7 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 	// NewInvalid carries APIStatus, which controller-runtime turns into a 422 with
 	// one cause per field. A bare aggregate would reach the user as a flat 403.
 	return nil, apierrors.NewInvalid(
-		mlv1alpha1.GroupVersion.WithKind("Dataset").GroupKind(), dataset.Name, frozen)
+		mlv1alpha1.GroupVersion.WithKind(mlv1alpha1.DatasetKind).GroupKind(), dataset.Name, frozen)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Dataset.

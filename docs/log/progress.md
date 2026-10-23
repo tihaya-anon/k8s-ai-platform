@@ -547,15 +547,24 @@ does not mention `hack/format.sh` or how to enable the hooks.
 part one. Which step's reason you had not expected, and which of the three Kubebuilder-book patterns
 you would have written yourself.
 
-**Goal:**
+**Goal:** monitor and handle the intentional and unintentional changes on Dataset
 
-**What I changed:**
+**What I changed:** Reconcile logic and UpdateValidation's criteria
 
-**How I proved it:**
+**How I proved it:** run `make test`
 
-**What surprised me:**
+**What surprised me:** must bear in mind that never trust the status seen last time
 
 **Quiz answers:**
+
+1. IDK, how to consider such situations?
+2. what to do next. the condition just records what happened, but doesn't give actions
+3. I can only come out of one, change the frozen fields. this will be forbidden in
+   dataset_webhook.go 121
+4. error will let the queue handle itself, RequeueAfter asks the queue to wait. When nothing went
+   wrong but just need to wait, use the latter one, otherwise just return the error. It conflates
+   failure and throttle
+5. IDK
 
 **Quiz review:**
 

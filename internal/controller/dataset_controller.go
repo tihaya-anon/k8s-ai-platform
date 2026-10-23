@@ -102,8 +102,11 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			Message:            fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri),
 		})
 	}
+	var driftError errors.Aggregate
 
-	driftError := r.detectDrift(ctx, &dset)
+	if resolveErr == nil {
+		driftError = r.detectDrift(ctx, &dset)
+	}
 
 	if driftError != nil {
 		log.Info("artifact fields drifted", "error", driftError)
@@ -115,7 +118,6 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			Reason:             "DriftDetected",
 			Message:            driftError.Error(),
 		})
-		return ctrl.Result{}, driftError
 	}
 
 	if err := r.Status().Update(ctx, &dset); err != nil {
@@ -143,7 +145,7 @@ func (r *DatasetReconciler) resyncInterval() time.Duration {
 
 func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) errors.Aggregate {
 	var driftErrors field.ErrorList
-	if !ptr.Equal(dset.Spec.Rows, dset.Status.ObservedRows) {
+	if dset.Spec.Rows != nil && !ptr.Equal(dset.Spec.Rows, dset.Status.ObservedRows) {
 		driftErrors = append(driftErrors, field.Invalid(
 			field.NewPath("spec", "rows"),
 			optional(dset.Status.ObservedRows),
@@ -151,7 +153,7 @@ func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Data
 				optional(dset.Status.ObservedRows), optional(dset.Spec.Rows)),
 		))
 	}
-	if !ptr.Equal(dset.Spec.Checksum, dset.Status.ObservedChecksum) {
+	if dset.Spec.Checksum != nil && !ptr.Equal(dset.Spec.Checksum, dset.Status.ObservedChecksum) {
 		driftErrors = append(driftErrors, field.Invalid(
 			field.NewPath("spec", "checksum"),
 			optional(dset.Status.ObservedChecksum),
