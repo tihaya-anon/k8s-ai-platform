@@ -49,9 +49,10 @@ lineage, and promotion gate. See [docs/product/architecture.md](docs/product/arc
   and a link in `training-tasks.md`.
 - `docs/log/progress.md` — the maintainer log, one entry per task.
 - `docs/reference/` — Kubernetes background that is not specific to this platform:
-  `cluster-components.md`, `api-machinery.md`, `objects-and-controllers.md`. Point the owner here
-  instead of re-explaining `get`/`list`/`watch`, informers, owner references, or the admission path
-  from scratch; extend these files when an explanation is worth keeping.
+  `cluster-components.md`, `api-machinery.md`, `objects-and-controllers.md`,
+  `validation-and-immutability.md`. Point the owner here instead of re-explaining
+  `get`/`list`/`watch`, informers, owner references, or the admission path from scratch; extend
+  these files when an explanation is worth keeping.
 - `docs/tooling/` — `agent-container.md` and anything else about the development environment rather
   than the platform.
 
@@ -118,7 +119,7 @@ docs/README.md        index: what each document is for
 docs/product/         requirements.md, architecture.md
 docs/curriculum/      training-tasks.md and one file per deep-taught task
 docs/log/             progress.md
-docs/reference/       Kubernetes background: components, API machinery, objects and controllers
+docs/reference/       Kubernetes background: components, API machinery, objects, validation
 docs/tooling/         agent-container.md
 .markdownlint.json
 .prettierrc

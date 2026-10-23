@@ -606,6 +606,30 @@ has to live in a package both can import downward — methods on the type in `ap
 small `internal/` rules package — with no `client.Client` and no `context` in it. The test that the
 boundary is right: that package is testable with table-driven unit tests and no envtest.
 
+**Part two review — round two (written by Claude, 2026-10-23):** second attempt is `1b4c1ff`; both
+sides now build `field.ErrorList` and compare optional fields with `ptr.Equal`, which is the right
+direction. The patterns it is reaching for, what upstream does instead, and both attempts read
+against each other are in
+[reference/validation-and-immutability.md](../reference/validation-and-immutability.md), written
+from a web search of how Kueue, Cluster API, Knative and the CEL transition rules handle the same
+problem. The short version, so the log stands alone:
+
+- `apimachinery` already ships `ValidateImmutableField`, which is the hand-rolled comparison plus
+  `Semantic.DeepEqual` on the pointees plus the standard `field is immutable` message.
+- `ValidateUpdate` returns `apierrors.NewInvalid` unconditionally, so every update is rejected, not
+  only the ones that changed a frozen field. An empty `ErrorList.ToAggregate()` is already `nil`.
+- `field.ErrorTypeInternal` means the server broke; a user editing a frozen field is
+  `field.Invalid`. Field paths belong in `field.NewPath("spec", "rows")`, not bare strings.
+- Switching to `ptr.Equal` in `detectDrift` dropped the "only if the user claimed it" guard, so a
+  Dataset claiming nothing now drifts against its own observation.
+- The drift error returns from `Reconcile` before `Status().Update`, so the condition it computed is
+  never persisted, and a permanent mismatch retries forever with backoff.
+- `make test` is still red on the same store-unreachable spec: the checksum branch dereferences
+  `*dset.Spec.Rows`, a copy-paste that the duplicated per-field block makes easy in both files.
+- The modern answer to a pure field-equality immutability rule is a CEL transition rule
+  (`self == oldSelf`) in the CRD, with no webhook at all — with a caveat for optional fields. The
+  webhook is still the right exercise here, because the admission path is what 1.1 teaches.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per

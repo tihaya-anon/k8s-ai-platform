@@ -34,6 +34,10 @@ Platform-independent background, safe to read at any point and not tied to a tas
 - [reference/api-machinery.md](reference/api-machinery.md) — groups, versions, kinds and resources;
   the `get`/`list`/`watch` verbs; `resourceVersion`, pagination and bookmarks; how list-watch
   becomes an informer cache and a workqueue.
+- [reference/validation-and-immutability.md](reference/validation-and-immutability.md) — the four
+  places a rule can live (schema markers, CEL, webhook, controller), which one to reach for, the
+  `field.ErrorList` conventions, and why a drift check and an immutability check cannot be one
+  function.
 - [reference/objects-and-controllers.md](reference/objects-and-controllers.md) — `spec` versus
   `status`, owner references, finalizers and conditions; the admission path a write takes; the
   level-triggered reconcile loop.
