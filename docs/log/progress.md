@@ -649,6 +649,49 @@ spec fails with `spec.rows: Invalid value: "unset": artifact resolved to unset r
 Nothing was observed on that branch, so decisions 1 and 3 are exactly what the test is asking for.
 Controller coverage went from 71.7% to 86.4% in passing.
 
+**Part two review — finished implementation (written by Claude, 2026-10-23):** `make fmt vet test`
+passes, 13 of 13 specs, controller coverage 71.1%. `make manifests generate` leaves `config/`
+unchanged, so the generated files match the markers.
+
+Against the checklist at the end of
+[training-tasks.md](../curriculum/training-tasks.md#reviewing-the-work): ecosystem behavior is
+adopted rather than rebuilt (`apivalidation.ValidateImmutableField`, `field.ErrorList`, `ptr.Equal`,
+`apimeta` conditions); the API carries lineage rather than translating YAML; errors name the layer
+at fault; generated files are in sync. Owner references do not apply — the `Dataset` controller
+creates no children.
+
+What the implementation got right: `detectDrift` is gated on `resolveErr == nil`, so an unreachable
+store is reported as `ArtifactUnreachable` and never as a mismatch; the nil checks are semantic
+(`Spec.Rows != nil` means "the registrant claimed nothing"), not defensive, and nothing dereferences
+a pointer it has not proved; the webhook freezes `spec.uri`, `spec.rows` and `spec.checksum`, guards
+the empty error list, and returns `NewInvalid` with a real `GroupKind` and object name, so a
+rejection arrives as a 422 with one cause per field. Recording `observedRows` and `observedChecksum`
+even when they mismatch is a deliberate choice in favor of forensics; the opposite choice is equally
+defensible and the quiz should ask for the defense.
+
+Open, in order of impact:
+
+1. **No steady-state resync.** `RequeueAfter` is returned inside the phase-transition branch, so a
+   `Ready` object that stays `Ready` ends with `ctrl.Result{}, nil`. The artifact store has no
+   watch, so nothing calls the reconciler again, and the first acceptance criterion — a rewritten
+   artifact moving a `Ready` Dataset to `Failed` with no user edit — cannot happen in a cluster even
+   though the drift logic itself is right. The requeue answers "when do I look again"; the event
+   answers "what changed". They are one branch today.
+2. **Events carry an empty message.** The `condition` value is declared with only `Type` and
+   `ObservedGeneration` and never filled, while the real conditions are built inline, so
+   `kubectl describe` prints `Dataset Failed:` with nothing after the colon.
+3. **Neither feature has a test.** The webhook suite is still the scaffold's commented-out examples
+   and no spec exercises drift, which is why coverage fell from 86.4% to 71.1% while the code grew.
+   The suite as it stands cannot catch items 1 or 2.
+4. **The rejection does not tell the user what to do.** `field is immutable` is the standard
+   phrasing and worth keeping for `rows` and `checksum`; the criterion asks for guidance to create a
+   new `Dataset`, which argues for a hand-built `field.Invalid` on `spec.uri`.
+5. **An empty artifact fails forever.** `FileResolver` returns `Rows: 0` for a zero-row file,
+   `observedRows` carries `+kubebuilder:validation:Minimum=1`, so the status write is rejected with
+   a 422 and the object retries with backoff indefinitely. Either zero is a legal observation or it
+   must not be recorded.
+6. Minor: `detectDrift` takes a `context.Context` it discards.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per
