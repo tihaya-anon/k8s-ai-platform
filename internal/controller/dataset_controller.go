@@ -26,7 +26,10 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -100,7 +103,20 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		})
 	}
 
-	r.detectDrift(ctx, &dset)
+	driftError := r.detectDrift(ctx, &dset)
+
+	if driftError != nil {
+		log.Info("artifact fields drifted", "error", driftError)
+		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
+		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
+			Type:               typeResolvedDataset,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: dset.Generation,
+			Reason:             "DriftDetected",
+			Message:            driftError.Error(),
+		})
+		return ctrl.Result{}, driftError
+	}
 
 	if err := r.Status().Update(ctx, &dset); err != nil {
 		return ctrl.Result{}, err
@@ -125,25 +141,30 @@ func (r *DatasetReconciler) resyncInterval() time.Duration {
 	return defaultResyncInterval
 }
 
-func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) {
-	var driftErrors []string
-	if dset.Spec.Rows != nil && *dset.Spec.Rows != *dset.Status.ObservedRows {
-		driftErrors = append(driftErrors, fmt.Sprintf("rows set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows))
+func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) errors.Aggregate {
+	var driftErrors field.ErrorList
+	var details []string
+	if !ptr.Equal(dset.Spec.Rows, dset.Status.ObservedRows) {
+		detail := fmt.Sprintf("rows set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows)
+		driftErrors = append(driftErrors, &field.Error{
+			Type:     field.ErrorTypeInternal,
+			Field:    "rows",
+			BadValue: dset.Status.ObservedRows,
+			Detail:   detail,
+		})
+		details = append(details, detail)
 	}
-	if dset.Spec.Checksum != nil && *dset.Spec.Checksum != *dset.Status.ObservedChecksum {
-		driftErrors = append(driftErrors, fmt.Sprintf("checksum set but mismatched, expect %v, get %v", *dset.Spec.Checksum, *dset.Status.ObservedChecksum))
+	if !ptr.Equal(dset.Spec.Checksum, dset.Status.ObservedChecksum) {
+		detail := fmt.Sprintf("checksum set but mismatched, expect %v, get %v", *dset.Spec.Rows, *dset.Status.ObservedRows)
+		driftErrors = append(driftErrors, &field.Error{
+			Type:     field.ErrorTypeInternal,
+			Field:    "checksum",
+			BadValue: dset.Status.ObservedChecksum,
+			Detail:   detail,
+		})
+		details = append(details, detail)
 	}
-	if len(driftErrors) == 0 {
-		return
-	}
-	dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
-	apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
-		Type:               typeResolvedDataset,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: dset.Generation,
-		Reason:             "DriftDetected",
-		Message:            fmt.Sprintf("drifts: %v", driftErrors),
-	})
+	return driftErrors.ToAggregate()
 }
 
 // SetupWithManager sets up the controller with the Manager.

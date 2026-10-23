@@ -20,7 +20,11 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -107,10 +111,37 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 	}
 	datasetlog.Info("Validation for Dataset upon update", "name", dataset.GetName())
 
-	// TODO(user): fill in your validation logic upon object update.
-	// just copy the logic from dataset_controller.go ?
-
-	return nil, nil
+	oldDset, _ := oldObj.(*mlv1alpha1.Dataset)
+	var driftErrors field.ErrorList
+	var details []string
+	frozenFiledMsg := "%v is not allowed to be modified once set"
+	if !ptr.Equal(dataset.Spec.Rows, oldDset.Spec.Rows) {
+		errorField := "rows"
+		detail := fmt.Sprintf(frozenFiledMsg, errorField)
+		driftErrors = append(driftErrors, &field.Error{
+			Type:     field.ErrorTypeInternal,
+			Field:    errorField,
+			BadValue: dataset.Spec.Rows,
+			Detail:   detail,
+		})
+		details = append(details, errorField, detail)
+	}
+	if !ptr.Equal(dataset.Spec.Checksum, oldDset.Spec.Checksum) {
+		errorField := "rows"
+		detail := fmt.Sprintf(frozenFiledMsg, errorField)
+		driftErrors = append(driftErrors, &field.Error{
+			Type:     field.ErrorTypeInternal,
+			Field:    "checksum",
+			BadValue: dataset.Spec.Checksum,
+			Detail:   detail,
+		})
+		details = append(details, errorField, detail)
+	}
+	err := driftErrors.ToAggregate()
+	if err != nil {
+		datasetlog.Error(err, "Readonly fields modified", details)
+	}
+	return nil, apierrors.NewInvalid(schema.GroupKind{}, "Readonly fields modified", driftErrors)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
