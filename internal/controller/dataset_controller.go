@@ -82,43 +82,33 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if resolveErr != nil {
 		log.Info("artifact resolution failed", "uri", *dset.Spec.Uri, "error", resolveErr)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
-		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
-			Type:               typeResolvedDataset,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: dset.Generation,
-			Reason:             "ArtifactUnreachable",
-			Message:            fmt.Sprintf("artifact store: %v", resolveErr),
-		})
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "ArtifactUnreachable"
+		condition.Message = fmt.Sprintf("artifact store: %v", resolveErr)
 	} else {
 		dset.Status.ObservedRows = &found.Rows
 		dset.Status.ObservedChecksum = &found.Checksum
 		dset.Status.LastResolvedTime = metav1.Now()
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseReady
-		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
-			Type:               typeResolvedDataset,
-			Status:             metav1.ConditionTrue,
-			ObservedGeneration: dset.Generation,
-			Reason:             "ArtifactResolved",
-			Message:            fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri),
-		})
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "ArtifactResolved"
+		condition.Message = fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri)
 	}
+
+	// Drift is only computable against a fresh observation, so it cannot be
+	// decided on the branch where resolution failed.
 	var driftError errors.Aggregate
-
 	if resolveErr == nil {
-		driftError = r.detectDrift(ctx, &dset)
+		driftError = r.detectDrift(&dset)
 	}
-
 	if driftError != nil {
 		log.Info("artifact fields drifted", "error", driftError)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
-		apimeta.SetStatusCondition(&dset.Status.Conditions, metav1.Condition{
-			Type:               typeResolvedDataset,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: dset.Generation,
-			Reason:             "DriftDetected",
-			Message:            driftError.Error(),
-		})
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "DriftDetected"
+		condition.Message = driftError.Error()
 	}
+	apimeta.SetStatusCondition(&dset.Status.Conditions, condition)
 
 	if err := r.Status().Update(ctx, &dset); err != nil {
 		return ctrl.Result{}, err
@@ -130,10 +120,12 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			eventType = corev1.EventTypeWarning
 		}
 		r.Recorder.Eventf(&dset, eventType, string(dset.Status.Phase), "Dataset %s: %s", dset.Status.Phase, condition.Message)
-		return ctrl.Result{RequeueAfter: r.resyncInterval()}, nil
 	}
 
-	return ctrl.Result{}, nil
+	// The artifact store has no watch: an untouched Dataset is only re-resolved
+	// because this returns. A transition is a reason to announce, never a reason
+	// to come back.
+	return ctrl.Result{RequeueAfter: r.resyncInterval()}, nil
 }
 
 func (r *DatasetReconciler) resyncInterval() time.Duration {
@@ -143,7 +135,7 @@ func (r *DatasetReconciler) resyncInterval() time.Duration {
 	return defaultResyncInterval
 }
 
-func (r *DatasetReconciler) detectDrift(_ context.Context, dset *mlv1alpha1.Dataset) errors.Aggregate {
+func (r *DatasetReconciler) detectDrift(dset *mlv1alpha1.Dataset) errors.Aggregate {
 	var driftErrors field.ErrorList
 	if dset.Spec.Rows != nil && !ptr.Equal(dset.Spec.Rows, dset.Status.ObservedRows) {
 		driftErrors = append(driftErrors, field.Invalid(

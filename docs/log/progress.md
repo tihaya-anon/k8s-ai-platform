@@ -566,7 +566,56 @@ you would have written yourself.
    failure and throttle
 5. IDK
 
-**Quiz review:**
+**Quiz review:** one of six answered correctly, one misunderstood, one half answered, three left
+open. Scores below; the corrections are the useful part, so they stay recorded.
+
+1. _Level-triggered line_ — **unanswered** ("how to consider such situations?"). The question is
+   asking you to find a line whose correctness depends on nothing being remembered between calls.
+   The strongest candidate in the file is that `r.Resolver.Resolve(...)` runs unconditionally: wrap
+   it in `if dset.Status.ObservedChecksum == nil` and a rewritten artifact could never be noticed
+   again after the first pass, because the one line that could notice it would be skipped. A second
+   one is `previousPhase := dset.Status.Phase` — it reads the phase out of the object, not out of a
+   field on the reconciler. Cache the last phase in the struct instead and a controller restart or a
+   second replica emits the wrong events, because the memory and the cluster disagree.
+2. _`observedGeneration` on a condition_ — **misunderstood**. The answer given ("the condition
+   records what happened but does not give actions") is about conditions in general. The question is
+   narrower: `metadata.generation` increments on every `spec` write and never on a status write, so
+   comparing it to the condition's `observedGeneration` answers _has the controller caught up with
+   the edit I just made?_ Without it, `Ready: True` is ambiguous right after an edit — it could
+   describe the spec you just submitted or the one before it. It is the field that makes "wait for
+   my change to take effect" possible.
+3. _Two ways to change a frozen field_ — **half answered**. The way named (editing the fields, which
+   `ValidateUpdate` rejects) is right. The second is **delete and recreate under the same name**:
+   that is a `DELETE` followed by a `CREATE`, so `ValidateUpdate` never runs, `ValidateCreate` sees
+   no old object, and it is admitted — a new `uid`, same name, lineage quietly broken. More
+   generally the webhook catches exactly what arrives as an update to `datasets` and nothing else:
+   not writes to another resource or subresource, not a future `v1beta1` (the marker lists
+   `versions=v1alpha1`), and not anything that skips admission, such as deleting the
+   `ValidatingWebhookConfiguration` or writing to `etcd` directly.
+4. _Error versus `RequeueAfter`_ — **correct**. Worth sharpening with the mechanics: an error is
+   logged at error level, increments `controller_runtime_reconcile_errors_total`, and re-adds the
+   key rate-limited (exponential, 5ms doubling to 1000s, per item, kept until a clean reconcile
+   calls `Forget`); `RequeueAfter` calls `Forget` first and schedules a plain delay. The two things
+   `Result.Requeue` conflated are precisely the ones named: _retry because something failed_, which
+   is what a rate limiter is for, and _come back soon although nothing failed_, which is a schedule.
+5. _Webhook versus marker_ — **unanswered**. What the webhook can see that a plain marker cannot:
+   the previous version of the object, the requesting user, the dry-run flag, and other objects in
+   the cluster. Which part of the rule could have been a marker: all three field comparisons, as CEL
+   transition rules — `+kubebuilder:validation:XValidation:rule="self == oldSelf"` — with the caveat
+   that `rows` and `checksum` are optional, and Kubernetes skips a transition rule when the old
+   value is absent, so each needs a `has()` companion rule on the parent struct. That leaves the
+   webhook earning its place only for rules needing another object or an identity.
+   [reference/validation-and-immutability.md](../reference/validation-and-immutability.md) has the
+   long version.
+6. _The `artifact.Resolver` seam_ — **not answered**. Two things it makes testable: the failure path
+   (`FakeResolver{Err: ...}` turns "the store is down" into one line, where a real client would need
+   a network envtest does not have), and drift itself (the fake can return different metadata on the
+   second call, which is the only way to simulate an artifact rewritten overnight). The cost is a
+   second implementation that can disagree with the real one: `FileResolver` returns `Rows: 0` for
+   an empty file and the fake never does, which is exactly how review item 5 below stayed invisible.
+
+Revisit 2, 3 and 6 before 1.2 — 2 is a misunderstanding rather than a gap, and 3 and 6 each left a
+required part unanswered. 1 and 5 are recorded as misses rather than re-asked.
 
 **Part two review — in progress (written by Claude, 2026-10-22):** notes on the drift work as it
 stands in `internal/controller/dataset_controller.go`, kept here so the device change does not lose
@@ -700,6 +749,17 @@ Open, in order of impact:
    a 422 and the object retries with backoff indefinitely. Either zero is a legal observation or it
    must not be recorded.
 6. Minor: `detectDrift` takes a `context.Context` it discards.
+
+**Review items 1, 2 and 6 applied by Claude, 2026-10-23:** the resync now returns unconditionally
+and a phase transition only decides whether to emit an Event; the reconciler builds one `Condition`
+value across the resolve and drift branches and calls `SetStatusCondition` once, so the Event
+message is no longer empty; `detectDrift` lost the context it discarded. `make fmt vet test` passes,
+controller coverage 72.5%.
+
+Left open on purpose: the tests for drift and for the webhook rejection, and the patch/refine step
+(the immutability message telling the user to create a new `Dataset`, plus its assertion) — that
+step is the exercise, so it stays unwritten. Review item 5, whether an artifact with zero rows is a
+legal observation or an unusable artifact, is a decision rather than a fix.
 
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
