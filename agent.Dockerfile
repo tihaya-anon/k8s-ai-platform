@@ -99,8 +99,13 @@ FROM base AS agent-cli
 
 # Declared in this stage, and deliberately. A Pi/Codex/Claude pin change should rebuild only the
 # CLI stage, not the editor-tool stage with the Neovim/starship/ble.sh downloads.
+#
+# These track what the host actually runs, so a container session and a host session differ in
+# their sandbox and in nothing else. Read the host's own answer (`pi --version`) rather than a
+# remembered one. The image installs each CLI once and never self-updates it, so the way to move
+# a version is to change the pin and rebuild -- see DISABLE_AUTOUPDATER below.
 ARG CLAUDE_VERSION=2.1.278
-ARG PI_VERSION=1.1.0
+ARG PI_VERSION=1.4.0
 ARG CODEX_VERSION=0.154.0
 ARG MARKDOWNLINT_VERSION=0.23.2
 ARG PRETTIER_VERSION=3.9.6
@@ -138,6 +143,12 @@ ARG NPM_REGISTRY=https://registry.npmjs.org
 # ships a stub. The list is exactly one package: codex's binary arrives as an aliased
 # optionalDependency rather than a script, and pi runs fine with esbuild's and protobufjs's
 # scripts skipped. Install scripts are arbitrary code from the registry, so it stays that short.
+#
+# Pi gets --ignore-scripts in addition, which is what upstream's own install instructions use.
+# Naming a package in --allow-scripts is an exception to a denial; pi needs no exception at all,
+# so its scripts are refused rather than merely not granted. The version is pinned by PI_VERSION
+# and enforced by the CLI gate below, so nothing is lost by not letting its dependencies build
+# themselves.
 ARG TARGETARCH
 RUN --mount=type=cache,target=/root/.npm set -eu; \
     case "${TARGETARCH:-amd64}" in \
@@ -153,6 +164,7 @@ RUN --mount=type=cache,target=/root/.npm set -eu; \
     npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
         "@openai/codex-${codex_arch}@npm:@openai/codex@${CODEX_VERSION}-${codex_arch}"; \
     npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
+        --ignore-scripts \
         "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
         "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
@@ -186,8 +198,13 @@ RUN set -eu; \
 FROM base AS pi-extensions
 
 ARG PI_READER_VERSION=0.3.3
-ARG PI_BACKGROUND_TASKS_VERSION=2.6.9
+ARG PI_BACKGROUND_TASKS_VERSION=2.6.10
 ARG NPM_REGISTRY=https://registry.npmjs.org
+
+# Same rule as the CLI pins: mirror the host. The specifier in the host's settings.json is not the
+# answer -- it says `latest` for pi-background-tasks -- so read the installed version out of the
+# host's own package tree instead. The specs written below are exact, because the container must
+# not drift onto a newer release than the host runs.
 
 # These are personal Pi extensions that are part of this repository's agent experience, not project
 # source. Bake the packages into Pi's own npm directory so a fresh container can load them without
