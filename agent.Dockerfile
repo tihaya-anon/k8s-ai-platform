@@ -97,8 +97,8 @@ RUN set -eu; \
 
 FROM base AS agent-cli
 
-# Declared in this stage, and deliberately. A Pi/Codex/Claude pin change should rebuild only the
-# CLI stage, not the editor-tool stage with the Neovim/starship/ble.sh downloads.
+# Declared in this stage, and deliberately. A Pi/Codex/Claude/OpenCode pin change should rebuild
+# only the CLI stage, not the editor-tool stage with the Neovim/starship/ble.sh downloads.
 #
 # These track what the host actually runs, so a container session and a host session differ in
 # their sandbox and in nothing else. Read the host's own answer (`pi --version`) rather than a
@@ -107,6 +107,7 @@ FROM base AS agent-cli
 ARG CLAUDE_VERSION=2.1.278
 ARG PI_VERSION=1.4.0
 ARG CODEX_VERSION=0.154.0
+ARG OPENCODE_VERSION=2.1.4
 ARG MARKDOWNLINT_VERSION=0.23.2
 ARG PRETTIER_VERSION=3.9.6
 
@@ -149,13 +150,22 @@ ARG NPM_REGISTRY=https://registry.npmjs.org
 # so its scripts are refused rather than merely not granted. The version is pinned by PI_VERSION
 # and enforced by the CLI gate below, so nothing is lost by not letting its dependencies build
 # themselves.
+#
+# OpenCode 2 is @opencode/cli, not opencode-ai: the latter still points at OpenCode 1 and has no
+# 2.x releases. Its wrapper package pulls every matching platform build (x64 baseline, musl, ...)
+# as optionalDependencies -- about 900MB to end up running one 230MB binary. The official V2
+# installer instead downloads only the platform package, and so does this layer. The command names
+# the architecture-specific package explicitly; the wrapper's postinstall is never needed.
 ARG TARGETARCH
 RUN --mount=type=cache,target=/root/.npm set -eu; \
     case "${TARGETARCH:-amd64}" in \
-      amd64) codex_arch=linux-x64 ;; \
-      arm64) codex_arch=linux-arm64 ;; \
+      amd64) codex_arch=linux-x64; opencode_pkg=@opencode/cli-linux-x64 ;; \
+      arm64) codex_arch=linux-arm64; opencode_pkg=@opencode/cli-linux-arm64 ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
+    if [ "$opencode_pkg" = "@opencode/cli-linux-x64" ] && ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then \
+      opencode_pkg=@opencode/cli-linux-x64-baseline; \
+    fi; \
     npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
         --allow-scripts=@anthropic-ai/claude-code \
         "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; \
@@ -166,6 +176,10 @@ RUN --mount=type=cache,target=/root/.npm set -eu; \
     npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
         --ignore-scripts \
         "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
+    npm install --prefix /opt/opencode --no-save --no-package-lock --ignore-scripts \
+        --registry="${NPM_REGISTRY}" "${opencode_pkg}@${OPENCODE_VERSION}"; \
+    mkdir -p /opt/opencode/bin; \
+    ln -sf "../node_modules/${opencode_pkg}/bin/opencode" /opt/opencode/bin/opencode; \
     npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
         "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
         "prettier@${PRETTIER_VERSION}"
@@ -175,14 +189,14 @@ RUN --mount=type=cache,target=/root/.npm set -eu; \
 # Both mechanisms above fail quietly: a skipped install script is a warning, and npm counts a failed
 # optionalDependency as success. Either one yields an image that builds clean, passes every layer,
 # and then tells whoever types `claude` that its native binary is missing. This image exists to run
-# these three CLIs, so it must not be allowed to build without them.
+# these four CLIs, so it must not be allowed to build without them.
 #
 # The gate runs each CLI rather than checking for a directory: it is the same code path the user
 # takes, and it also catches a binary that unpacked but will not execute. It is deliberately the
 # layer right after the install, so the failure lands next to its cause.
 RUN set -eu; \
-    export PATH="/opt/agent-cli/bin:${PATH}"; \
-    for cli in claude codex pi; do \
+    export PATH="/opt/agent-cli/bin:/opt/opencode/bin:${PATH}"; \
+    for cli in claude codex pi opencode; do \
       if ! "$cli" --version; then \
         echo >&2; \
         echo "agent.Dockerfile: '$cli --version' failed, so the install above did not produce a" >&2; \
@@ -230,6 +244,7 @@ ARG USER_UID=1000
 ARG USER_GID=1000
 
 COPY --from=agent-cli /opt/agent-cli /opt/agent-cli
+COPY --from=agent-cli /opt/opencode /opt/opencode
 COPY --from=editor-tools /opt/nvim /opt/nvim
 COPY --from=editor-tools /usr/local/bin/starship /usr/local/bin/starship
 COPY --from=editor-tools /usr/share/blesh /usr/share/blesh
@@ -237,7 +252,8 @@ RUN set -eu; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \
     for cli in claude codex pi markdownlint-cli2 prettier; do \
       ln -sf "/opt/agent-cli/bin/${cli}" "/usr/local/bin/${cli}"; \
-    done
+    done; \
+    ln -sf /opt/opencode/bin/opencode /usr/local/bin/opencode
 
 # CLAUDE_CONFIG_DIR is set explicitly so every piece of Claude Code state -- credentials, session
 # history, installed skills and its config file -- lands under one directory, which hack/agent.sh

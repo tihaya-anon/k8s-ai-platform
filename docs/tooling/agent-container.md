@@ -7,7 +7,7 @@ default, but it is not enabled automatically: nothing uses it until you run `hac
 This is different from the product image in the root `Dockerfile`, and it is also different from
 Kubebuilder's generated `.devcontainer/`. The generated devcontainer is the ordinary human
 development environment. `agent.Dockerfile` is an agent sandbox with Go, Make, Git, small CLI tools
-for editing and testing, and the `claude`, `pi` and `codex` CLIs. It does not bake any
+for editing and testing, and the `claude`, `pi`, `codex` and `opencode` CLIs. It does not bake any
 model-provider credentials into the image.
 
 Quick start from the repository root:
@@ -169,9 +169,10 @@ AGENT_NODE_IMAGE=node:24-bookworm AGENT_GO_IMAGE=golang:1.25-bookworm hack/agent
 
 Expect around 3GB and a slow first build. `codex` and `claude-code` are thin npm wrappers around
 per-platform native binaries pulled in as optional dependencies -- roughly 570MB unpacked between
-them -- and that is the bulk of both the image and the build time. Keeping all three agent CLIs is
-deliberate: the image is a general-purpose agent sandbox, not a Claude-specific one. The npm cache
-is a BuildKit cache mount, so an interrupted build resumes rather than starting the download again.
+them -- and `opencode` adds its own 230MB binary, `@opencode/cli-linux-*`. That is the bulk of both
+the image and the build time. Keeping all four agent CLIs is deliberate: the image is a
+general-purpose agent sandbox, not a Claude-specific one. The npm cache is a BuildKit cache mount,
+so an interrupted build resumes rather than starting the download again.
 
 To fill only the Go module cache used by the container:
 
@@ -261,8 +262,8 @@ It is resolved on the host and carried in, in git's own order of precedence:
 Two consequences worth knowing:
 
 - `.git/config` is inside the bind-mounted checkout, so that write lands on the host and outlives
-  the container. The container does not write `~/.gitconfig`, because only `~/.claude` is a named
-  volume and anything else in the home directory dies with `--rm`.
+  the container. The container does not write `~/.gitconfig`, because it is not on one of the named
+  volumes and would disappear with `--rm`.
 - Commit signing is not carried in. A host configured with `commit.gpgsign = true` globally will
   produce unsigned commits inside the container.
 
@@ -277,6 +278,12 @@ It does not get an IDE. Neovim is installed as `$EDITOR` — `git commit` withou
 `git rebase -i` need one — but without the LazyVim configuration or any language server. Editing
 usually happens on the host against the same inodes through the bind mount; the container editor is
 there for commit messages and emergency terminal edits, not as the project's IDE policy.
+
+OpenCode's terminal settings are tracked alongside the shell configuration in
+`hack/agent-home/.config/opencode/cli.json`. Message navigation uses `alt+j` / `alt+k` for next and
+previous and `alt+g` / `alt+shift+g` for first and last; the modifier is deliberate, because bare
+`j`/`k`/`g` are text in the prompt rather than navigation. The first and last bindings keep
+OpenCode's existing keys as alternatives.
 
 `~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
 `.bashrc` guard skips it when absent. Pass `--mount` if a session genuinely needs one of those
@@ -308,6 +315,12 @@ and `hack/agent.sh` backs that directory with a named volume, so running `claude
 container and logging in once there keeps the credential in the volume across `docker run --rm`. The
 host credential is never mounted, and revoking the container's access is
 `docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
+
+OpenCode gets the same treatment through `k8s-ai-opencode`, mounted at its XDG data directory
+`~/.local/share/opencode`: sessions and connected accounts survive `--rm`, and no host credential is
+mounted. Its terminal settings, including the message-navigation keybindings, are tracked in
+`hack/agent-home/.config/opencode/cli.json` and mounted read-only over the copy in the image. Clear
+the volume with `docker volume rm k8s-ai-opencode`.
 
 The image also bakes in this maintainer's usual Pi extension packages under the container's Pi home:
 `@inobit/pi-reader` and `pi-background-tasks` with its packaged background-task and
@@ -370,6 +383,8 @@ claude
 pi
 # or
 codex
+# or
+opencode
 ```
 
 ## Why the agents run unattended

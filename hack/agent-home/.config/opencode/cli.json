@@ -1,0 +1,17 @@
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight"
+  },
+  "animations": true,
+  "session": {
+    "scrollbar": true,
+    "permissions": "prompt"
+  },
+  "keybinds": {
+    "session.message.previous": "alt+k",
+    "session.message.next": "alt+j",
+    "session.first": "ctrl+g,home,alt+home,alt+g",
+    "session.last": "ctrl+alt+g,end,alt+shift+g"
+  }
+}

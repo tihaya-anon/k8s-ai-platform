@@ -41,6 +41,11 @@ caches=(
 # survives --rm and the host credential never has to be mounted in.
 claude_volume=(-v k8s-ai-claude:/home/agent/.claude)
 
+# OpenCode keeps sessions, connected accounts and its database under the XDG data directory. A
+# named volume gives it the same treatment as Claude Code: connect once inside the container and
+# the credential stays in the volume, with no host file mounted.
+opencode_volume=(-v k8s-ai-opencode:/home/agent/.local/share/opencode)
+
 # Shell configuration, read from the repository rather than the copy baked into the image, so
 # editing it on the host takes effect in the next shell. Read-only: nothing in the container
 # writes its own configuration. ~/.bash_env is absent on purpose -- it holds real tokens on the
@@ -50,6 +55,7 @@ home_mounts=(
   -v "$repo_root/hack/agent-home/.bash_aliases:/home/agent/.bash_aliases:ro"
   -v "$repo_root/hack/agent-home/.blerc:/home/agent/.blerc:ro"
   -v "$repo_root/hack/agent-home/.config/starship.toml:/home/agent/.config/starship.toml:ro"
+  -v "$repo_root/hack/agent-home/.config/opencode/cli.json:/home/agent/.config/opencode/cli.json:ro"
 )
 
 # The credential files the agent CLIs read, as name:host:container. Opt-in through --creds and
@@ -296,9 +302,10 @@ prepare_volumes() {
   run_step docker run --rm --user root \
     "${caches[@]}" \
     "${claude_volume[@]}" \
+    "${opencode_volume[@]}" \
     "$image" \
-    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.claude \
-      && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.claude'
+    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.claude /home/agent/.local/share/opencode \
+      && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.claude /home/agent/.local/share/opencode'
 }
 
 # One `docker run`, parameterised by how the workspace is mounted and what runs inside. Everything
@@ -360,6 +367,7 @@ agent_run() {
     "${mount_flags[@]}" \
     "${caches[@]}" \
     "${claude_volume[@]}" \
+    "${opencode_volume[@]}" \
     "${session_mounts[@]}" \
     "${home_mounts[@]}" \
     ${cred_mounts[@]+"${cred_mounts[@]}"} \
