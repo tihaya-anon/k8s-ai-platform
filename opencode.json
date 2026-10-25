@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "gofmt": {
+      "disabled": true
+    },
+    "prettier": {
+      "disabled": true
+    },
+    "hack-format": {
+      "command": ["./hack/format.sh", "$FILE"],
+      "extensions": [".go", ".json", ".jsonc", ".md", ".yaml", ".yml"]
+    }
+  }
+}

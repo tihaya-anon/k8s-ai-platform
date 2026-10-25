@@ -238,6 +238,11 @@ The image pins `markdownlint-cli2` and `prettier` alongside the agent CLIs, so `
 behaves identically inside the container and on the host. Both degrade to a warning when a formatter
 is missing, which would otherwise mean the container silently accepted markdown the host rejects.
 
+OpenCode is configured by the tracked `opencode.json` to run the same `hack/format.sh` after its
+`write`, `edit` and `patch` tools change a file. The built-in `gofmt` and `prettier` formatters are
+disabled there, so `hack/format.sh` remains the one formatter and handles Go imports, Markdown
+linting and Prettier wrapping in a single pass.
+
 `core.hooksPath` lives in `.git/config`, which is not tracked, so a fresh clone starts with the
 pre-commit hook disarmed. The image's entrypoint sets it on every entry instead of relying on anyone
 remembering `git config core.hooksPath hack/git-hooks`. It also adds the workspace to
