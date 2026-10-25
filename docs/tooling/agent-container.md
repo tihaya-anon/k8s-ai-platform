@@ -210,6 +210,17 @@ through, and the tty is only allocated when there is one to attach to:
 hack/agent.sh shell -- go test ./internal/...
 ```
 
+The container gets its own `LOCALBIN` on the `k8s-ai-tools` named volume
+(`/home/agent/.cache/k8s-ai-platform/bin`), passed as an environment variable by `hack/agent.sh`.
+That is not a convenience. The generated Makefile installs its tools into `$(pwd)/bin` and symlinks
+each one with an absolute path from `realpath`, and the checkout has a different absolute path on
+the host than in the container (`/workspace/k8s-ai-platform`). Sharing `bin/` through the bind mount
+therefore means whichever side ran `make` last leaves the other a dangling link. Separate
+directories keep the generated Makefile unmodified, keep each environment's links valid, and stop a
+host-built binary from being executed across the boundary. The first container run downloads the
+tools into the volume; `docker volume rm k8s-ai-tools` forces a fresh download. `hack/format.sh`
+reads the same `LOCALBIN`, so `goimports` remains the single Go formatter in both places.
+
 Setup output — the image build and the volume permissions — is captured rather than printed, since
 it is noise on every run but the first. `-v` prints it, along with the exact `docker` commands. A
 step that fails prints what it captured either way.
@@ -280,10 +291,14 @@ usually happens on the host against the same inodes through the bind mount; the 
 there for commit messages and emergency terminal edits, not as the project's IDE policy.
 
 OpenCode's terminal settings are tracked alongside the shell configuration in
-`hack/agent-home/.config/opencode/cli.json`. Message navigation uses `alt+j` / `alt+k` for next and
-previous and `alt+g` / `alt+shift+g` for first and last; the modifier is deliberate, because bare
-`j`/`k`/`g` are text in the prompt rather than navigation. The first and last bindings keep
-OpenCode's existing keys as alternatives.
+`hack/agent-home/.config/opencode/cli.json`. Scrolling and message navigation use vim-style keys:
+`ctrl+u` / `ctrl+d` for half a page, `ctrl+k` / `ctrl+j` for one line, `ctrl+alt+k` / `ctrl+alt+j`
+for previous / next message, and `ctrl+alt+g` / `ctrl+alt+shift+g` for first / last. The modifiers
+are deliberate, because bare `j`/`k`/`g` are text in the prompt rather than navigation.
+`which-key.toggle` moves to `ctrl+alt+shift+w` so it does not swallow `ctrl+alt+k`; `ctrl+k` and
+`ctrl+j` are freed by disabling the input's delete-to-line-end binding and dropping `ctrl+j` from
+`input.newline`. `alt+e` opens the current prompt in `$EDITOR`, after disabling the input's
+move-to-visual-line-end binding.
 
 `~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
 `.bashrc` guard skips it when absent. Pass `--mount` if a session genuinely needs one of those
@@ -326,6 +341,12 @@ The image also bakes in this maintainer's usual Pi extension packages under the 
 `@inobit/pi-reader` and `pi-background-tasks` with its packaged background-task and
 Anthropic-attribution extensions. This makes the extensions available in a fresh container, but does
 not mount or copy any provider credentials.
+
+Pi's model defaults are not baked into the image. They live in the tracked project settings,
+`.pi/settings.json`, which the workspace bind mount already presents to the container: the host and
+the container read the same file, so provider, model and thinking level are set once rather than
+pinned twice. Project settings load only after project trust is granted, so a fresh container asks
+once and keeps the answer in its ephemeral Pi home.
 
 Pi and Codex session history is host-backed by default, without mounting credentials:
 

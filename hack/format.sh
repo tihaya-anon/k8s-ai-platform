@@ -53,8 +53,10 @@ fi
 # Grouping must stay in step with the goimports settings in .golangci.yml, or
 # `make lint` will flag what this script just wrote.
 if [[ ${#go[@]} -gt 0 ]]; then
-  if [[ -x $repo_root/bin/goimports ]]; then
-    "$repo_root/bin/goimports" -w "${go[@]}" || status=1
+  # LOCALBIN is what the Makefile installs goimports into; the container sets it to its own volume.
+  localbin=${LOCALBIN:-$repo_root/bin}
+  if [[ -x $localbin/goimports ]]; then
+    "$localbin/goimports" -w "${go[@]}" || status=1
   elif have goimports; then
     goimports -w "${go[@]}" || status=1
   elif have gofmt; then

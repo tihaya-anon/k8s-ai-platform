@@ -37,6 +37,17 @@ caches=(
   -v k8s-ai-go-build:/home/agent/.cache/go-build
 )
 
+# The generated Makefile installs controller-gen, setup-envtest, kustomize and goimports into
+# LOCALBIN (default $(pwd)/bin) and links each one with an absolute path from realpath. The checkout
+# has a different absolute path on the host and inside the container, and the bind mount makes both
+# see the same bin/, so whichever side ran make last leaves the other a dangling link. Rather than
+# edit generated files, the container gets its own LOCALBIN on a named volume: same Makefile, links
+# that are valid where they were written, and no host-built tool binary is executed across the
+# boundary. LOCALBIN is a `?=` assignment, so the environment wins. Emptying the volume re-downloads
+# the tools.
+tools_volume=(-v k8s-ai-tools:/home/agent/.cache/k8s-ai-platform)
+container_localbin=/home/agent/.cache/k8s-ai-platform/bin
+
 # Claude Code keeps credentials, history and skills here, so `claude /login` inside the container
 # survives --rm and the host credential never has to be mounted in.
 claude_volume=(-v k8s-ai-claude:/home/agent/.claude)
@@ -301,10 +312,11 @@ prepare_volumes() {
   ensure_image
   run_step docker run --rm --user root \
     "${caches[@]}" \
+    "${tools_volume[@]}" \
     "${claude_volume[@]}" \
     "${opencode_volume[@]}" \
     "$image" \
-    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.claude /home/agent/.local/share/opencode \
+    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.cache/k8s-ai-platform/bin /home/agent/.claude /home/agent/.local/share/opencode \
       && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.claude /home/agent/.local/share/opencode'
 }
 
@@ -360,12 +372,14 @@ agent_run() {
     --network "${AGENT_RUN_NETWORK:-host}" \
     "${sandbox[@]}" \
     -e GOPROXY="$proxy_chain" \
+    -e LOCALBIN="$container_localbin" \
     -e AGENT_GIT_USER_NAME="$git_user_name" \
     -e AGENT_GIT_USER_EMAIL="$git_user_email" \
     "${proxy_flags[@]}" \
     "${hostmod_flags[@]}" \
     "${mount_flags[@]}" \
     "${caches[@]}" \
+    "${tools_volume[@]}" \
     "${claude_volume[@]}" \
     "${opencode_volume[@]}" \
     "${session_mounts[@]}" \

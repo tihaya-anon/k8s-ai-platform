@@ -9,9 +9,18 @@
     "permissions": "prompt"
   },
   "keybinds": {
-    "session.message.previous": "alt+k",
-    "session.message.next": "alt+j",
-    "session.first": "ctrl+g,home,alt+home,alt+g",
-    "session.last": "ctrl+alt+g,end,alt+shift+g"
+    "session.half.page.up": "ctrl+u",
+    "session.half.page.down": "ctrl+d",
+    "session.line.up": "ctrl+k",
+    "session.line.down": "ctrl+j",
+    "session.message.previous": "ctrl+alt+k",
+    "session.message.next": "ctrl+alt+j",
+    "session.first": "ctrl+g,home,alt+home,ctrl+alt+g",
+    "session.last": "end,ctrl+alt+shift+g",
+    "which-key.toggle": "ctrl+alt+shift+w",
+    "input.delete.to.line.end": "none",
+    "input.newline": "shift+return,ctrl+return,alt+return",
+    "input.visual.line.end": "none",
+    "prompt.editor": "alt+e"
   }
 }
