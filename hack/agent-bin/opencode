@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Launch OpenCode with its permission prompts auto-approved.
+#
+# Same reasoning as the claude wrapper beside this file: the container is the boundary, so a second
+# approval gate inside it only asks a question whose answer is already fixed. --auto approves what
+# the configuration does not explicitly deny; an explicit deny still wins, which is the part worth
+# keeping.
+#
+# A flag, not `session.permissions: autoaccept` in cli.json: that file is shared with the host and
+# with the tracked container config, and a bypass written there would apply outside the sandbox. The
+# flag is scoped to this process.
+set -euo pipefail
+
+real=/usr/local/bin/opencode
+
+# The escape hatch for a session that wants the prompts back, and the loop guard: the wrapper
+# shadows the real binary by PATH, so an unguarded re-exec would find itself.
+if [[ ${AGENT_BYPASS:-1} != 1 ]]; then
+  exec "$real" "$@"
+fi
+
+# Subcommands either do not run an agent or do not accept --auto. Pass them through untouched.
+case ${1:-} in
+upgrade | update | uninstall | acp | api | debug | auth | mcp | plugin | models | stats | mini | session | service)
+  exec "$real" "$@"
+  ;;
+--help | -h | --version | -v | --completions | --wizard)
+  exec "$real" "$@"
+  ;;
+esac
+
+# Already asked for explicitly. Passing it twice is harmless, but preserving what the caller typed
+# keeps the wrapper transparent.
+for arg in "$@"; do
+  case $arg in
+  --auto)
+    exec "$real" "$@"
+    ;;
+  esac
+done
+
+# --auto is a flag of run, and the root command that starts the TUI. Insert it after the subcommand
+# where there is one, because that is the documented spelling.
+case ${1:-} in
+run)
+  sub=$1
+  shift
+  exec "$real" "$sub" --auto "$@"
+  ;;
+esac
+
+exec "$real" --auto "$@"

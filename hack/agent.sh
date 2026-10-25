@@ -17,6 +17,12 @@ image=${AGENT_IMAGE:-$image_repo:latest}
 name=${AGENT_NAME:-k8s-ai-agent}
 workspace=/workspace/k8s-ai-platform
 
+# OpenCode's managed service defaults to port 49374, the same port the host service uses, and
+# hack/agent.sh runs the container with host networking. Give every container its own port from a
+# range instead, so a second agent container does not collide with the first. The entrypoint writes
+# the chosen port into ~/.config/opencode/service.json.
+opencode_port_range=${AGENT_OPENCODE_PORT_RANGE:-49376-49400}
+
 # The container inherits whatever mirrors the host already trusts, rather than hardcoding any.
 go_proxy=${GO_PROXY:-$(go env GOPROXY 2>/dev/null || printf direct)}
 npm_registry=${NPM_REGISTRY:-$(npm config get registry 2>/dev/null || printf 'https://registry.npmjs.org')}
@@ -69,6 +75,23 @@ home_mounts=(
   -v "$repo_root/hack/agent-home/.config/opencode/cli.json:/home/agent/.config/opencode/cli.json:ro"
 )
 
+# OpenCode's selected model and variant are state, not cli.json. Mount the host's model.json
+# read-only and let the entrypoint copy it into the container's writable state directory. A host
+# global opencode.json(c), when present, is mounted read-only as well, so configuration-based
+# defaults and the project config agree.
+opencode_config_dir=${XDG_CONFIG_HOME:-$HOME/.config}/opencode
+opencode_state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/opencode
+opencode_config_mounts=()
+opencode_state_mounts=()
+for config_name in opencode.json opencode.jsonc; do
+  if [[ -f $opencode_config_dir/$config_name ]]; then
+    opencode_config_mounts+=(-v "$opencode_config_dir/$config_name:/home/agent/.config/opencode/$config_name:ro")
+  fi
+done
+if [[ -f $opencode_state_dir/model.json ]]; then
+  opencode_state_mounts=(--mount "type=bind,src=$opencode_state_dir/model.json,dst=/run/agent-host/opencode-model.json,readonly")
+fi
+
 # The credential files the agent CLIs read, as name:host:container. Opt-in through --creds and
 # never mounted otherwise, because "no host secrets unless you asked for one" is the property the
 # container is for -- see docs/tooling/agent-container.md.
@@ -76,6 +99,10 @@ home_mounts=(
 # Claude Code is deliberately absent: one `claude /login` inside the container puts its credential
 # in the k8s-ai-claude volume, so there is nothing on the host to mount and nothing to revoke
 # beyond the volume. CODEX_HOME is honoured because codex documents it; pi has no equivalent.
+#
+# OpenCode is absent too, but for a different reason: its saved accounts live in SQLite, not in a
+# file. --creds opencode runs `opencode auth export` on the host into a temporary JSON file and
+# mounts that; the entrypoint imports it into the container's own database.
 credentials=(
   # Pi rewrites auth.json when OAuth-backed providers refresh or when provider attribution metadata
   # changes. Mount the host secret somewhere inert and let the entrypoint copy it into the
@@ -113,6 +140,8 @@ session_mounts=()
 extra_mounts=()
 # Filled by --creds, from the registry above. Same reasoning, one flag shorter to type.
 cred_mounts=()
+# Temporary host file holding `opencode auth export` output, removed when the script exits.
+opencode_cred_file=
 creds=0
 creds_select=
 # Filled by everything after --, to run one command instead of an interactive shell.
@@ -121,6 +150,40 @@ command_override=()
 die() {
   printf 'agent.sh: %s\n' "$1" >&2
   exit 1
+}
+
+# True when something already listens on the port in the host network namespace. The container
+# shares that namespace, so ss is seeing exactly the addresses OpenCode would try to bind.
+port_in_use() {
+  local port=$1
+  if command -v ss >/dev/null 2>&1; then
+    ss -Hltn 2>/dev/null | awk -v p="$port" '$4 ~ ":" p "$" { found = 1 } END { exit found ? 0 : 1 }'
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null
+  fi
+}
+
+# First free port in START-END, checked against the host's listeners. The gap between choosing and
+# OpenCode binding is unavoidable without holding the port, but in practice a session starts its
+# service before another session is opened.
+choose_opencode_port() {
+  local range=$1 start end port
+  if [[ ! $range =~ ^([0-9]+)-([0-9]+)$ ]]; then
+    die "AGENT_OPENCODE_PORT_RANGE must be START-END, got: $range"
+  fi
+  start=$((10#${BASH_REMATCH[1]}))
+  end=$((10#${BASH_REMATCH[2]}))
+  if ((start < 1 || end > 65535 || start > end)); then
+    die "AGENT_OPENCODE_PORT_RANGE is outside 1-65535 or reversed: $range"
+  fi
+
+  for ((port = start; port <= end; port++)); do
+    if ! port_in_use "$port"; then
+      printf '%s\n' "$port"
+      return 0
+    fi
+  done
+  die "no free port in AGENT_OPENCODE_PORT_RANGE=$range"
 }
 
 # Echo under -v, so what happened to the boundary can be put in the scrollback. %q rather than $*,
@@ -220,18 +283,35 @@ resolve_sessions() {
   )
 }
 
+# Write the host's saved OpenCode accounts to a temporary JSON file for the container to import.
+# `auth export` does not include environment-only providers, by design: those are not saved accounts
+# and have nothing on disk to transfer.
+export_opencode_credentials() {
+  local json
+  command -v opencode >/dev/null 2>&1 || return 1
+
+  json=$(opencode auth export --standalone 2>/dev/null) || return 1
+  [[ -n $json && $json != "[]" ]] || return 1
+
+  opencode_cred_file=$(mktemp "${TMPDIR:-/tmp}/opencode-auth.XXXXXX") || return 1
+  chmod 0600 "$opencode_cred_file"
+  printf '%s\n' "$json" >"$opencode_cred_file"
+  cred_mounts+=(--mount "type=bind,src=$opencode_cred_file,dst=/run/agent-creds/opencode-auth.json,readonly")
+  printf 'agent.sh: mounting opencode credential, read-only: host auth export\n' >&2
+}
+
 resolve_credentials() {
   ((creds)) || return 0
 
-  local wanted=() entry name host container
+  local wanted=() entry name host container known_names=(pi codex opencode)
   [[ -n $creds_select ]] && IFS=, read -ra wanted <<<"$creds_select"
 
   for name in ${wanted[@]+"${wanted[@]}"}; do
     local known=0
-    for entry in "${credentials[@]}"; do
-      [[ ${entry%%:*} == "$name" ]] && known=1
+    for entry in "${known_names[@]}"; do
+      [[ $entry == "$name" ]] && known=1
     done
-    ((known)) || die "unknown credential: $name (known: ${credentials[*]%%:*})"
+    ((known)) || die "unknown credential: $name (known: ${known_names[*]})"
   done
 
   for entry in "${credentials[@]}"; do
@@ -254,6 +334,21 @@ resolve_credentials() {
     # thing this script does that the scrollback should record without being asked.
     printf 'agent.sh: mounting %s credential, read-only: %s\n' "$name" "$host" >&2
   done
+
+  local want_opencode=0
+  if ((${#wanted[@]})); then
+    for name in "${wanted[@]}"; do
+      [[ $name == opencode ]] && want_opencode=1
+    done
+  else
+    want_opencode=1
+  fi
+
+  if ((want_opencode)); then
+    if ! export_opencode_credentials; then
+      ((${#wanted[@]})) && die "no saved OpenCode credentials on this host (connect one with /connect or opencode auth login)"
+    fi
+  fi
 }
 
 build_image() {
@@ -330,6 +425,9 @@ agent_run() {
   local access=$1 mode=$2
   shift 2
 
+  local opencode_port
+  opencode_port=$(choose_opencode_port "$opencode_port_range")
+
   local mount_flags=(-v "$repo_root:$workspace")
   [[ $access == ro ]] && mount_flags=(-v "$repo_root:$workspace:ro")
 
@@ -373,6 +471,7 @@ agent_run() {
     "${sandbox[@]}" \
     -e GOPROXY="$proxy_chain" \
     -e LOCALBIN="$container_localbin" \
+    -e AGENT_OPENCODE_PORT="$opencode_port" \
     -e AGENT_GIT_USER_NAME="$git_user_name" \
     -e AGENT_GIT_USER_EMAIL="$git_user_email" \
     "${proxy_flags[@]}" \
@@ -384,6 +483,8 @@ agent_run() {
     "${opencode_volume[@]}" \
     "${session_mounts[@]}" \
     "${home_mounts[@]}" \
+    ${opencode_config_mounts[@]+"${opencode_config_mounts[@]}"} \
+    ${opencode_state_mounts[@]+"${opencode_state_mounts[@]}"} \
     ${cred_mounts[@]+"${cred_mounts[@]}"} \
     "${extra_mounts[@]}" \
     -w "$workspace" \
@@ -414,11 +515,13 @@ Options:
                  downloads every dependency over the network into its own volume, which is
                  slower by minutes but touches no host path outside the checkout.
   --creds [LIST] mount the agent CLI credentials this host has, read-only. Nothing is
-                 mounted without it. LIST is a comma-separated selection of pi,codex;
-                 omit it to take whichever of them exist. A name given explicitly must
-                 exist, a missing one under a bare --creds is skipped, and either way the
-                 paths handed over are printed. Claude Code needs none of this: log in
-                 once inside the container and the k8s-ai-claude volume keeps it.
+                 mounted without it. LIST is a comma-separated selection of
+                 pi,codex,opencode; omit it to take whichever of them exist. A name given
+                 explicitly must exist, a missing one under a bare --creds is skipped, and
+                 either way what was handed over is printed. Claude Code needs none of
+                 this: log in once inside the container and the k8s-ai-claude volume keeps
+                 it. OpenCode's saved accounts are exported from its database rather than
+                 mounted as a file.
   --mount SPEC   passed to docker as --mount, repeatable. The escape hatch for anything
                  --creds does not know about, e.g.
                    --mount type=bind,src=$HOME/.config/x/token,dst=/home/agent/.config/x/token,readonly
@@ -447,10 +550,17 @@ Environment:
   AGENT_GIT_USER_EMAIL
                  git commit identity used inside the container (default: host git config,
                  then AI Platform Agent <agent@k8s-ai-platform.local>)
+  AGENT_OPENCODE_PORT_RANGE
+                 host port range assigned to this container's OpenCode service (default:
+                 49376-49400). The container uses host networking, so each concurrent
+                 agent container needs its own free port.
 EOF
 }
 
 main() {
+  cleanup() { [[ -n ${opencode_cred_file:-} ]] && rm -f -- "$opencode_cred_file"; }
+  trap cleanup EXIT HUP INT TERM
+
   # -v is accepted before the command as well as after it, because it is the flag most likely to
   # be added to a command someone has already typed.
   if [[ ${1:-} == -v || ${1:-} == --verbose ]]; then

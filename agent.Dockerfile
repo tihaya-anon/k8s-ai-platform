@@ -265,9 +265,9 @@ RUN set -eu; \
 # C.UTF-8 is built into glibc, so this needs no locales package.
 #
 # PATH puts /usr/local/libexec/agent-bin ahead of npm's /usr/local/bin so the wrappers copied in
-# below shadow `claude` and `codex`. Set here, in the image, rather than in .bashrc: a session is
-# also started non-interactively -- `hack/agent.sh shell -- claude -p ...` from a hook or CI reads
-# no rc file -- and the two must not disagree about which binary runs.
+# below shadow `claude`, `codex` and `opencode`. Set here, in the image, rather than in .bashrc: a
+# session is also started non-interactively -- `hack/agent.sh shell -- claude -p ...` from a hook
+# or CI reads no rc file -- and the two must not disagree about which binary runs.
 #
 # DISABLE_AUTOUPDATER for the same reason, and because the update cannot succeed by design: the
 # CLIs are installed into the root-owned /opt/agent-cli and the session runs as ${USERNAME}, so
@@ -300,6 +300,9 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         /home/agent/.pi/agent/npm \
         /home/agent/.codex \
         /home/agent/.claude \
+        /home/agent/.local/share/opencode \
+        /home/agent/.local/state \
+        /home/agent/.cache/opencode \
     && chown -R "${USERNAME}:${USERNAME}" /workspace /home/agent
 
 COPY --from=pi-extensions --chown=${USER_UID}:${USER_GID} /home/agent/.pi/ /home/agent/.pi/

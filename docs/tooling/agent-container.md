@@ -337,10 +337,24 @@ host credential is never mounted, and revoking the container's access is
 `docker volume rm k8s-ai-claude` rather than a hunt for what was bind-mounted where.
 
 OpenCode gets the same treatment through `k8s-ai-opencode`, mounted at its XDG data directory
-`~/.local/share/opencode`: sessions and connected accounts survive `--rm`, and no host credential is
-mounted. Its terminal settings, including the message-navigation keybindings, are tracked in
-`hack/agent-home/.config/opencode/cli.json` and mounted read-only over the copy in the image. Clear
-the volume with `docker volume rm k8s-ai-opencode`.
+`~/.local/share/opencode`: sessions and connected accounts survive `--rm`, and apart from
+`--creds opencode`, no host credential is mounted. Its terminal settings, including the
+message-navigation keybindings, are tracked in `hack/agent-home/.config/opencode/cli.json` and
+mounted read-only over the copy in the image. Clear the volume with
+`docker volume rm k8s-ai-opencode`.
+
+`hack/agent.sh` assigns each container a free port from `AGENT_OPENCODE_PORT_RANGE` (default
+`49376-49400`) and passes it to the entrypoint, which writes `~/.config/opencode/service.json`
+before OpenCode starts. OpenCode's default is 49374, which is also the host's default, and
+`hack/agent.sh` runs the container with host networking; without the per-container port the second
+service fails to bind. Widen the range if you expect to run more containers than it has ports.
+
+OpenCode's selected model and variant live in `~/.local/state/opencode/model.json`, not in
+`cli.json`. The entrypoint copies the host's file into the container's writable state directory, so
+a new session starts with the host's recent model and variant. A host global
+`~/.config/opencode/opencode.json(c)` is also mounted read-only when it exists. The container's
+state directory is ephemeral, so changing `/models` inside a container does not rewrite the host's
+selection.
 
 The image also bakes in this maintainer's usual Pi extension packages under the container's Pi home:
 `@inobit/pi-reader` and `pi-background-tasks` with its packaged background-task and
@@ -374,25 +388,38 @@ while refreshing OAuth-backed providers; the host file is still only read:
 hack/agent.sh shell --creds
 ```
 
+OpenCode has no equivalent file: saved API keys and OAuth tokens live in its SQLite database
+(`~/.local/share/opencode/opencode.db` on the host). `--creds opencode` therefore runs
+`opencode auth export --standalone` on the host, writes the JSON to a temporary file, mounts it at
+`/run/agent-creds/opencode-auth.json`, and lets the entrypoint import it with `opencode auth import`
+into the container's own database. The `k8s-ai-opencode` volume then keeps those imported accounts
+across `--rm`. Environment-only connections such as `DEEPSEEK_API_KEY` are not saved accounts, so
+they are not exported; set them in the container explicitly, for example with `--mount` of an env
+file, or connect inside the container.
+
 It prints what it handed over, because giving a container a host secret is the one thing this script
 does that belongs in the scrollback whether or not anyone asked for `-v`:
 
 ```text
 agent.sh: mounting pi credential, read-only: /home/you/.pi/agent/auth.json
 agent.sh: mounting codex credential, read-only: /home/you/.codex/auth.json
+agent.sh: mounting opencode credential, read-only: host auth export
 ```
 
 Name the ones you want to narrow it further, and the same flag works on `review`:
 
 ```bash
 hack/agent.sh review --creds codex
+hack/agent.sh shell --creds opencode
 ```
 
 The two halves behave differently on purpose. A credential named explicitly must exist, because
 `--creds codex` quietly opening a shell without it is the failure worth an error message; one that
-is simply absent under a bare `--creds` is skipped. The host credentials are read-only without
-exception -- the container has no business rewriting a token the host owns, and a Pi refresh written
-inside it dies with `--rm` anyway.
+is simply absent under a bare `--creds` is skipped. The same applies to OpenCode: `--creds opencode`
+fails if the host has no saved accounts, while a bare `--creds` skips it. The host credentials are
+read-only without exception -- the container has no business rewriting a token the host owns, and a
+Pi refresh written inside it dies with `--rm` anyway. The temporary OpenCode export is removed when
+`hack/agent.sh` exits.
 
 `--mount` remains for anything `--creds` does not know about:
 
@@ -415,11 +442,11 @@ opencode
 
 ## Why the agents run unattended
 
-`claude` and `codex` in this image are wrapper scripts in `hack/agent-bin/`, copied to
+`claude`, `codex` and `opencode` in this image are wrapper scripts in `hack/agent-bin/`, copied to
 `/usr/local/libexec/agent-bin` and put ahead of npm's `/usr/local/bin` on `PATH`. They exec the real
 binary with its interactive gate removed -- `--dangerously-skip-permissions` for Claude Code,
-`--dangerously-bypass-approvals-and-sandbox` for Codex -- so an agent works to completion instead of
-stopping on every write and every shell command.
+`--dangerously-bypass-approvals-and-sandbox` for Codex, `--auto` for OpenCode -- so an agent works
+to completion instead of stopping on every write and every shell command.
 
 That is the point of the container. The boundary is the one described under [Boundary](#boundary):
 `--cap-drop ALL`, `--security-opt no-new-privileges`, no Docker socket, no kubeconfig, no host home,
@@ -439,6 +466,8 @@ It is a launch flag rather than configuration, on both sides, and deliberately:
   volume, which outlives any one container and travels with the credential.
 - Codex's `approval_policy` and `sandbox_mode` would live in `~/.codex/config.toml`, the directory
   sessions bind-mount `auth.json` into from the host.
+- OpenCode's `session.permissions: autoaccept` would live in `cli.json`, which is shared with the
+  host and with the tracked container config.
 
 Either would quietly widen something outside the container's lifetime. A flag is scoped to the
 process that was launched.
@@ -447,12 +476,13 @@ To get the prompts back for one session, set `AGENT_BYPASS=0`:
 
 ```bash
 AGENT_BYPASS=0 claude
+AGENT_BYPASS=0 opencode
 ```
 
 The wrappers also stand aside on their own when the invocation already decides the question --
-`claude --permission-mode plan`, `codex --sandbox read-only` -- and when the subcommand does not
-take the flag at all, such as `claude mcp list` or `codex login`. They are root-owned and `0755`, so
-the agent user cannot edit its own launcher.
+`claude --permission-mode plan`, `codex --sandbox read-only`, `opencode --auto` -- and when the
+subcommand does not take the flag at all, such as `claude mcp list` or `codex login`. They are
+root-owned and `0755`, so the agent user cannot edit its own launcher.
 
 Model usage is controlled by the credentials/account you mount. The repo/container boundary only
 prevents the agent's shell commands from reaching host secrets or cloud credentials you did not

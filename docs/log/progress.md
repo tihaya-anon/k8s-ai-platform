@@ -541,7 +541,7 @@ does not mention `hack/format.sh` or how to enable the hooks.
 
 **Quiz review:** not applicable — Claude wrote the answers above.
 
-### 1.1 Dataset lifecycle — YYYY-MM-DD
+### 1.1 Dataset lifecycle — 2026-10-24
 
 **Learn — what I saw:** typing [1.1-dataset-reconciler.md](../curriculum/1.1-dataset-reconciler.md)
 part one. Which step's reason you had not expected, and which of the three Kubebuilder-book patterns
