@@ -121,5 +121,7 @@ var _ = Describe("Dataset Controller", func() {
 			Expect(condition.Reason).To(Equal("ArtifactUnreachable"))
 			Expect(condition.ObservedGeneration).To(Equal(failed.Generation))
 		})
+
+		It("should go Failed when frozen fields are modified", func() {})
 	})
 })
