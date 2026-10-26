@@ -237,6 +237,34 @@ RUN --mount=type=cache,target=/root/.npm set -eu; \
         '}' \
         > /home/agent/.pi/agent/settings.json
 
+FROM base AS go-tools
+
+# goimports, so a fresh container can format Go before any make target has run.
+#
+# hack/format.sh prefers $LOCALBIN/goimports and falls back to whatever is on PATH; this copy is
+# that fallback. It is not a replacement for `make goimports`, which installs into the named
+# LOCALBIN volume and wins when present -- it is what keeps the pre-commit hook from degrading to
+# plain gofmt on the first run in a new container, which is how imports stopped being regrouped.
+#
+# Pinned to GOIMPORTS_VERSION in the Makefile, which matches the golang.org/x/tools in go.mod so
+# format.sh and golangci-lint group imports identically. The two pins must move together; a
+# container that formats differently from CI is worse than one with no formatter at all.
+ARG GOIMPORTS_VERSION=v0.26.0
+
+# GOPROXY is an ARG for the same reason APT_MIRROR and NPM_REGISTRY are: this image is built on
+# networks where the default is the slow path, e.g. --build-arg GOPROXY=https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
+
+# The module and build caches are mount caches, so nothing from the install reaches the layer
+# except the binary itself. GOPATH is redirected away from /home/agent for the same reason: this
+# stage runs as root, and the final image's GOPATH belongs to the agent user.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    set -eu; \
+    GOPATH=/go GOCACHE=/root/.cache/go-build GOBIN=/opt/go-tools/bin GOPROXY="${GOPROXY}" \
+      go install "golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION}"; \
+    printf 'package p\n' | /opt/go-tools/bin/goimports >/dev/null
+
 FROM base
 
 ARG USERNAME=agent
@@ -248,6 +276,7 @@ COPY --from=agent-cli /opt/opencode /opt/opencode
 COPY --from=editor-tools /opt/nvim /opt/nvim
 COPY --from=editor-tools /usr/local/bin/starship /usr/local/bin/starship
 COPY --from=editor-tools /usr/share/blesh /usr/share/blesh
+COPY --from=go-tools /opt/go-tools/bin/goimports /usr/local/bin/goimports
 RUN set -eu; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \
     for cli in claude codex pi markdownlint-cli2 prettier; do \

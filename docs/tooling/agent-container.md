@@ -221,6 +221,13 @@ host-built binary from being executed across the boundary. The first container r
 tools into the volume; `docker volume rm k8s-ai-tools` forces a fresh download. `hack/format.sh`
 reads the same `LOCALBIN`, so `goimports` remains the single Go formatter in both places.
 
+The image also ships `goimports` on `PATH`, pinned to the same version as the Makefile's
+`GOIMPORTS_VERSION`. That copy is only the fallback `hack/format.sh` uses when `LOCALBIN` is still
+empty: without it, the first commit in a fresh container formats with plain `gofmt` and silently
+leaves imports ungrouped, since the pre-commit hook does not stop for a missing formatter. The two
+pins have to move together -- a container that groups imports differently from `make lint` is worse
+than one with no formatter at all.
+
 Setup output — the image build and the volume permissions — is captured rather than printed, since
 it is noise on every run but the first. `-v` prints it, along with the exact `docker` commands. A
 step that fails prints what it captured either way.
