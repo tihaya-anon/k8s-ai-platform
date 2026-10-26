@@ -79,13 +79,34 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	found, resolveErr := r.Resolver.Resolve(ctx, *dset.Spec.Uri)
-	if resolveErr != nil {
+
+	// An artifact with no rows is unusable, not merely unremarkable: nothing can
+	// be trained or evaluated on it, so it is a failure of the artifact and never
+	// a successful observation. The decision is also what keeps the object out of
+	// a retry loop — observedRows carries Minimum=1, so recording a 0 would have
+	// the API server reject the status write forever.
+	usable := resolveErr == nil && found.Rows >= 1
+
+	switch {
+	case resolveErr != nil:
 		log.Info("artifact resolution failed", "uri", *dset.Spec.Uri, "error", resolveErr)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
 		condition.Reason = "ArtifactUnreachable"
 		condition.Message = fmt.Sprintf("artifact store: %v", resolveErr)
-	} else {
+	case !usable:
+		log.Info("artifact is empty", "uri", *dset.Spec.Uri)
+		// The store answered, so the checksum and the timestamp are facts worth
+		// keeping. The row count is cleared rather than left behind: a stale count
+		// from an earlier pass would claim an observation this pass contradicts.
+		dset.Status.ObservedRows = nil
+		dset.Status.ObservedChecksum = &found.Checksum
+		dset.Status.LastResolvedTime = metav1.Now()
+		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "ArtifactEmpty"
+		condition.Message = fmt.Sprintf("artifact at %s has no rows and cannot be used for training or evaluation", *dset.Spec.Uri)
+	default:
 		dset.Status.ObservedRows = &found.Rows
 		dset.Status.ObservedChecksum = &found.Checksum
 		dset.Status.LastResolvedTime = metav1.Now()
@@ -96,9 +117,11 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Drift is only computable against a fresh observation, so it cannot be
-	// decided on the branch where resolution failed.
+	// decided on a branch that produced none. An empty artifact is reported as
+	// empty; saying it also contradicts the claimed row count would name the
+	// registrant as the layer at fault when the artifact is.
 	var driftError errors.Aggregate
-	if resolveErr == nil {
+	if usable {
 		driftError = r.detectDrift(&dset)
 	}
 	if driftError != nil {

@@ -19,12 +19,16 @@ package v1alpha1
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -39,12 +43,10 @@ var datasetlog = logf.Log.WithName("dataset-resource")
 // SetupDatasetWebhookWithManager registers the webhook for Dataset in the manager.
 func SetupDatasetWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).For(&mlv1alpha1.Dataset{}).
-		WithValidator(&DatasetCustomValidator{}).
+		WithValidator(&DatasetCustomValidator{Client: mgr.GetClient()}).
 		WithDefaulter(&DatasetCustomDefaulter{}).
 		Complete()
 }
-
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // +kubebuilder:webhook:path=/mutate-ml-aiplatform-io-v1alpha1-dataset,mutating=true,failurePolicy=fail,sideEffects=None,groups=ml.aiplatform.io,resources=datasets,verbs=create;update,versions=v1alpha1,name=mdataset-v1alpha1.kb.io,admissionReviewVersions=v1
 
@@ -84,22 +86,76 @@ func (d *DatasetCustomDefaulter) Default(_ context.Context, obj runtime.Object) 
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
 type DatasetCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
+	Client client.Client
 }
 
 var _ webhook.CustomValidator = &DatasetCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
-func (v *DatasetCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
+func (v *DatasetCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
 	dataset, ok := obj.(*mlv1alpha1.Dataset)
 	if !ok {
 		return nil, fmt.Errorf("expected a Dataset object but got %T", obj)
 	}
 	datasetlog.Info("Validation for Dataset upon creation", "name", dataset.GetName())
 
-	// TODO(user): fill in your validation logic upon object creation.
+	// A name collision is deliberately not checked here. The storage layer refuses
+	// a duplicate key with AlreadyExists after admission, and metadata.name is the
+	// only uniqueness Kubernetes actually guarantees; re-implementing it against a
+	// cache would be slower, staler, and wrong for generateName, where the name is
+	// still empty at this point.
+	return v.warnOnDuplicateURI(ctx, dataset), nil
+}
 
-	return nil, nil
+// warnOnDuplicateURI reports Datasets that already register the same artifact.
+//
+// This can only ever be advisory. Kubernetes has no unique index on a spec field,
+// the List below reads a cache that may lag, and a concurrent create is not
+// visible from here at all — so a rule that returned an error would be a promise
+// the platform cannot keep. Two registrations of one URI are a signal a human
+// should see, which is what admission.Warnings is for: a disagreeing checksum
+// means one of the two claims is wrong, and the create is still admitted.
+func (v *DatasetCustomValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1alpha1.Dataset) admission.Warnings {
+	if v.Client == nil || dataset.Spec.Uri == nil {
+		return nil
+	}
+
+	var siblings mlv1alpha1.DatasetList
+	if err := v.Client.List(ctx, &siblings, client.InNamespace(dataset.Namespace)); err != nil {
+		// An advisory warning is not worth failing an otherwise valid create over.
+		datasetlog.Error(err, "listing Datasets for the duplicate-URI warning", "namespace", dataset.Namespace)
+		return nil
+	}
+
+	var agreeing, conflicting []string
+	for i := range siblings.Items {
+		sibling := &siblings.Items[i]
+		if sibling.Name == dataset.Name || !ptr.Equal(sibling.Spec.Uri, dataset.Spec.Uri) {
+			continue
+		}
+		if ptr.Equal(sibling.Spec.Checksum, dataset.Spec.Checksum) {
+			agreeing = append(agreeing, sibling.Name)
+			continue
+		}
+		conflicting = append(conflicting, sibling.Name)
+	}
+	slices.Sort(agreeing)
+	slices.Sort(conflicting)
+
+	var warnings admission.Warnings
+	if len(agreeing) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"spec.uri %q is already registered by Dataset %s in this namespace with the same spec.checksum; "+
+				"lineage recorded against either one will not distinguish them",
+			*dataset.Spec.Uri, strings.Join(agreeing, ", ")))
+	}
+	if len(conflicting) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"spec.uri %q is already registered by Dataset %s in this namespace with a different spec.checksum; "+
+				"one of the two registrations is wrong about the same artifact",
+			*dataset.Spec.Uri, strings.Join(conflicting, ", ")))
+	}
+	return warnings
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
@@ -128,6 +184,10 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 
 	if len(frozen) == 0 {
 		return nil, nil
+	}
+
+	for _, err := range frozen {
+		err.Detail += "Do not modify the immutable fields, create a new Dataset instead"
 	}
 
 	// NewInvalid carries APIStatus, which controller-runtime turns into a 422 with

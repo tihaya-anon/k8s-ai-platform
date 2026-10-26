@@ -6,10 +6,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
-	"github.com/tihaya-anon/k8s-ai-platform/internal/utils"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Dataset API", func() {
@@ -59,34 +59,34 @@ var _ = Describe("Dataset API", func() {
 		Expect(apierrors.IsInvalid(err)).Should(BeTrue(), "want Invalid from the API server, got %v", err)
 	},
 		Entry("missing uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = nil }),
-		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = utils.Ptr("") }),
-		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = utils.Ptr(strings.Repeat("x", 129)) }),
+		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = ptr.To("") }),
+		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = ptr.To(strings.Repeat("x", 129)) }),
 
 		Entry("missing owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = nil }),
-		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = utils.Ptr("") }),
+		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = ptr.To("") }),
 		Entry("owner over MaxLength", func(s *mlv1alpha1.DatasetSpec) {
-			s.Owner = utils.Ptr(strings.Repeat("x", 129))
+			s.Owner = ptr.To(strings.Repeat("x", 129))
 		}),
 
 		Entry("zero rows", func(s *mlv1alpha1.DatasetSpec) {
-			s.Rows = utils.Ptr(0)
+			s.Rows = ptr.To(0)
 		}),
 
 		Entry("empty checksum", func(s *mlv1alpha1.DatasetSpec) {
-			s.Checksum = utils.Ptr("")
+			s.Checksum = ptr.To("")
 		}),
 		Entry("checksum over MaxLength", func(s *mlv1alpha1.DatasetSpec) {
-			s.Checksum = utils.Ptr(strings.Repeat("x", 257))
+			s.Checksum = ptr.To(strings.Repeat("x", 257))
 		}),
 	)
 })
 
 func validSpec() mlv1alpha1.DatasetSpec {
 	return mlv1alpha1.DatasetSpec{
-		Uri:      utils.Ptr("sample.uri"),
-		Owner:    utils.Ptr("sample.owner"),
-		Rows:     utils.Ptr(1),
-		Checksum: utils.Ptr("placeholder"),
-		Golden:   utils.Ptr(false),
+		Uri:      ptr.To("sample.uri"),
+		Owner:    ptr.To("sample.owner"),
+		Rows:     ptr.To(1),
+		Checksum: ptr.To("placeholder"),
+		Golden:   ptr.To(false),
 	}
 }

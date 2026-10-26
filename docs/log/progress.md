@@ -761,6 +761,69 @@ Left open on purpose: the tests for drift and for the webhook rejection, and the
 step is the exercise, so it stays unwritten. Review item 5, whether an artifact with zero rows is a
 legal observation or an unusable artifact, is a decision rather than a fix.
 
+**Patch/refine and the duplicate-URI warning — owner's own work, then Claude's, 2026-10-26:**
+
+Owner-written: the immutability message now appends "Do not modify the immutable fields, create a
+new Dataset instead" to the standard `field is immutable` detail rather than replacing it, so the
+conventional phrase and the guidance both reach the user, and `IsInvalid` plus the per-field causes
+are untouched. That closes the patch/refine step and the third acceptance criterion.
+
+Claude-written at the owner's request, after the owner decided not to implement it: everything
+below. It is not part of 1.1's acceptance criteria — it is the "uniqueness is `metadata.name`"
+design note, reached by way of a name-collision `Get` in `ValidateCreate` that could not have
+helped.
+
+- The `Get` by name/namespace in `ValidateCreate` was deleted. The storage layer already refuses a
+  duplicate key with `AlreadyExists` after admission, so the check could only duplicate a guarantee
+  it cannot match: it reads a cache that may lag, costs an informer and RBAC, and sees an empty
+  `metadata.name` for a `generateName` create, because the name is assigned in the storage layer
+  after admission runs. A comment in the file says so, since the absence is the decision.
+- `DatasetCustomValidator` now holds a _named_ `Client` field, wired from `mgr.GetClient()` in
+  `SetupDatasetWebhookWithManager`. Embedding `client.Client` promoted `Create`/`Update`/`Delete`
+  onto a type whose whole job is to be read-only.
+- `warnOnDuplicateURI` lists Datasets in the namespace and returns `admission.Warnings` — never an
+  error — when another one registers the same `spec.uri`. Two messages: same `spec.checksum` means
+  lineage cannot distinguish the two registrations; a different `spec.checksum` means one of the two
+  is wrong about the same artifact. A List failure is logged and swallowed; an advisory warning is
+  not worth failing a valid create over.
+- Five specs in `dataset_webhook_test.go` cover it, each asserting the create is still admitted: no
+  duplicate, agreeing checksum, disagreeing checksum, a sibling in another namespace, and the object
+  not warning about itself. They use `fake.NewClientBuilder()` rather than envtest, because the rule
+  is a pure function of what the List returned.
+- The reject spec became a `DescribeTable` over six entries: each frozen field changed, `nil` -> set
+  on `rows`, set -> `nil` on `checksum`, and all three at once. Every entry asserts `IsInvalid`, one
+  `FieldValueInvalid` cause per changed field matched with `ConsistOf`, and both message substrings.
+- No RBAC marker was added: the controller's existing `datasets` `get;list;watch` grant covers the
+  webhook's List, since both run under the manager's ServiceAccount. If the webhook ever moves out
+  of this manager, that grant has to move with it.
+
+`go test ./...` passes with `KUBEBUILDER_ASSETS` pointed at `bin/k8s/1.34.1-linux-amd64`;
+`make fmt vet test` was not run end to end here.
+
+**Review item 5 decided by the owner, 2026-10-26 — zero rows is an unusable artifact**, implemented
+by Claude. A Dataset nothing can be trained or evaluated on is a failure of the artifact, so it is
+never recorded as a successful observation:
+
+- `Reconcile` now branches three ways instead of two. `ArtifactUnreachable` still means the store
+  did not answer; the new `ArtifactEmpty` means it answered and the answer is unusable. Keeping them
+  apart is the "errors name the layer at fault" convention — one is retryable infrastructure, the
+  other is a fact about the artifact the registrant has to fix.
+- The empty branch records `observedChecksum` and `lastResolvedTime`, because the resolution did
+  happen, and sets `observedRows` back to `nil`. A row count left over from an earlier pass would
+  assert an observation this pass contradicts.
+- Drift detection is now gated on `usable` rather than on `resolveErr == nil`. Reporting drift for
+  an empty artifact would blame the registrant's claimed row count for an artifact-side problem.
+- The `+kubebuilder:validation:Minimum=1` marker on `observedRows` stays, and now expresses the same
+  policy at the API layer: a zero-row observation is not representable. It was the symptom that
+  raised the question (a 422 on the status write, retrying forever); it is the enforcement now that
+  the controller never attempts that write.
+- Two specs in `dataset_controller_test.go`: an artifact that resolves to zero rows goes `Failed`
+  with `ArtifactEmpty` and no `observedRows`, and a Dataset that was `Ready` at one row has its
+  `observedRows` cleared when the artifact is later emptied.
+
+`go test ./...` passes; `make manifests generate` updated only the `observedRows` description in
+`config/crd/bases/ml.aiplatform.io_datasets.yaml`.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per

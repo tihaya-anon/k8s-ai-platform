@@ -4,36 +4,36 @@ kind: ClusterRole
 metadata:
   name: manager-role
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - ml.aiplatform.io
-  resources:
-  - datasets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ml.aiplatform.io
-  resources:
-  - datasets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - ml.aiplatform.io
-  resources:
-  - datasets/status
-  verbs:
-  - get
-  - patch
-  - update
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - ml.aiplatform.io
+    resources:
+      - datasets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - ml.aiplatform.io
+    resources:
+      - datasets/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - ml.aiplatform.io
+    resources:
+      - datasets/status
+    verbs:
+      - get
+      - patch
+      - update

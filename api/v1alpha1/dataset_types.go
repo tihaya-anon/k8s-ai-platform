@@ -87,7 +87,9 @@ type DatasetStatus struct {
 	// +required
 	Phase DatasetPhase `json:"phase"`
 
-	// ObservedRows metadata resolved by the controller
+	// ObservedRows metadata resolved by the controller. Absent means the last
+	// pass observed no usable row count: a zero-row artifact is unusable, so the
+	// controller reports ArtifactEmpty instead of recording the observation.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 	ObservedRows *int `json:"observedRows,omitempty"`

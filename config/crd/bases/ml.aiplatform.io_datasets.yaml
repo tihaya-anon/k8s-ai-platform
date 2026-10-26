@@ -172,7 +172,10 @@ spec:
                 minLength: 1
                 type: string
               observedRows:
-                description: ObservedRows metadata resolved by the controller
+                description: |-
+                  ObservedRows metadata resolved by the controller. Absent means the last
+                  pass observed no usable row count: a zero-row artifact is unusable, so the
+                  controller reports ArtifactEmpty instead of recording the observation.
                 minimum: 1
                 type: integer
               phase:
