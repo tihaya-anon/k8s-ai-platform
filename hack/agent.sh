@@ -558,7 +558,13 @@ EOF
 }
 
 main() {
-  cleanup() { [[ -n ${opencode_cred_file:-} ]] && rm -f -- "$opencode_cred_file"; }
+  # An if, not `[[ ]] && rm`: under set -e a false test as the trap's last status becomes the
+  # script's exit status, and every command that mounted no OpenCode credential exited 1.
+  cleanup() {
+    if [[ -n ${opencode_cred_file:-} ]]; then
+      rm -f -- "$opencode_cred_file"
+    fi
+  }
   trap cleanup EXIT HUP INT TERM
 
   # -v is accepted before the command as well as after it, because it is the flag most likely to
