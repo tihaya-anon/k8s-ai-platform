@@ -104,85 +104,99 @@ FROM base AS agent-cli
 # their sandbox and in nothing else. Read the host's own answer (`pi --version`) rather than a
 # remembered one. The image installs each CLI once and never self-updates it, so the way to move
 # a version is to change the pin and rebuild -- see DISABLE_AUTOUPDATER below.
-ARG CLAUDE_VERSION=2.1.278
-ARG PI_VERSION=1.4.0
-ARG CODEX_VERSION=0.154.0
-ARG OPENCODE_VERSION=2.1.4
-ARG MARKDOWNLINT_VERSION=0.23.2
-ARG PRETTIER_VERSION=3.9.6
+#
+# One ARG and one RUN per CLI, in increasing order of how often the pin moves. BuildKit keys a
+# layer on its expanded command string, so a single RUN naming every version meant that bumping
+# prettier -- 10MB -- reinstalled all 1.3GB. Split, a bump only invalidates its own layer and the
+# layers after it, which is why Claude Code is last: it is the pin that moves most often. Moving an
+# ARG above a layer that does not use it costs nothing, so the ARGs sit with their installs.
+#
+# Separate commands are also load-bearing for a second reason. npm drops the per-platform
+# optionalDependencies of codex and claude-code when several roots are installed in one global
+# command: it creates node_modules/@anthropic-ai/ and leaves it empty, the postinstall then finds
+# no binary to copy, and both CLIs ship as stubs that fail on first use. Installed one at a time,
+# the same versions and the same registry resolve correctly. Verified in this image, not assumed.
 
 # The second package mirror, for the same reason as APT_MIRROR: the agent CLIs are by far the
 # largest downloads in the image and the default registry is the slow path on some networks.
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
-# The cache mount is not an optimisation here, it is what makes a retry survivable. codex and
-# claude-code ship their real binaries as per-platform optionalDependencies -- around 570MB
-# unpacked between them -- and without a cache every interrupted build starts the download again.
-# Cache mounts live outside the image, so the layer's size is unchanged.
-# One `npm install -g` per CLI, not one command listing five packages, and that is the whole
-# reason this block looks repetitive. npm drops the per-platform optionalDependencies of codex and
-# claude-code when several roots are installed in a single global command: it creates
-# node_modules/@anthropic-ai/ and leaves it empty, the postinstall then finds no binary to copy,
-# and both CLIs ship as stubs that fail on first use. Installed one at a time, the same versions
-# and the same registry resolve correctly. Verified in this image, not assumed.
-#
-# codex needs one more step than that. Its binary is an *aliased* optionalDependency
-# (@openai/codex-linux-x64 -> npm:@openai/codex@<version>-linux-x64), and npm installs no aliased
-# optional dependency at all under -g -- claude-code's plain scoped one installs fine, which is how
-# the two were told apart. So the alias is installed explicitly, by the name codex resolves:
-# bin/codex.js calls require.resolve("@openai/codex-<arch>/package.json"), and the module walk
-# reaches the configured npm prefix's lib/node_modules, so installing the alias into the same
-# prefix makes it visible.
-#
-# --include=optional is npm's default, and is written out anyway: it is what pulls those binaries,
-# and a default this load-bearing should be visible in the file rather than inherited.
-#
-# --allow-scripts is not optional either. npm 11.19 -- the version in node:24-bookworm -- stopped
-# running dependency install scripts unless the package is named, and because strict-allow-scripts
-# defaults to false it *warns and continues* rather than failing. Claude Code copies its native
-# binary into place from its own postinstall, so without this the build succeeds and the image
-# ships a stub. The list is exactly one package: codex's binary arrives as an aliased
-# optionalDependency rather than a script, and pi runs fine with esbuild's and protobufjs's
-# scripts skipped. Install scripts are arbitrary code from the registry, so it stays that short.
-#
-# Pi gets --ignore-scripts in addition, which is what upstream's own install instructions use.
-# Naming a package in --allow-scripts is an exception to a denial; pi needs no exception at all,
-# so its scripts are refused rather than merely not granted. The version is pinned by PI_VERSION
-# and enforced by the CLI gate below, so nothing is lost by not letting its dependencies build
-# themselves.
-#
+# The cache mount on every layer below is not an optimisation, it is what makes a retry survivable.
+# codex and claude-code ship their real binaries as per-platform optionalDependencies -- around
+# 570MB unpacked between them -- and without a cache every interrupted build starts the download
+# again. Cache mounts live outside the image, so the layers' size is unchanged.
+
+# The formatters, first because their pins move least. Two roots in one command is safe here: both
+# are plain packages with no per-platform binary to lose.
+ARG MARKDOWNLINT_VERSION=0.23.2
+ARG PRETTIER_VERSION=3.9.6
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
+        "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
+        "prettier@${PRETTIER_VERSION}"
+
 # OpenCode 2 is @opencode/cli, not opencode-ai: the latter still points at OpenCode 1 and has no
 # 2.x releases. Its wrapper package pulls every matching platform build (x64 baseline, musl, ...)
 # as optionalDependencies -- about 900MB to end up running one 230MB binary. The official V2
 # installer instead downloads only the platform package, and so does this layer. The command names
 # the architecture-specific package explicitly; the wrapper's postinstall is never needed.
+ARG OPENCODE_VERSION=2.1.4
 ARG TARGETARCH
 RUN --mount=type=cache,target=/root/.npm set -eu; \
     case "${TARGETARCH:-amd64}" in \
-      amd64) codex_arch=linux-x64; opencode_pkg=@opencode/cli-linux-x64 ;; \
-      arm64) codex_arch=linux-arm64; opencode_pkg=@opencode/cli-linux-arm64 ;; \
+      amd64) opencode_pkg=@opencode/cli-linux-x64 ;; \
+      arm64) opencode_pkg=@opencode/cli-linux-arm64 ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
     if [ "$opencode_pkg" = "@opencode/cli-linux-x64" ] && ! grep -qwi avx2 /proc/cpuinfo 2>/dev/null; then \
       opencode_pkg=@opencode/cli-linux-x64-baseline; \
     fi; \
-    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
-        --allow-scripts=@anthropic-ai/claude-code \
-        "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; \
-    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
-        "@openai/codex@${CODEX_VERSION}"; \
-    npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
-        "@openai/codex-${codex_arch}@npm:@openai/codex@${CODEX_VERSION}-${codex_arch}"; \
-    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
-        --ignore-scripts \
-        "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
     npm install --prefix /opt/opencode --no-save --no-package-lock --ignore-scripts \
         --registry="${NPM_REGISTRY}" "${opencode_pkg}@${OPENCODE_VERSION}"; \
     mkdir -p /opt/opencode/bin; \
-    ln -sf "../node_modules/${opencode_pkg}/bin/opencode" /opt/opencode/bin/opencode; \
-    npm install -g --prefix /opt/agent-cli --registry="${NPM_REGISTRY}" \
-        "markdownlint-cli2@${MARKDOWNLINT_VERSION}" \
-        "prettier@${PRETTIER_VERSION}"
+    ln -sf "../node_modules/${opencode_pkg}/bin/opencode" /opt/opencode/bin/opencode
+
+# Pi gets --ignore-scripts, which is what upstream's own install instructions use. Naming a package
+# in --allow-scripts is an exception to a denial; pi needs no exception at all, so its scripts are
+# refused rather than merely not granted. The version is pinned by PI_VERSION and enforced by the
+# CLI gate below, so nothing is lost by not letting its dependencies build themselves.
+ARG PI_VERSION=1.4.0
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
+        --ignore-scripts \
+        "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+# --include=optional is npm's default, and is written out anyway: it is what pulls the per-platform
+# binary, and a default this load-bearing should be visible in the file rather than inherited.
+#
+# This layer used to install codex's binary a second time, as an alias
+# (@openai/codex-linux-x64 -> npm:@openai/codex@<version>-linux-x64), on the belief that npm
+# installs no aliased optionalDependency under -g. That was wrong, and expensively so: npm does
+# install it, nested under the codex root rather than hoisted, and node resolves the nested copy.
+# `require.resolve` from bin/codex.js in the built image returns
+# @openai/codex/node_modules/@openai/codex-linux-x64, so the hoisted alias was 324MB -- a quarter
+# of what the CLIs occupy -- that nothing ever loaded. If a future npm really does drop it, the gate below
+# fails on `codex --version` rather than shipping a stub, which is the whole reason the gate runs
+# the binary instead of checking for a path.
+ARG CODEX_VERSION=0.154.0
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
+        "@openai/codex@${CODEX_VERSION}"
+
+# Last, because this pin moves most often and everything above should survive a bump.
+#
+# --allow-scripts is not optional here. npm 11.19 -- the version in node:24-bookworm -- stopped
+# running dependency install scripts unless the package is named, and because strict-allow-scripts
+# defaults to false it *warns and continues* rather than failing. Claude Code copies its native
+# binary into place from its own postinstall, so without this the build succeeds and the image
+# ships a stub. The list is exactly one package: install scripts are arbitrary code from the
+# registry, so it stays that short.
+ARG CLAUDE_VERSION=2.1.278
+RUN --mount=type=cache,target=/root/.npm set -eu; \
+    npm install -g --prefix /opt/agent-cli --include=optional --registry="${NPM_REGISTRY}" \
+        --allow-scripts=@anthropic-ai/claude-code \
+        "@anthropic-ai/claude-code@${CLAUDE_VERSION}"
+
 # No `npm cache clean` any more: the cache is a build mount, so it never reached the image, and
 # cleaning it would only throw away what makes the next build fast.
 
@@ -192,15 +206,16 @@ RUN --mount=type=cache,target=/root/.npm set -eu; \
 # these four CLIs, so it must not be allowed to build without them.
 #
 # The gate runs each CLI rather than checking for a directory: it is the same code path the user
-# takes, and it also catches a binary that unpacked but will not execute. It is deliberately the
-# layer right after the install, so the failure lands next to its cause.
+# takes, and it also catches a binary that unpacked but will not execute. It is the layer directly
+# after the last install, so a failure still lands next to the layer that could have caused it;
+# a per-install gate would catch it one layer earlier, at the cost of four more layers.
 RUN set -eu; \
     export PATH="/opt/agent-cli/bin:/opt/opencode/bin:${PATH}"; \
     for cli in claude codex pi opencode; do \
       if ! "$cli" --version; then \
         echo >&2; \
         echo "agent.Dockerfile: '$cli --version' failed, so the install above did not produce a" >&2; \
-        echo "  working CLI. Two known causes, both silent:" >&2; \
+        echo "  working CLI. Three known causes, all silent:" >&2; \
         echo "    - its postinstall was skipped; add it to --allow-scripts on the npm install" >&2; \
         echo "    - its per-platform optionalDependency was dropped; keep one npm install -g" >&2; \
         echo "      per CLI, since npm discards them when several roots share one command" >&2; \
