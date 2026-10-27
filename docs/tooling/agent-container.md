@@ -293,9 +293,17 @@ Two consequences worth knowing:
 ## The shell inside the container
 
 The container is meant to be lived in, not only shelled into, so it gets the shell the host runs:
-bash with ble.sh, starship and the usual git/docker/kubectl aliases, vendored at `hack/agent-home/`,
-baked into the image so it works standalone and bind-mounted read-only over that copy by the run
-targets so a change on the host takes effect in the next shell without a rebuild.
+zsh in vi mode with starship, zsh-autosuggestions, zsh-syntax-highlighting and the usual
+git/docker/kubectl aliases. `.zshenv`, `.zprofile`, `.zshrc` and `.zsh_aliases` are vendored at
+`hack/agent-home/`, baked into the image so it works standalone and bind-mounted read-only over that
+copy by the run targets so a change on the host takes effect in the next shell without a rebuild.
+The interactive shell is a login shell (`zsh -l`), so `.zprofile` sets `EDITOR` and `PATH` the same
+way a host terminal does.
+
+The two plugins are not vendored; `agent.Dockerfile` downloads them at the commits the host
+installer checked out (`ZSH_AUTOSUGGESTIONS_COMMIT`, `ZSH_SYNTAX_HIGHLIGHTING_COMMIT`) into
+`~/.local/share/zsh/plugins`, the same path the host uses, so `.zshrc` needs no container branch.
+Bash is still in the image for scripts; it just has no interactive configuration any more.
 
 It does not get an IDE. Neovim is installed as `$EDITOR` — `git commit` without `-m` and
 `git rebase -i` need one — but without the LazyVim configuration or any language server. Editing
@@ -312,8 +320,8 @@ are deliberate, because bare `j`/`k`/`g` are text in the prompt rather than navi
 `input.newline`. `alt+e` opens the current prompt in `$EDITOR`, after disabling the input's
 move-to-visual-line-end binding.
 
-`~/.bash_env` is not vendored and not mounted: it holds real API tokens on the host, and the
-`.bashrc` guard skips it when absent. Pass `--mount` if a session genuinely needs one of those
+`~/.zsh_env` is not vendored and not mounted: it holds real API tokens on the host, and the
+`.zprofile` guard skips it when absent. Pass `--mount` if a session genuinely needs one of those
 tokens.
 
 ## Run for read-only review

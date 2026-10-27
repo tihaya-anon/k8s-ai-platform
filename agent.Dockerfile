@@ -37,7 +37,7 @@ RUN for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
         procps \
         ripgrep \
         tree \
-        bash-completion \
+        zsh \
         fd-find \
         unzip \
         xz-utils \
@@ -54,16 +54,17 @@ FROM base AS editor-tools
 # container behaves like a session outside it rather than like a slightly different editor.
 ARG NVIM_VERSION=0.12.5
 ARG STARSHIP_VERSION=1.25.0
-# ble.sh cuts tagged releases rarely; the host runs 0.4.0-devel4+b99cadb, which upstream ships as
-# a dated nightly asset. Pinning the asset, not "nightly", keeps the build reproducible.
-ARG BLESH_NIGHTLY=20260310+b99cadb
+# Neither zsh plugin cuts releases often enough to track the host's clones, so pin the commits the
+# host installer checked out. Debian's packages would be older than the host and drift silently.
+ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
+ARG ZSH_SYNTAX_HIGHLIGHTING_COMMIT=e6683f20e5c38d3e5447f45845d04ddda75d0f23
 
 # Every download below comes from GitHub releases. Point this at a mirror when the build network
 # cannot reach github.com directly, e.g. --build-arg GITHUB_MIRROR=https://ghproxy.net/https://github.com
 ARG GITHUB_MIRROR=https://github.com
 
-# Neovim, starship and ble.sh, from upstream release tarballs rather than apt: Debian stable's
-# Neovim is ancient and neither starship nor ble.sh is packaged at all.
+# Neovim, starship and the zsh plugins, from upstream tarballs rather than apt: Debian stable's
+# Neovim is ancient, starship is not packaged at all, and the plugin packages lag the host.
 #
 # Neovim here is $EDITOR, not an IDE. `git commit` without -m, `git rebase -i` and an agent
 # shelling out all need an editor to exist; editing this repository happens on the host, against
@@ -87,18 +88,23 @@ RUN set -eu; \
     curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/starship.tar.gz \
       "${GITHUB_MIRROR}/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${star_arch}.tar.gz"; \
     tar -C /usr/local/bin -xzf /tmp/starship.tar.gz starship; \
-    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/blesh.tar.xz \
-      "${GITHUB_MIRROR}/akinomyoga/ble.sh/releases/download/nightly/ble-nightly-${BLESH_NIGHTLY}.tar.xz"; \
-    mkdir -p /usr/share/blesh; \
-    tar -C /usr/share/blesh --strip-components=1 -xJf /tmp/blesh.tar.xz; \
-    rm -rf /tmp/nvim.tar.gz /tmp/starship.tar.gz /tmp/blesh.tar.xz; \
+    for plugin in "zsh-autosuggestions:${ZSH_AUTOSUGGESTIONS_COMMIT}" \
+                  "zsh-syntax-highlighting:${ZSH_SYNTAX_HIGHLIGHTING_COMMIT}"; do \
+      name="${plugin%%:*}"; commit="${plugin#*:}"; \
+      curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o "/tmp/${name}.tar.gz" \
+        "${GITHUB_MIRROR}/zsh-users/${name}/archive/${commit}.tar.gz"; \
+      mkdir -p "/opt/zsh-plugins/${name}"; \
+      tar -C "/opt/zsh-plugins/${name}" --strip-components=1 -xzf "/tmp/${name}.tar.gz"; \
+      test -r "/opt/zsh-plugins/${name}/${name}.zsh"; \
+    done; \
+    rm -rf /tmp/nvim.tar.gz /tmp/starship.tar.gz /tmp/zsh-*.tar.gz; \
     nvim --version | head -1; \
     starship --version | head -1
 
 FROM base AS agent-cli
 
 # Declared in this stage, and deliberately. A Pi/Codex/Claude/OpenCode pin change should rebuild
-# only the CLI stage, not the editor-tool stage with the Neovim/starship/ble.sh downloads.
+# only the CLI stage, not the editor-tool stage with the Neovim/starship/zsh-plugin downloads.
 #
 # These track what the host actually runs, so a container session and a host session differ in
 # their sandbox and in nothing else. Read the host's own answer (`pi --version`) rather than a
@@ -290,7 +296,6 @@ COPY --from=agent-cli /opt/agent-cli /opt/agent-cli
 COPY --from=agent-cli /opt/opencode /opt/opencode
 COPY --from=editor-tools /opt/nvim /opt/nvim
 COPY --from=editor-tools /usr/local/bin/starship /usr/local/bin/starship
-COPY --from=editor-tools /usr/share/blesh /usr/share/blesh
 COPY --from=go-tools /opt/go-tools/bin/goimports /usr/local/bin/goimports
 RUN set -eu; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \
@@ -304,12 +309,12 @@ RUN set -eu; \
 # backs with a single named volume. Left to the default, the config file sits beside the directory
 # at $HOME and is lost on every `docker run --rm`.
 #
-# LANG is unset in a container, and an unset LANG means the C locale: ble.sh warns about it, and
-# anything that draws a box or a glyph -- starship's prompt, Neovim's UI -- degrades to ASCII.
+# LANG is unset in a container, and an unset LANG means the C locale: zle miscounts multibyte
+# input, and anything that draws a box or a glyph -- starship's prompt, Neovim's UI -- degrades to ASCII.
 # C.UTF-8 is built into glibc, so this needs no locales package.
 #
 # PATH puts /usr/local/libexec/agent-bin ahead of npm's /usr/local/bin so the wrappers copied in
-# below shadow `claude`, `codex` and `opencode`. Set here, in the image, rather than in .bashrc: a
+# below shadow `claude`, `codex` and `opencode`. Set here, in the image, rather than in .zshrc: a
 # session is also started non-interactively -- `hack/agent.sh shell -- claude -p ...` from a hook
 # or CI reads no rc file -- and the two must not disagree about which binary runs.
 #
@@ -321,13 +326,17 @@ RUN set -eu; \
 # rebuild to move versions.
 #
 # TERM because `docker run -t` falls back to plain `xterm` when the image leaves it unset, and
-# `xterm` advertises 8 colours: Neovim's colourscheme, starship and ble.sh highlighting all degrade.
+# `xterm` advertises 8 colours: Neovim's colourscheme, starship and zsh syntax highlighting all degrade.
 # Docker only fills in that fallback when TERM is absent from the image config, so setting it here
 # wins. xterm-256color's terminfo entry ships in ncurses-base, already in the base image.
+#
+# SHELL because Docker sets none, and the agents' shell tools and Neovim's :terminal read it to
+# pick a shell; unset, they fall back to sh and lose the aliases the session has.
 ENV CLAUDE_CONFIG_DIR=/home/agent/.claude \
     DISABLE_AUTOUPDATER=1 \
     LANG=C.UTF-8 \
     PATH=/usr/local/libexec/agent-bin:/opt/agent-cli/bin:${PATH} \
+    SHELL=/bin/zsh \
     TERM=xterm-256color
 
 RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
@@ -335,7 +344,7 @@ RUN groupadd --gid "${USER_GID}" "${USERNAME}" \
         --uid "${USER_UID}" \
         --gid "${USER_GID}" \
         --create-home \
-        --shell /bin/bash \
+        --shell /bin/zsh \
         "${USERNAME}" \
     && mkdir -p \
         /workspace/k8s-ai-platform \
@@ -355,6 +364,8 @@ COPY --from=pi-extensions --chown=${USER_UID}:${USER_GID} /home/agent/.pi/ /home
 # reviewed in the same diff as the code. Copied, not mounted: the read-only targets mount only the
 # workspace, and a shell that loses its prompt and its editor under --read-only is not usable.
 COPY --chown=${USER_UID}:${USER_GID} hack/agent-home/ /home/agent/
+# The path ~/.zshrc reads on the host too, so the shared file needs no container branch.
+COPY --from=editor-tools --chown=${USER_UID}:${USER_GID} /opt/zsh-plugins/ /home/agent/.local/share/zsh/plugins/
 
 # Baked in rather than run from the mount: the read-only targets cannot execute a script they
 # mount :ro without also trusting the mount, and the entrypoint has to work before the
@@ -374,4 +385,5 @@ WORKDIR /workspace/k8s-ai-platform
 
 # Arms core.hooksPath on every entry, then hands over to CMD or to the docker run arguments.
 ENTRYPOINT ["/usr/local/bin/agent-entrypoint"]
-CMD ["/bin/bash"]
+# A login shell, so ~/.zprofile sets EDITOR and PATH exactly as a host terminal does.
+CMD ["/bin/zsh", "-l"]

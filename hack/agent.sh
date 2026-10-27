@@ -65,12 +65,13 @@ opencode_volume=(-v k8s-ai-opencode:/home/agent/.local/share/opencode)
 
 # Shell configuration, read from the repository rather than the copy baked into the image, so
 # editing it on the host takes effect in the next shell. Read-only: nothing in the container
-# writes its own configuration. ~/.bash_env is absent on purpose -- it holds real tokens on the
-# host, and the .bashrc guard skips it here.
+# writes its own configuration. ~/.zsh_env is absent on purpose -- it holds real tokens on the
+# host, and the .zprofile guard skips it here.
 home_mounts=(
-  -v "$repo_root/hack/agent-home/.bashrc:/home/agent/.bashrc:ro"
-  -v "$repo_root/hack/agent-home/.bash_aliases:/home/agent/.bash_aliases:ro"
-  -v "$repo_root/hack/agent-home/.blerc:/home/agent/.blerc:ro"
+  -v "$repo_root/hack/agent-home/.zshenv:/home/agent/.zshenv:ro"
+  -v "$repo_root/hack/agent-home/.zprofile:/home/agent/.zprofile:ro"
+  -v "$repo_root/hack/agent-home/.zshrc:/home/agent/.zshrc:ro"
+  -v "$repo_root/hack/agent-home/.zsh_aliases:/home/agent/.zsh_aliases:ro"
   -v "$repo_root/hack/agent-home/.config/starship.toml:/home/agent/.config/starship.toml:ro"
   -v "$repo_root/hack/agent-home/.config/opencode/cli.json:/home/agent/.config/opencode/cli.json:ro"
 )

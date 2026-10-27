@@ -21,7 +21,6 @@ $haskell\
 $python\
 [](fg:green bg:sapphire)\
 $conda\
-
 [](fg:sapphire bg:lavender)\
 $time\
 [ ](fg:lavender)\
@@ -39,7 +38,6 @@ style = "bg:red fg:crust"
 [os.symbols]
 Windows = ""
 Ubuntu = "󰕈"
-
 SUSE = ""
 Raspbian = "󰐿"
 Mint = "󰣭"
@@ -50,7 +48,6 @@ Gentoo = "󰣨"
 Fedora = "󰣛"
 Alpine = ""
 Amazon = ""
-
 Android = ""
 AOSC = ""
 Arch = "󰣇"
@@ -118,7 +115,6 @@ symbol = " "
 style = "bg:green"
 format = '[[ $symbol( $version) ](fg:crust bg:green)]($style)'
 
-
 [kotlin]
 symbol = ""
 style = "bg:green"
@@ -176,7 +172,6 @@ rosewater = "#f5e0dc"
 flamingo = "#f2cdcd"
 pink = "#f5c2e7"
 mauve = "#cba6f7"
-
 red = "#f38ba8"
 maroon = "#eba0ac"
 peach = "#fab387"
@@ -187,7 +182,6 @@ sky = "#89dceb"
 sapphire = "#74c7ec"
 blue = "#89b4fa"
 lavender = "#b4befe"
-
 text = "#cdd6f4"
 subtext1 = "#bac2de"
 subtext0 = "#a6adc8"

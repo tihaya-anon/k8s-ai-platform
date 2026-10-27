@@ -31,34 +31,34 @@ alias gf='git fetch'
 alias grb='git rebase'
 
 gr() {
-  if [ "$#" -eq 0 ]; then
-    git remote -v
-  else
-    git remote "$@"
-  fi
+    if [ "$#" -eq 0 ]; then
+        git remote -v
+    else
+        git remote "$@"
+    fi
 }
 alias gcp='git cherry-pick'
 alias gst='git stash'
 # Show the five most recent commits unless a count is supplied.
 glg() {
-  if [ "$#" -eq 0 ]; then
-    git log --oneline -n 5
-  else
-    git log --oneline -n "$@"
-  fi
+    if [ "$#" -eq 0 ]; then
+        git log --oneline -n 5
+    else
+        git log --oneline -n "$@"
+    fi
 }
 # Create merge commits without opening an editor, except when explicitly requested.
 gmg() {
-  local arg
+    local arg
 
-  for arg in "$@"; do
-    if [ "$arg" = '-e' ]; then
-      git merge "$@"
-      return
-    fi
-  done
+    for arg in "$@"; do
+        if [ "$arg" = '-e' ]; then
+            git merge "$@"
+            return
+        fi
+    done
 
-  git merge --no-edit "$@"
+    git merge --no-edit "$@"
 }
 
 # Docker
@@ -73,11 +73,11 @@ alias lzd='lazydocker'
 
 # Kubernetes
 k() {
-  if [ -n "${KUBECTL_NAMESPACE:-}" ]; then
-    kubectl --namespace="$KUBECTL_NAMESPACE" "$@"
-  else
-    kubectl "$@"
-  fi
+    if [ -n "${KUBECTL_NAMESPACE:-}" ]; then
+        kubectl --namespace="$KUBECTL_NAMESPACE" "$@"
+    else
+        kubectl "$@"
+    fi
 }
 alias ka='k apply'
 alias kd='k describe'
