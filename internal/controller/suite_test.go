@@ -24,6 +24,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/utils/ptr"
 
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -113,4 +114,14 @@ func getFirstFoundEnvTestBinaryDir() string {
 		}
 	}
 	return ""
+}
+
+func ValidSpec() mlv1alpha1.DatasetSpec {
+	return mlv1alpha1.DatasetSpec{
+		Uri:      ptr.To("sample.uri"),
+		Owner:    ptr.To("sample.owner"),
+		Rows:     ptr.To(1),
+		Checksum: ptr.To("placeholder"),
+		Golden:   ptr.To(false),
+	}
 }

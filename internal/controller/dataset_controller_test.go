@@ -26,7 +26,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -46,6 +45,27 @@ var _ = Describe("Dataset Controller", func() {
 		}
 		dataset := &mlv1alpha1.Dataset{}
 
+		// Everything the reconciler cannot reach through the API server is injected,
+		// so a whole pass is described by the metadata the store hands back. The
+		// recorder is a parameter rather than a local: a transition is only
+		// observable against the phase the previous pass left behind, and a fresh
+		// recorder per pass could never tell "emitted once" from "emitted again".
+		reconcileWith := func(recorder record.EventRecorder, found artifact.Metadata) {
+			GinkgoHelper()
+			controllerReconciler := &DatasetReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: recorder,
+				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
+					"sample.uri": found,
+				}},
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
 		BeforeEach(func() {
 			By("creating the custom resource for the Kind Dataset")
 			err := k8sClient.Get(ctx, typeNamespacedName, dataset)
@@ -55,13 +75,7 @@ var _ = Describe("Dataset Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: mlv1alpha1.DatasetSpec{
-						Uri:      ptr.To("sample.uri"),
-						Owner:    ptr.To("sample.owner"),
-						Rows:     ptr.To(1),
-						Checksum: ptr.To("placeholder"),
-						Golden:   ptr.To(false),
-					},
+					Spec: ValidSpec(),
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -145,6 +159,10 @@ var _ = Describe("Dataset Controller", func() {
 			condition := apimeta.FindStatusCondition(empty.Status.Conditions, "Resolved")
 			Expect(condition).NotTo(BeNil())
 			By("naming the artifact as the layer at fault, not the registrant's claim")
+			// Matched exactly, not as a substring: the claimed row count disagrees
+			// with an empty artifact too, so dropping the guard that skips drift
+			// detection on this branch turns the reason into DriftDetected and
+			// blames the registrant for a store that returned nothing.
 			Expect(condition.Reason).To(Equal("ArtifactEmpty"))
 
 			By("recording no row count, which Minimum=1 would have rejected")
@@ -153,35 +171,132 @@ var _ = Describe("Dataset Controller", func() {
 		})
 
 		It("should clear a row count that an emptied artifact has invalidated", func() {
-			reconcileWith := func(rows int) {
-				controllerReconciler := &DatasetReconciler{
-					Client:   k8sClient,
-					Scheme:   k8sClient.Scheme(),
-					Recorder: record.NewFakeRecorder(10),
-					Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
-						"sample.uri": {Rows: rows, Checksum: "placeholder"},
-					}},
-				}
-				_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-					NamespacedName: typeNamespacedName,
-				})
-				Expect(err).NotTo(HaveOccurred())
-			}
+			recorder := record.NewFakeRecorder(10)
 
 			By("observing a usable artifact first")
-			reconcileWith(1)
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
 			ready := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, ready)).To(Succeed())
 			Expect(ready.Status.ObservedRows).To(HaveValue(Equal(1)))
 
 			By("resolving the same uri after the artifact was emptied")
-			reconcileWith(0)
+			reconcileWith(recorder, artifact.Metadata{Rows: 0, Checksum: "placeholder"})
 			emptied := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, emptied)).To(Succeed())
 			Expect(emptied.Status.ObservedRows).To(BeNil(), "a stale count would claim an observation this pass contradicts")
 			Expect(emptied.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
 		})
 
-		It("should go Failed when frozen fields are modified", func() {})
+		DescribeTable("should go Failed when the artifact no longer matches the claim", func(
+			found artifact.Metadata, wantMessages ...string) {
+			recorder := record.NewFakeRecorder(10)
+			reconcileWith(recorder, found)
+
+			drifted := &mlv1alpha1.Dataset{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, drifted)).To(Succeed())
+			Expect(drifted.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
+
+			condition := apimeta.FindStatusCondition(drifted.Status.Conditions, "Resolved")
+			Expect(condition).NotTo(BeNil())
+			By("naming the claim as the layer at fault, not the store that answered")
+			Expect(condition.Reason).To(Equal("DriftDetected"))
+			Expect(condition.ObservedGeneration).To(Equal(drifted.Generation))
+
+			// The whole clause, not just the field path: a message that printed the
+			// observed and the claimed value the wrong way round would still contain
+			// "spec.rows", and would tell the reader the artifact holds the number
+			// the registrant typed.
+			for _, want := range wantMessages {
+				Expect(condition.Message).To(ContainSubstring(want))
+			}
+
+			By("still recording what the store returned, since the drift is only legible against it")
+			Expect(drifted.Status.ObservedChecksum).To(HaveValue(Equal(found.Checksum)))
+
+			By("warning a human about a transition nobody asked for")
+			Expect(recorder.Events).To(Receive(SatisfyAll(
+				ContainSubstring("Warning"),
+				ContainSubstring("Dataset Failed"),
+			)))
+		},
+			Entry("rows drifted", artifact.Metadata{Rows: 2, Checksum: "placeholder"},
+				"spec.rows", "artifact resolved to 2 rows, spec claims 1"),
+			Entry("checksum drifted", artifact.Metadata{Rows: 1, Checksum: "drifted"},
+				"spec.checksum", "artifact resolved to checksum drifted, spec claims placeholder"),
+			Entry("both drifted", artifact.Metadata{Rows: 2, Checksum: "drifted"},
+				"spec.rows", "artifact resolved to 2 rows, spec claims 1",
+				"spec.checksum", "artifact resolved to checksum drifted, spec claims placeholder"),
+		)
+
+		It("should fail a Ready Dataset whose artifact was rewritten under it", func() {
+			recorder := record.NewFakeRecorder(10)
+
+			By("resolving the artifact the registrant actually registered")
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
+			ready := &mlv1alpha1.Dataset{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, ready)).To(Succeed())
+			Expect(ready.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
+			Expect(recorder.Events).To(Receive(ContainSubstring("Normal")))
+
+			By("resyncing after the artifact was replaced, with nobody touching the Dataset")
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "rewritten"})
+			rewritten := &mlv1alpha1.Dataset{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, rewritten)).To(Succeed())
+			Expect(rewritten.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
+			condition := apimeta.FindStatusCondition(rewritten.Status.Conditions, "Resolved")
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Reason).To(Equal("DriftDetected"))
+
+			// generation moves on a spec write and never on a status write, so an
+			// unchanged generation is the proof that the world moved, not the user.
+			By("proving no user edit stands between the two passes")
+			Expect(rewritten.Generation).To(Equal(ready.Generation))
+			Expect(recorder.Events).To(Receive(ContainSubstring("Warning")))
+
+			By("staying quiet on a resync that changed nothing, so the transition is not buried")
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "rewritten"})
+			Expect(recorder.Events).NotTo(Receive())
+		})
+
+		It("should stay Ready when the artifact moves in a field nobody claimed", func() {
+			By("registering a Dataset that makes no claim about rows or checksum")
+			spec := ValidSpec()
+			spec.Rows = nil
+			spec.Checksum = nil
+			unclaimed := &mlv1alpha1.Dataset{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "unclaimed-",
+					Namespace:    "default",
+				},
+				Spec: spec,
+			}
+			Expect(k8sClient.Create(ctx, unclaimed)).To(Succeed())
+			// The outer AfterEach only removes the shared fixture, so cleanup for
+			// this object has to travel with the object.
+			DeferCleanup(func() {
+				Expect(k8sClient.Delete(ctx, unclaimed)).To(Succeed())
+			})
+			unclaimedName := types.NamespacedName{Name: unclaimed.Name, Namespace: unclaimed.Namespace}
+
+			controllerReconciler := &DatasetReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: record.NewFakeRecorder(10),
+				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
+					"sample.uri": {Rows: 50, Checksum: "whatever-the-store-holds"},
+				}},
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: unclaimedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			resolved := &mlv1alpha1.Dataset{}
+			Expect(k8sClient.Get(ctx, unclaimedName, resolved)).To(Succeed())
+			By("an absent claim has nothing to disagree with")
+			Expect(resolved.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
+			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(50)))
+			Expect(resolved.Status.ObservedChecksum).To(HaveValue(Equal("whatever-the-store-holds")))
+		})
 	})
 })
