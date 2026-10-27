@@ -14,28 +14,58 @@ set -euo pipefail
 
 real=/usr/local/bin/claude
 
-# The escape hatch for a session that wants the prompts back, and the loop guard: the wrapper
-# shadows the real binary by PATH, so an unguarded re-exec would find itself.
-if [[ ${AGENT_BYPASS:-1} != 1 ]]; then
-  exec "$real" "$@"
-fi
+# Claude Code positions the terminal's own cursor rather than drawing one, and sets it to a block
+# at startup, so the beam that .zshrc's zle-line-init asked for is gone by the time the input is
+# drawn and the shape inside the session stops matching the shell outside it.
+#
+# It sets the shape once rather than holding it, so a DECSCUSR write that lands after the first
+# frame sticks. The write is repeated because the moment that frame lands moves with container
+# start-up cost, and one that arrives too early is simply overwritten again. /dev/tty rather than
+# stdout, so a redirected stdout still reaches the terminal; `-t 1` so a piped `-p` run starts no
+# background job at all.
+#
+# Called only on the paths that start the interactive UI. A subcommand exits long before the last
+# write is due, and the escapes would land on the shell prompt that follows -- where they would
+# turn a vi-normal-mode block back into a beam and misreport the mode.
+arm_cursor_shape() {
+  [[ -t 1 ]] || return 0
+  (
+    # Cumulative, so the writes land about one, two and four seconds in. The last one bounds how
+    # long a stray escape can outlive the session: quit inside four seconds and it reaches the
+    # shell prompt instead, which is the same failure the subcommand paths avoid by not arming.
+    for delay in 1 1 2; do
+      sleep "$delay"
+      printf '\033[5 q' >/dev/tty 2>/dev/null || exit 0
+    done
+  ) &
+}
 
 # Subcommands take their own option sets and reject the flag outright; only the default command --
-# interactive, or -p -- accepts it.
+# interactive, or -p -- accepts it. Checked ahead of the bypass escape hatch, which hands over the
+# same argv, so that one branch carries the no-UI decision for both.
 case ${1:-} in
 config | mcp | migrate-installer | doctor | update | install | setup-token | plugin)
   exec "$real" "$@"
   ;;
 esac
 
+# The escape hatch for a session that wants the prompts back, and the loop guard: the wrapper
+# shadows the real binary by PATH, so an unguarded re-exec would find itself.
+if [[ ${AGENT_BYPASS:-1} != 1 ]]; then
+  arm_cursor_shape
+  exec "$real" "$@"
+fi
+
 # Already asked for explicitly, or asked for the opposite. Passing it twice is harmless, but
 # `--permission-mode plan` followed by an injected bypass is not what the caller typed.
 for arg in "$@"; do
   case $arg in
   --dangerously-skip-permissions | --permission-mode | --permission-mode=*)
+    arm_cursor_shape
     exec "$real" "$@"
     ;;
   esac
 done
 
+arm_cursor_shape
 exec "$real" --dangerously-skip-permissions "$@"

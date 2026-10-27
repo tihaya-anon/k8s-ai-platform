@@ -499,6 +499,15 @@ The wrappers also stand aside on their own when the invocation already decides t
 subcommand does not take the flag at all, such as `claude mcp list` or `codex login`. They are
 root-owned and `0755`, so the agent user cannot edit its own launcher.
 
+The Claude Code wrapper carries one unrelated fix. Claude Code positions the terminal's own cursor
+rather than drawing one, and sets it to a block at startup, so the beam `.zshrc` asks for in insert
+mode is gone by the time the input is drawn and the shape stops matching the shell outside the
+session. It sets the shape once rather than holding it, so the wrapper writes `\e[5 q` to `/dev/tty`
+from a background job about one, two and four seconds in; a write that lands before the first frame
+is simply overwritten again. Only the paths that start the interactive UI arm it -- a subcommand
+exits before the last write is due, and the escape would reach the shell prompt instead and turn a
+vi-normal-mode block back into a beam.
+
 Model usage is controlled by the credentials/account you mount. The repo/container boundary only
 prevents the agent's shell commands from reaching host secrets or cloud credentials you did not
 mount.
