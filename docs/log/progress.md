@@ -824,6 +824,59 @@ never recorded as a successful observation:
 `go test ./...` passes; `make manifests generate` updated only the `observedRows` description in
 `config/crd/bases/ml.aiplatform.io_datasets.yaml`.
 
+**Drift tests — owner's own work, finished by Claude at the owner's request, 2026-10-27:** this
+closes open item 3 above for the reconciler half; the webhook half closed on 2026-10-26.
+`make fmt vet test` passes, 20 of 20 specs, controller coverage 72.5% -> 91.7%, committed as
+`f0e01ef`.
+
+Owner-written: the `DescribeTable` driven by resolved `artifact.Metadata` rather than by a mutated
+spec, its three entries, the `DriftDetected` and `observedGeneration` assertions, and moving
+`validSpec` out of `dataset_api_test.go` into `suite_test.go` as `ValidSpec` so the controller specs
+share the fixture the API specs already used.
+
+Claude-written at the owner's request, after the owner decided to stop there: everything below.
+
+- **A `DescribeTable` with no `Entry` registers no specs and still passes.** The first draft had a
+  table body and no entries, so `make test` was green over a feature with zero coverage. A table
+  generates one spec per `Entry`; with none, Ginkgo has nothing to run and nothing to report. The
+  spec count in `-ginkgo.v` output is the only thing that shows it.
+- **The table was named for the webhook's job** — "should go Failed when frozen fields are modified"
+  — and its body mutated a local `DatasetSpec` copy after `Create`, which reaches no API server. The
+  reconciler can never observe that case: `ValidateUpdate` rejects a frozen-field edit at admission,
+  so the edit never lands and no reconcile follows. The controller-side story is the opposite one —
+  the spec stays frozen and the _artifact_ moves — which is what the table now varies.
+- **The acceptance criterion now has a spec.**
+  `should fail a Ready Dataset whose artifact was rewritten under it` reconciles twice against
+  different metadata and asserts `Generation` is identical across both passes. That is the part that
+  makes it the stated criterion rather than a repeat of the table: `generation` increments on a spec
+  write and never on a status write, so an unchanged generation is the proof that the world moved
+  and the user did not.
+- **Transition events are asserted, including the absence of one.** `record.NewFakeRecorder(10)`
+  appeared in every spec and was never read, so step 6 was untested. The recorder is now a parameter
+  of the shared `reconcileWith` helper so it survives several passes, and a third identical pass
+  asserts `recorder.Events` receives nothing — one event per transition, not per resync.
+- **An unclaimed field cannot drift.** Both comparisons in `detectDrift` are guarded by `!= nil`,
+  and neither guard was exercised, because `ValidSpec` sets both. A Dataset registering no `rows`
+  and no `checksum` against an artifact resolving 50 rows must come back `Ready`. This is decision 1
+  from the 2026-10-23 mechanical pass, now pinned by a test rather than by a comment.
+- **Drift messages are asserted as whole clauses**, not by field path.
+  `ContainSubstring("spec.rows")` still matches a message that printed the observed and the claimed
+  value the wrong way round, which is the one defect in this code a reader would act on at 3am.
+
+_Verified by mutation rather than by coverage._ Four single-line breaks to `dataset_controller.go`,
+each reverted, each failing a named spec:
+
+| Mutation                                      | Caught by                                           |
+| --------------------------------------------- | --------------------------------------------------- |
+| `if usable` -> `if true`                      | the `ArtifactUnreachable` and `ArtifactEmpty` specs |
+| drop the `dset.Spec.Rows != nil` guard        | the unclaimed-field spec                            |
+| `!= previousPhase` -> `\|\| true`             | the rewritten-artifact spec                         |
+| swap observed and claimed in the rows message | `rows drifted` and `both drifted`                   |
+
+Worth recording from that exercise: the first attempt at the event mutation was `if true {`, which
+does not compile, because `previousPhase` goes unused. A mutation that fails to build proves nothing
+about the suite, and reads exactly like a mutation the suite failed to catch.
+
 ### 1.2 TrainingJob on Kueue — YYYY-MM-DD
 
 **Learn — what I saw:** driving Kueue by hand per
