@@ -43,6 +43,11 @@ caches=(
   -v k8s-ai-go-build:/home/agent/.cache/go-build
 )
 
+# LazyVim installs its plugin tree into ~/.local/share/nvim, and the first start in a fresh container
+# would otherwise pull roughly 500MB of plugins again on every `docker run --rm`. A named volume
+# makes that a one-time cost; `docker volume rm k8s-ai-nvim` forces a clean reinstall.
+nvim_volume=(-v k8s-ai-nvim:/home/agent/.local/share/nvim)
+
 # The generated Makefile installs controller-gen, setup-envtest, kustomize and goimports into
 # LOCALBIN (default $(pwd)/bin) and links each one with an absolute path from realpath. The checkout
 # has a different absolute path on the host and inside the container, and the bind mount makes both
@@ -219,6 +224,24 @@ run_step() {
   rm -f "$log"
 }
 
+# The base images are moving tags, so the build has to resolve them to a digest either way -- and
+# resolving is what pins the build, not pulling. On a network where Docker Hub is slow or
+# unreachable, pulling on every build re-downloads whatever upstream changed for a base whose
+# layers are already local, and can fail outright before the build starts. Reuse the local image by
+# default and let AGENT_PULL=always restore the refresh.
+pull_base_image() {
+  case ${AGENT_PULL:-missing} in
+  missing)
+    if docker image inspect "$1" >/dev/null 2>&1; then
+      return 0
+    fi
+    run_step docker pull "$1"
+    ;;
+  always) run_step docker pull "$1" ;;
+  *) die "AGENT_PULL must be missing or always, got: ${AGENT_PULL}" ;;
+  esac
+}
+
 parse_options() {
   while [[ $# -gt 0 ]]; do
     case $1 in
@@ -363,9 +386,10 @@ build_image() {
 
   # Resolve moving tags to immutable digests before the build. BuildKit otherwise checks Docker Hub
   # for node:24-bookworm/golang:1.25-bookworm on every cold builder and may pull a different base
-  # even when an older agent image exists locally.
-  run_step docker pull "$node_image"
-  run_step docker pull "$go_image"
+  # even when an older agent image exists locally. The digest comes from the local image when one
+  # is there, so the build stays pinned without the pull.
+  pull_base_image "$node_image"
+  pull_base_image "$go_image"
   node_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$node_image")
   go_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$go_image")
 
@@ -376,7 +400,17 @@ build_image() {
     --build-arg USER_UID="$(id -u)"
     --build-arg USER_GID="$(id -g)"
     --build-arg NPM_REGISTRY="$npm_registry"
+    --build-arg GOPROXY="$go_proxy"
   )
+  # Package and release mirrors keep their defaults in the Dockerfile; passing them only when the
+  # host sets them leaves one source of truth while letting a slow network override them the way it
+  # already overrides NPM_REGISTRY and GOPROXY.
+  local mirror_var
+  for mirror_var in APT_MIRROR GITHUB_MIRROR NVIM_RELEASE_BASE; do
+    if [[ -n ${!mirror_var:-} ]]; then
+      build_args+=(--build-arg "$mirror_var=${!mirror_var}")
+    fi
+  done
   local proxy_var
   for proxy_var in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
     if [[ -n ${!proxy_var:-} ]]; then
@@ -408,12 +442,13 @@ prepare_volumes() {
   ensure_image
   run_step docker run --rm --user root \
     "${caches[@]}" \
+    "${nvim_volume[@]}" \
     "${tools_volume[@]}" \
     "${claude_volume[@]}" \
     "${opencode_volume[@]}" \
     "$image" \
-    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.cache/k8s-ai-platform/bin /home/agent/.claude /home/agent/.local/share/opencode \
-      && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.claude /home/agent/.local/share/opencode'
+    sh -c 'mkdir -p /home/agent/go/pkg/mod /home/agent/.cache/go-build /home/agent/.cache/k8s-ai-platform/bin /home/agent/.claude /home/agent/.local/share/opencode /home/agent/.local/share/nvim \
+      && chown -R agent:agent /home/agent/go/pkg /home/agent/.cache /home/agent/.claude /home/agent/.local/share/opencode /home/agent/.local/share/nvim'
 }
 
 # One `docker run`, parameterised by how the workspace is mounted and what runs inside. Everything
@@ -431,6 +466,13 @@ agent_run() {
 
   local mount_flags=(-v "$repo_root:$workspace")
   [[ $access == ro ]] && mount_flags=(-v "$repo_root:$workspace:ro")
+
+  # Neovim's configuration is part of the checkout, so it follows the session's access mode instead
+  # of the read-only home mounts: LazyVim rewrites lazy-lock.json when it installs plugins into a
+  # fresh volume, and a review session must not write to the tree. The plugin tree itself lives on
+  # the k8s-ai-nvim volume, so only the config directory is bound.
+  local nvim_flags=(-v "$repo_root/hack/agent-home/.config/nvim:/home/agent/.config/nvim")
+  [[ $access == ro ]] && nvim_flags=(-v "$repo_root/hack/agent-home/.config/nvim:/home/agent/.config/nvim:ro")
 
   local mode_flags=(--rm)
   if [[ $mode == tty ]]; then
@@ -478,7 +520,9 @@ agent_run() {
     "${proxy_flags[@]}" \
     "${hostmod_flags[@]}" \
     "${mount_flags[@]}" \
+    "${nvim_flags[@]}" \
     "${caches[@]}" \
+    "${nvim_volume[@]}" \
     "${tools_volume[@]}" \
     "${claude_volume[@]}" \
     "${opencode_volume[@]}" \
@@ -543,6 +587,15 @@ Environment:
   AGENT_NAME     container name for the interactive shells (default: k8s-ai-agent)
   AGENT_BUILD_NETWORK
                  docker build network mode (default: host, so localhost proxies work)
+  AGENT_PULL     base image refresh policy: missing (default) resolves node/golang from a local
+                 image and pulls only when it is absent; always pulls the moving tags every build
+  APT_MIRROR     Debian package mirror for the image build (default: the Dockerfile's, which is
+                 mirrors.aliyun.com)
+  GITHUB_MIRROR  prefix for GitHub release downloads in the image build (default: the
+                 Dockerfile's, https://github.com)
+  NVIM_RELEASE_BASE
+                 directory holding the Neovim release tarballs, for a mirror that keeps them under
+                 its own layout (default: the upstream GitHub release for NVIM_VERSION)
   AGENT_RUN_NETWORK
                  docker run network mode (default: host, so localhost proxies work)
   GO_PROXY       module proxy (default: the host's `go env GOPROXY`)

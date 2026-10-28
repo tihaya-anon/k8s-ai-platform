@@ -1,6 +1,11 @@
 # ~/.zprofile: executed by zsh(1) for login shells.
 # PATH and exports set here are inherited by every shell and editor started from the session.
 
+# Docker sets no $USER, and starship plus a number of CLIs read it. Derived rather than baked into
+# the image, because the container is also entered with `--user root` and a fixed value would be
+# wrong there.
+export USER="${USER:-$(id -un)}"
+
 # Debian's zsh does not read /etc/profile, so load /etc/profile.d (snap, distro tool paths) here.
 for profile_script in /etc/profile.d/*.sh(N); do
     emulate sh -c ". '$profile_script'"

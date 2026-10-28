@@ -1,6 +1,13 @@
 local M = {}
 
 local function system(command)
+  -- vim.system raises ENOENT instead of returning a status when the binary is missing, and the
+  -- agent container has neither gsettings nor the Windows tools this probes for. Checking first
+  -- keeps the first line of options.lua from aborting the rest of the file there.
+  if vim.fn.executable(command[1]) ~= 1 then
+    return nil
+  end
+
   local result = vim.system(command, { text = true }):wait()
 
   if result.code ~= 0 then

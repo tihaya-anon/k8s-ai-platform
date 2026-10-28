@@ -93,7 +93,7 @@ Allowed in the development shell:
 - run the agent process inside the Docker container;
 - read and write this repository checkout;
 - run local build, format, vet, and unit-test commands;
-- use named Go cache volumes created for this repo.
+- use named Go and Neovim cache volumes created for this repo.
 
 Allowed in the review shell:
 
@@ -146,9 +146,13 @@ docker pull node:24-bookworm
 docker pull golang:1.25-bookworm
 ```
 
-`hack/agent.sh image` pulls those tags too, then resolves them to immutable RepoDigests and passes
-the digest references into `agent.Dockerfile`. That keeps readable defaults in the Dockerfile while
-preventing a moving Docker Hub tag from silently changing the build.
+`hack/agent.sh image` resolves those tags to immutable RepoDigests and passes the digest references
+into `agent.Dockerfile`. That keeps readable defaults in the Dockerfile while preventing a moving
+Docker Hub tag from silently changing the build. The digest is read from the image already on disk
+when there is one, so a base that has been pulled once is not downloaded again on every build;
+`AGENT_PULL=always` restores the refresh for when you want the newest `node:24-bookworm`. That
+matters on a network where Docker Hub is slow or unreachable, since the pull otherwise happens
+before the build has started and fails it.
 
 To build only the agent image:
 
@@ -158,8 +162,24 @@ hack/agent.sh image
 
 The build passes your UID/GID into the image so files created by the container belong to your WSL
 user. It also passes the host's `go env GOPROXY` and `npm config get registry` through, so the build
-uses whatever mirrors the host already trusts; `APT_MIRROR` and `GITHUB_MIRROR` are build args on
-the same footing.
+uses whatever mirrors the host already trusts. `APT_MIRROR`, `GITHUB_MIRROR` and `NVIM_RELEASE_BASE`
+work the same way: set them in the environment and `hack/agent.sh` forwards them as build args,
+leaving the Dockerfile's defaults in place when they are unset.
+
+On a network where the default registries are the slow part, name the mirrors explicitly:
+
+```bash
+NPM_REGISTRY=https://registry.npmmirror.com \
+GITHUB_MIRROR=https://gh-proxy.com/https://github.com \
+NVIM_RELEASE_BASE=https://mirror.nju.edu.cn/github-release/neovim/neovim/Nvim%200.12.6 \
+hack/agent.sh image
+```
+
+These are build args, so the values are part of the cache key: changing one invalidates every layer
+that used it, including the ~1GB npm install. Keep them stable between builds — putting them in the
+host's `~/.zsh_env` is the usual place, since that file is private and already sourced by the shell.
+`NVIM_RELEASE_BASE` exists because GitHub proxies cache small assets well and the 11MB Neovim
+tarball badly; the NJU mirror carries it at LAN speed under a layout of its own.
 
 To override the base images deliberately:
 
@@ -305,10 +325,23 @@ installer checked out (`ZSH_AUTOSUGGESTIONS_COMMIT`, `ZSH_SYNTAX_HIGHLIGHTING_CO
 `~/.local/share/zsh/plugins`, the same path the host uses, so `.zshrc` needs no container branch.
 Bash is still in the image for scripts; it just has no interactive configuration any more.
 
-It does not get an IDE. Neovim is installed as `$EDITOR` — `git commit` without `-m` and
-`git rebase -i` need one — but without the LazyVim configuration or any language server. Editing
-usually happens on the host against the same inodes through the bind mount; the container editor is
-there for commit messages and emergency terminal edits, not as the project's IDE policy.
+Neovim is `$EDITOR` and runs the same LazyVim configuration as the host, vendored at
+`hack/agent-home/.config/nvim`: `git commit` without `-m`, `git rebase -i` and an agent shelling out
+open the editor the owner actually uses. The plugin tree is not baked into the image. LazyVim
+installs it on the first start inside the container, into `~/.local/share/nvim`, which
+`hack/agent.sh` backs with the `k8s-ai-nvim` named volume — so the download happens once per volume
+rather than once per container. `docker volume rm k8s-ai-nvim` forces a clean reinstall. Seeding
+that volume from the host's `~/.local/share/nvim` is the way to skip the first download entirely.
+
+Two spots in that configuration are container-guarded rather than shared verbatim with the host,
+because the host is WSL and the container is not: the `clip.exe` clipboard provider is only set when
+`clip.exe` is on `PATH`, and the system-theme probe skips a command it cannot execute. Both guards
+are no-ops on the host.
+
+The container still does not carry the project's IDE policy: there is no language-server install and
+no per-project editor setup beyond what LazyVim does on its own. The plugin volume exists so the
+same configuration is usable for commit messages and quick edits, not so the container becomes the
+place editing happens.
 
 OpenCode's terminal settings are tracked alongside the shell configuration in
 `hack/agent-home/.config/opencode/cli.json`. Scrolling and message navigation use vim-style keys:

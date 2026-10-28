@@ -52,12 +52,19 @@ FROM base AS editor-tools
 
 # The editor side of the sandbox. Pinned to the versions the host runs, so a session in the
 # container behaves like a session outside it rather than like a slightly different editor.
-ARG NVIM_VERSION=0.12.5
+ARG NVIM_VERSION=0.12.6
 ARG STARSHIP_VERSION=1.25.0
 # Neither zsh plugin cuts releases often enough to track the host's clones, so pin the commits the
 # host installer checked out. Debian's packages would be older than the host and drift silently.
 ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
 ARG ZSH_SYNTAX_HIGHLIGHTING_COMMIT=e6683f20e5c38d3e5447f45845d04ddda75d0f23
+
+# Where the Neovim release tarballs come from. The default is the upstream GitHub release; a mirror
+# with a different layout -- the NJU GitHub-release mirror keeps them under Nvim <version>/ -- is
+# given as the whole directory, e.g.
+#   --build-arg NVIM_RELEASE_BASE=https://mirror.nju.edu.cn/github-release/neovim/neovim/Nvim%200.12.6
+# and is worth setting wherever github.com itself is the slow path.
+ARG NVIM_RELEASE_BASE=
 
 # Every download below comes from GitHub releases. Point this at a mirror when the build network
 # cannot reach github.com directly, e.g. --build-arg GITHUB_MIRROR=https://ghproxy.net/https://github.com
@@ -66,32 +73,39 @@ ARG GITHUB_MIRROR=https://github.com
 # Neovim, starship and the zsh plugins, from upstream tarballs rather than apt: Debian stable's
 # Neovim is ancient, starship is not packaged at all, and the plugin packages lag the host.
 #
-# Neovim here is $EDITOR, not an IDE. `git commit` without -m, `git rebase -i` and an agent
-# shelling out all need an editor to exist; editing this repository happens on the host, against
-# the same inodes through the bind mount. The IDE configuration and its language servers were
-# removed for that reason: the container editor is for commit messages and emergency terminal
-# edits, not for carrying the project's IDE policy.
+# Neovim here is $EDITOR, not an IDE, but it runs the same LazyVim configuration the host does --
+# hack/agent-home/.config/nvim -- so `git commit` without -m, `git rebase -i` and an agent shelling
+# out all open the editor the owner actually uses. The plugin tree is not baked in: LazyVim installs
+# it into ~/.local/share/nvim, which hack/agent.sh backs with the k8s-ai-nvim named volume, so the
+# first start in a fresh volume downloads the plugins and later starts reuse them.
 #
 # TARGETARCH comes from BuildKit and is the only architecture switch in the image.
+#
+# The downloads carry a stall guard as well as retries: a proxy can accept the connection and then
+# send nothing, and without --speed-limit/--speed-time curl waits on that socket forever. The
+# threshold is deliberately low -- one kilobyte a second over a minute -- because it exists to catch
+# a dead socket, not a slow one, and aborting a slow transfer only restarts it from zero.
 ARG TARGETARCH
 RUN set -eu; \
+    curl_opts="--http1.1 --connect-timeout 15 --retry 5 --retry-delay 2 --retry-all-errors --speed-limit 1024 --speed-time 60"; \
     case "${TARGETARCH:-amd64}" in \
       amd64) nvim_arch=linux-x86_64; star_arch=x86_64-unknown-linux-gnu ;; \
       arm64) nvim_arch=linux-arm64;  star_arch=aarch64-unknown-linux-gnu ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/nvim.tar.gz \
-      "${GITHUB_MIRROR}/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-${nvim_arch}.tar.gz"; \
+    nvim_base=${NVIM_RELEASE_BASE:-${GITHUB_MIRROR}/neovim/neovim/releases/download/v${NVIM_VERSION}}; \
+    curl $curl_opts -fsSL -o /tmp/nvim.tar.gz \
+      "${nvim_base}/nvim-${nvim_arch}.tar.gz"; \
     tar -C /opt -xzf /tmp/nvim.tar.gz; \
     mv "/opt/nvim-${nvim_arch}" /opt/nvim; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \
-    curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o /tmp/starship.tar.gz \
+    curl $curl_opts -fsSL -o /tmp/starship.tar.gz \
       "${GITHUB_MIRROR}/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${star_arch}.tar.gz"; \
     tar -C /usr/local/bin -xzf /tmp/starship.tar.gz starship; \
     for plugin in "zsh-autosuggestions:${ZSH_AUTOSUGGESTIONS_COMMIT}" \
                   "zsh-syntax-highlighting:${ZSH_SYNTAX_HIGHLIGHTING_COMMIT}"; do \
       name="${plugin%%:*}"; commit="${plugin#*:}"; \
-      curl --http1.1 --retry 5 --retry-delay 2 --retry-all-errors -fsSL -o "/tmp/${name}.tar.gz" \
+      curl $curl_opts -fsSL -o "/tmp/${name}.tar.gz" \
         "${GITHUB_MIRROR}/zsh-users/${name}/archive/${commit}.tar.gz"; \
       mkdir -p "/opt/zsh-plugins/${name}"; \
       tar -C "/opt/zsh-plugins/${name}" --strip-components=1 -xzf "/tmp/${name}.tar.gz"; \
