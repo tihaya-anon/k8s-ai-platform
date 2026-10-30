@@ -6,10 +6,20 @@
     "ghcr.io/devcontainers/features/git:1": {}
   },
   "runArgs": ["--network=host"],
+  "mounts": [
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/root/.zshenv,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/root/.zprofile,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/root/.zshrc,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/root/.zsh_aliases,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/root/.config/starship.toml,type=bind,readonly"
+  ],
   "customizations": {
     "vscode": {
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "terminal.integrated.profiles.linux": {
+          "zsh": { "path": "/bin/zsh", "args": ["-l"] }
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh"
       },
       "extensions": ["ms-kubernetes-tools.vscode-kubernetes-tools", "ms-azuretools.vscode-docker"]
     }
