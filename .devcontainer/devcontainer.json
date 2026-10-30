@@ -11,17 +11,64 @@
     "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/root/.zprofile,type=bind,readonly",
     "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/root/.zshrc,type=bind,readonly",
     "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/root/.zsh_aliases,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/root/.config/starship.toml,type=bind,readonly"
+    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/root/.config/starship.toml,type=bind,readonly",
+    // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
+    // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
+    // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
+    "source=k8s-ai-devcontainer-tools,target=/root/.cache/k8s-ai-platform,type=volume"
   ],
+  "containerEnv": {
+    "LOCALBIN": "/root/.cache/k8s-ai-platform/bin"
+  },
   "customizations": {
     "vscode": {
       "settings": {
         "terminal.integrated.profiles.linux": {
           "zsh": { "path": "/bin/zsh", "args": ["-l"] }
         },
-        "terminal.integrated.defaultProfile.linux": "zsh"
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "go.toolsManagement.autoUpdate": false,
+        "go.lintTool": "golangci-lint-v2",
+        "go.lintOnSave": "package",
+        // The Makefile's pinned golangci-lint, so the editor and `make lint` read .golangci.yml
+        // with the same version.
+        "go.alternateTools": {
+          "golangci-lint-v2": "/root/.cache/k8s-ai-platform/bin/golangci-lint"
+        },
+        "gopls": {
+          "ui.semanticTokens": true,
+          // Same import grouping as the goimports settings in .golangci.yml and hack/format.sh.
+          "formatting.local": "github.com/tihaya-anon/k8s-ai-platform"
+        },
+        "[go]": {
+          "editor.defaultFormatter": "golang.go",
+          "editor.formatOnSave": true,
+          "editor.semanticHighlighting.enabled": true,
+          "editor.codeActionsOnSave": { "source.organizeImports": "explicit" }
+        },
+        // hack/format.sh order: markdownlint fixes structure first, Prettier owns wrapping.
+        "[markdown]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": { "source.fixAll.markdownlint": "explicit" }
+        },
+        "[json][jsonc][yaml]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        }
       },
-      "extensions": ["ms-kubernetes-tools.vscode-kubernetes-tools", "ms-azuretools.vscode-docker"]
+      "extensions": [
+        "golang.go",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-containers",
+        "ms-vscode.makefile-tools",
+        "esbenp.prettier-vscode",
+        "davidanson.vscode-markdownlint",
+        "mermaidchart.vscode-mermaid-chart",
+        "timonwong.shellcheck",
+        "github.vscode-github-actions"
+      ]
     }
   },
   "onCreateCommand": "bash .devcontainer/post-install.sh"

@@ -55,6 +55,16 @@ for plugin in "zsh-autosuggestions:${ZSH_AUTOSUGGESTIONS_COMMIT}" \
   test -r "${zsh_plugins}/${name}/${name}.zsh"
 done
 
+# The Go extension would otherwise prompt to install these unpinned on first open. gopls v0.22+
+# needs Go 1.26, so v0.21.x is the newest that builds on this toolchain.
+GOPLS_VERSION=${GOPLS_VERSION:-v0.21.1}
+DELVE_VERSION=${DELVE_VERSION:-v1.27.2}
+go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"
+go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
+# Into $LOCALBIN (a volume, see devcontainer.json) at the Makefile's pins; the editor's linter and
+# hack/format.sh both read them from there.
+make goimports golangci-lint
+
 docker network create -d bridge --subnet 172.19.0.0/24 kind 2>/dev/null || true
 
 go version
