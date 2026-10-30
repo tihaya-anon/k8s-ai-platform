@@ -65,8 +65,6 @@ go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
 # hack/format.sh both read them from there.
 make goimports golangci-lint
 
-docker network create -d bridge --subnet 172.19.0.0/24 kind 2>/dev/null || true
-
 go version
 kind version
 kubebuilder version
