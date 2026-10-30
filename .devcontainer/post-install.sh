@@ -61,9 +61,10 @@ GOPLS_VERSION=${GOPLS_VERSION:-v0.21.1}
 DELVE_VERSION=${DELVE_VERSION:-v1.27.2}
 go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"
 go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
-# Into $LOCALBIN (a volume, see devcontainer.json) at the Makefile's pins; the editor's linter and
-# hack/format.sh both read them from there.
-make goimports golangci-lint
+# Into $LOCALBIN (a volume, see devcontainer.json) at the Makefile's pins; the editor's linter,
+# hack/format.sh and Go Annotations' marker definitions all read them from there. Go Annotations
+# only watches the workspace's bin/, so controller-gen has to be there before the editor starts.
+make goimports golangci-lint controller-gen
 
 go version
 kind version
