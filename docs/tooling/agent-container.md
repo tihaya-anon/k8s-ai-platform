@@ -79,6 +79,16 @@ kubectl version --client
 docker --version
 ```
 
+The live `.devcontainer/` has moved on from that baseline in one way worth stating here: it runs as
+a non-root user. `ghcr.io/devcontainers/features/common-utils` creates `agent` at uid/gid 1000 — the
+same identity `agent.Dockerfile` creates — and `remoteUser` points the editor, its terminals and the
+lifecycle commands at it. The workspace is a bind mount, so a devcontainer running as root wrote
+root-owned files back to the host; `.git/config`, `.git/HEAD` and `.git/packed-refs` ended up that
+way, and `hack/agent.sh`'s container, which runs as uid 1000, could then no longer rewrite them. Two
+costs follow from the change and are paid in `post-install.sh`: its installs go through `sudo`, and
+it chowns the directories Docker created for the mounts — including `$HOME/.cache`, which is both
+the tools volume's parent and where `GOCACHE` lands.
+
 The agent container below is a separate, stronger sandbox for running AI CLIs. Keep both available:
 the devcontainer is the ordinary development environment, while `agent.Dockerfile` is opt-in.
 
@@ -304,6 +314,12 @@ It is resolved on the host and carried in, in git's own order of precedence:
 
 Two consequences worth knowing:
 
+- The entrypoint writes a key only when it does not already hold the wanted value, and it decides
+  that by reading the value back rather than by testing `-w` on `.git/config`. Write permission on
+  that file was never what decided whether the write succeeds: git replaces it through
+  `.git/config.lock` and a rename, so what matters is the permission on `.git/`. A `-w` test
+  therefore reported a disarmed `core.hooksPath` whenever the file merely belonged to another UID,
+  including when the hook was armed and the write would have worked.
 - `.git/config` is inside the bind-mounted checkout, so that write lands on the host and outlives
   the container. The container does not write `~/.gitconfig`, because it is not on one of the named
   volumes and would disappear with `--rm`.

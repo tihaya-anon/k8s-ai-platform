@@ -2,28 +2,52 @@
   "name": "k8s-ai-platform",
   "image": "golang:1.25-bookworm",
   "features": {
+    // The golang image has no non-root user, so this creates one. Running as root was not a
+    // cosmetic choice: the workspace is a bind mount, so every file the container wrote -- git's
+    // .git/config, HEAD and packed-refs among them -- came back to the host owned by root, and
+    // hack/agent.sh's container, which runs as uid 1000, then could not rewrite them.
+    //
+    // 1000:1000 is what agent.Dockerfile creates, so a file written here and a file written there
+    // have the same owner. updateRemoteUserUID (below) still adjusts it if the host's uid differs.
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "agent",
+      "userUid": "1000",
+      "userGid": "1000",
+      // zsh comes from post-install.sh, at the same pins agent.Dockerfile uses, and the dotfiles
+      // are bind-mounted read-only below. Letting this feature install zsh would also install
+      // oh-my-zsh and write its own ~/.zshrc over the mount point.
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false
+    },
     // The host's Docker, not a nested one: with --network=host a nested dockerd creates its bridges
     // and routes in the host's network namespace, and its kind network shadowed the host's.
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
     "ghcr.io/devcontainers/features/git:1": {}
   },
+  // The editor, its terminals and every lifecycle command run as this user; the container's own
+  // init stays root so the docker-outside-of-docker feature can still chown the socket proxy.
+  // updateRemoteUserUID is the default and is written out because it is what keeps files written
+  // here owned by the person on the host rather than by whoever uid 1000 happens to be.
+  "remoteUser": "agent",
+  "updateRemoteUserUID": true,
   "runArgs": ["--network=host"],
   "mounts": [
-    "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/root/.zshenv,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/root/.zprofile,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/root/.zshrc,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/root/.zsh_aliases,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/root/.config/starship.toml,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/home/agent/.zshenv,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/home/agent/.zprofile,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/home/agent/.zshrc,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/home/agent/.zsh_aliases,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/home/agent/.config/starship.toml,type=bind,readonly",
     // The cluster hack/set-up-cluster.sh made on the host; --network=host makes its 127.0.0.1 API
     // server reachable from here. Read-only so nothing in the container rewrites the host's contexts.
-    "source=${localEnv:HOME}/.kube/config,target=/root/.kube/config,type=bind,readonly",
+    "source=${localEnv:HOME}/.kube/config,target=/home/agent/.kube/config,type=bind,readonly",
     // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
     // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
     // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
-    "source=k8s-ai-devcontainer-tools,target=/root/.cache/k8s-ai-platform,type=volume"
+    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume"
   ],
   "containerEnv": {
-    "LOCALBIN": "/root/.cache/k8s-ai-platform/bin"
+    "LOCALBIN": "/home/agent/.cache/k8s-ai-platform/bin"
   },
   "customizations": {
     "vscode": {
@@ -38,11 +62,11 @@
         // The Makefile's pinned golangci-lint, so the editor and `make lint` read .golangci.yml
         // with the same version.
         "go.alternateTools": {
-          "golangci-lint-v2": "/root/.cache/k8s-ai-platform/bin/golangci-lint"
+          "golangci-lint-v2": "/home/agent/.cache/k8s-ai-platform/bin/golangci-lint"
         },
         // Go Annotations reads its Kubebuilder marker definitions from controller-gen. It looks in
         // bin/ by default, but here LOCALBIN is elsewhere; this is the Makefile's pinned one.
-        "goAnnotations.markers.controllerGenPath": "/root/.cache/k8s-ai-platform/bin/controller-gen",
+        "goAnnotations.markers.controllerGenPath": "/home/agent/.cache/k8s-ai-platform/bin/controller-gen",
         "gopls": {
           "ui.semanticTokens": true,
           // Same import grouping as the goimports settings in .golangci.yml and hack/format.sh.

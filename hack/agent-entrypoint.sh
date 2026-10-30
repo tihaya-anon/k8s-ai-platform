@@ -51,18 +51,29 @@ if [[ -d $repo/.git ]]; then
     git config --global --add safe.directory "$repo" 2>/dev/null || true
   fi
 
-  if [[ -w $repo/.git/config ]]; then
-    git -C "$repo" config user.name "${AGENT_GIT_USER_NAME:-AI Platform Agent}" 2>/dev/null || true
-    git -C "$repo" config user.email "${AGENT_GIT_USER_EMAIL:-agent@k8s-ai-platform.local}" 2>/dev/null || true
-  fi
+  # Write a repository config key only when it does not already carry the value we want.
+  #
+  # The test is on the outcome, not on write permission. .git/config is routinely not writable
+  # by this container -- the :ro targets mount the workspace read-only, and a devcontainer or
+  # any other root process that touched the checkout leaves .git/config owned by root while
+  # this process is the agent user -- yet in that case the value is usually already correct,
+  # because it was written from the host. Testing `-w` first reported a disarmed hook whenever
+  # the file was merely unwritable, including when the hook was in fact armed.
+  ensure_git_config() {
+    local key=$1 want=$2
+    [[ $(git -C "$repo" config --get "$key" 2>/dev/null) == "$want" ]] && return 0
+    git -C "$repo" config "$key" "$want" 2>/dev/null
+  }
 
-  if [[ -d $repo/hack/git-hooks ]]; then
-    if [[ -w $repo/.git/config ]] && git -C "$repo" config core.hooksPath hack/git-hooks 2>/dev/null; then
-      :
-    else
-      printf 'agent-entrypoint: could not set core.hooksPath (read-only mount?); ' >&2
-      printf 'the pre-commit hook is disarmed in this container.\n' >&2
-    fi
+  ensure_git_config user.name "${AGENT_GIT_USER_NAME:-AI Platform Agent}" || true
+  ensure_git_config user.email "${AGENT_GIT_USER_EMAIL:-agent@k8s-ai-platform.local}" || true
+
+  # Failing to arm the hook must never stop the command, so this only warns -- and only when the
+  # hook really is not armed.
+  if [[ -d $repo/hack/git-hooks ]] && ! ensure_git_config core.hooksPath hack/git-hooks; then
+    printf 'agent-entrypoint: core.hooksPath is not hack/git-hooks and .git/config could not be\n' >&2
+    printf '  written (read-only workspace, or a .git owned by another UID); the pre-commit hook\n' >&2
+    printf '  is disarmed in this container.\n' >&2
   fi
 fi
 
