@@ -50,8 +50,19 @@ type DatasetReconciler struct {
 // ensure interface implementation
 var _ reconcile.Reconciler = (*DatasetReconciler)(nil)
 
+// Condition type and reasons are part of the controller's status contract:
+// alerts, scripts, and tests match on these exact strings. Keeping them here
+// makes a rename a single edit and a typo a compile error.
+const (
+	conditionResolvedDataset = "Resolved"
+
+	reasonArtifactResolved    = "ArtifactResolved"
+	reasonArtifactEmpty       = "ArtifactEmpty"
+	reasonArtifactUnreachable = "ArtifactUnreachable"
+	reasonDriftDetected       = "DriftDetected"
+)
+
 const defaultResyncInterval = 10 * time.Minute
-const typeResolvedDataset = "Resolved"
 
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets,verbs=get;list;watch;create;update;patch;delete
@@ -74,7 +85,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	previousPhase := dset.Status.Phase
 
 	condition := metav1.Condition{
-		Type:               typeResolvedDataset,
+		Type:               conditionResolvedDataset,
 		ObservedGeneration: dset.Generation,
 	}
 
@@ -92,7 +103,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		log.Info("artifact resolution failed", "uri", *dset.Spec.Uri, "error", resolveErr)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "ArtifactUnreachable"
+		condition.Reason = reasonArtifactUnreachable
 		condition.Message = fmt.Sprintf("artifact store: %v", resolveErr)
 	case !usable:
 		log.Info("artifact is empty", "uri", *dset.Spec.Uri)
@@ -104,7 +115,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		dset.Status.LastResolvedTime = metav1.Now()
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "ArtifactEmpty"
+		condition.Reason = reasonArtifactEmpty
 		condition.Message = fmt.Sprintf("artifact at %s has no rows and cannot be used for training or evaluation", *dset.Spec.Uri)
 	default:
 		dset.Status.ObservedRows = &found.Rows
@@ -112,7 +123,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		dset.Status.LastResolvedTime = metav1.Now()
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseReady
 		condition.Status = metav1.ConditionTrue
-		condition.Reason = "ArtifactResolved"
+		condition.Reason = reasonArtifactResolved
 		condition.Message = fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri)
 	}
 
@@ -128,7 +139,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		log.Info("artifact fields drifted", "error", driftError)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "DriftDetected"
+		condition.Reason = reasonDriftDetected
 		condition.Message = driftError.Error()
 	}
 	apimeta.SetStatusCondition(&dset.Status.Conditions, condition)

@@ -33,6 +33,16 @@ import (
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 )
 
+var _ = Describe("Dataset condition vocabulary", func() {
+	It("keeps the strings external consumers match on", func() {
+		Expect(conditionResolvedDataset).To(Equal("Resolved"))
+		Expect(reasonArtifactResolved).To(Equal("ArtifactResolved"))
+		Expect(reasonArtifactEmpty).To(Equal("ArtifactEmpty"))
+		Expect(reasonArtifactUnreachable).To(Equal("ArtifactUnreachable"))
+		Expect(reasonDriftDetected).To(Equal("DriftDetected"))
+	})
+})
+
 var _ = Describe("Dataset Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -111,7 +121,7 @@ var _ = Describe("Dataset Controller", func() {
 			Expect(resolved.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
 			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(1)))
 			Expect(resolved.Status.LastResolvedTime.IsZero()).To(BeFalse())
-			Expect(apimeta.IsStatusConditionTrue(resolved.Status.Conditions, "Resolved")).To(BeTrue())
+			Expect(apimeta.IsStatusConditionTrue(resolved.Status.Conditions, conditionResolvedDataset)).To(BeTrue())
 		})
 
 		It("should go Failed when the artifact store cannot resolve the uri", func() {
@@ -130,9 +140,9 @@ var _ = Describe("Dataset Controller", func() {
 			failed := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, failed)).To(Succeed())
 			Expect(failed.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
-			condition := apimeta.FindStatusCondition(failed.Status.Conditions, "Resolved")
+			condition := apimeta.FindStatusCondition(failed.Status.Conditions, conditionResolvedDataset)
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Reason).To(Equal("ArtifactUnreachable"))
+			Expect(condition.Reason).To(Equal(reasonArtifactUnreachable))
 			Expect(condition.ObservedGeneration).To(Equal(failed.Generation))
 		})
 
@@ -156,14 +166,14 @@ var _ = Describe("Dataset Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, empty)).To(Succeed())
 			Expect(empty.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
 
-			condition := apimeta.FindStatusCondition(empty.Status.Conditions, "Resolved")
+			condition := apimeta.FindStatusCondition(empty.Status.Conditions, conditionResolvedDataset)
 			Expect(condition).NotTo(BeNil())
 			By("naming the artifact as the layer at fault, not the registrant's claim")
 			// Matched exactly, not as a substring: the claimed row count disagrees
 			// with an empty artifact too, so dropping the guard that skips drift
 			// detection on this branch turns the reason into DriftDetected and
 			// blames the registrant for a store that returned nothing.
-			Expect(condition.Reason).To(Equal("ArtifactEmpty"))
+			Expect(condition.Reason).To(Equal(reasonArtifactEmpty))
 
 			By("recording no row count, which Minimum=1 would have rejected")
 			Expect(empty.Status.ObservedRows).To(BeNil())
@@ -196,10 +206,10 @@ var _ = Describe("Dataset Controller", func() {
 			Expect(k8sClient.Get(ctx, typeNamespacedName, drifted)).To(Succeed())
 			Expect(drifted.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
 
-			condition := apimeta.FindStatusCondition(drifted.Status.Conditions, "Resolved")
+			condition := apimeta.FindStatusCondition(drifted.Status.Conditions, conditionResolvedDataset)
 			Expect(condition).NotTo(BeNil())
 			By("naming the claim as the layer at fault, not the store that answered")
-			Expect(condition.Reason).To(Equal("DriftDetected"))
+			Expect(condition.Reason).To(Equal(reasonDriftDetected))
 			Expect(condition.ObservedGeneration).To(Equal(drifted.Generation))
 
 			// The whole clause, not just the field path: a message that printed the
@@ -243,9 +253,9 @@ var _ = Describe("Dataset Controller", func() {
 			rewritten := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, rewritten)).To(Succeed())
 			Expect(rewritten.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseFailed))
-			condition := apimeta.FindStatusCondition(rewritten.Status.Conditions, "Resolved")
+			condition := apimeta.FindStatusCondition(rewritten.Status.Conditions, conditionResolvedDataset)
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Reason).To(Equal("DriftDetected"))
+			Expect(condition.Reason).To(Equal(reasonDriftDetected))
 
 			// generation moves on a spec write and never on a status write, so an
 			// unchanged generation is the proof that the world moved, not the user.
