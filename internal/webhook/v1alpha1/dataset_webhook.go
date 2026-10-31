@@ -127,7 +127,8 @@ func (v *DatasetCustomValidator) warnOnDuplicateURI(ctx context.Context, dataset
 		return nil
 	}
 
-	var agreeing, conflicting []string
+	agreeing := make([]string, 0, len(siblings.Items))
+	conflicting := make([]string, 0, len(siblings.Items))
 	for i := range siblings.Items {
 		sibling := &siblings.Items[i]
 		if sibling.Name == dataset.Name || !ptr.Equal(sibling.Spec.Uri, dataset.Spec.Uri) {
