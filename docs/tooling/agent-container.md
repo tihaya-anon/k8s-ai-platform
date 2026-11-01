@@ -90,8 +90,17 @@ costs follow from the change and are paid in `post-install.sh`: its installs go 
 it chowns the directories Docker created for the mounts — including `$HOME/.cache`, which is both
 the tools volume's parent and where `GOCACHE` lands.
 
+Git pushes in the devcontainer use the host's identity rather than a key copied into the image:
+`.devcontainer/devcontainer.json` mounts `~/.ssh` and `~/.gitconfig` read-only at the same paths.
+The bind keeps the key's `0600` mode and host uid, which `updateRemoteUserUID` already matches, so
+`ssh` accepts it and `git push` authenticates exactly as it does on the host. The mount is read-only
+on purpose: the container borrows the identity, it cannot rotate the keys or rewrite the host's
+config. Mount changes only reach a container created after the edit, so reopen or rebuild the
+devcontainer if a running session still cannot push.
+
 The agent container below is a separate, stronger sandbox for running AI CLIs. Keep both available:
-the devcontainer is the ordinary development environment, while `agent.Dockerfile` is opt-in.
+the devcontainer is the ordinary development environment, while `agent.Dockerfile` is opt-in. The
+agent container deliberately does not inherit these mounts.
 
 ## Boundary
 

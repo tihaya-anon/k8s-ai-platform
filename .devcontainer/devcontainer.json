@@ -62,6 +62,16 @@
     // the kind API server is exposed on the host's 127.0.0.1, which --network=host shares, so the
     // same kubeconfig works from the container and the host.
     "source=${localEnv:HOME}/.kube/config,target=/home/agent/.kube/config,type=bind",
+    // git push over SSH reads the host's key through ~/.ssh/config (the remote is
+    // git@github.com). Read-only: the container borrows the host's git identity, it does not own
+    // it, and a session here must not be able to rotate the keys. A bind mount keeps the host's
+    // 0600 mode and uid, which is the identity updateRemoteUserUID already gives `agent`, so ssh's
+    // permission checks pass. This is the devcontainer, not the agent sandbox: the latter still
+    // gets no host keys unless --creds says so.
+    "source=${localEnv:HOME}/.ssh,target=/home/agent/.ssh,type=bind,readonly",
+    // Commit identity and credential helpers. Read-only for the same reason; `git config
+    // --global` belongs on the host, not in a container whose ~/.gitconfig disappears with it.
+    "source=${localEnv:HOME}/.gitconfig,target=/home/agent/.gitconfig,type=bind,readonly",
     // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
     // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
     // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.

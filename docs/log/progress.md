@@ -877,7 +877,7 @@ Worth recording from that exercise: the first attempt at the event mutation was 
 does not compile, because `previousPhase` goes unused. A mutation that fails to build proves nothing
 about the suite, and reads exactly like a mutation the suite failed to catch.
 
-### 1.2 TrainingJob on Kueue — YYYY-MM-DD
+### 1.2 TrainingJob on Kueue — 2026-11-01
 
 **Learn — what I saw:** driving Kueue by hand per
 [1.2-Kueue-and-jobs.md](../curriculum/1.2-kueue-and-jobs.md). Record the `Workload` conditions in
