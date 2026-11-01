@@ -401,3 +401,9 @@ WORKDIR /workspace/k8s-ai-platform
 ENTRYPOINT ["/usr/local/bin/agent-entrypoint"]
 # A login shell, so ~/.zprofile sets EDITOR and PATH exactly as a host terminal does.
 CMD ["/bin/zsh", "-l"]
+
+# The commit this image was built from. `hack/agent.sh sync` reads it back from the registry
+# manifest to decide whether latest may move, without pulling the image. Declared last so a new
+# commit invalidates one metadata layer instead of the layers above it.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}"

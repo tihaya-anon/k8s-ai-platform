@@ -13,7 +13,8 @@ model-provider credentials into the image.
 Quick start from the repository root:
 
 ```bash
-hack/agent.sh image      # build the agent image
+hack/agent.sh image      # build the agent image locally
+hack/agent.sh sync       # pull or build, then push so local and Docker Hub agree
 hack/agent.sh shell      # open a write-capable repo-scoped shell
 hack/agent.sh review     # open a read-only review shell
 ```
@@ -203,6 +204,34 @@ them -- and `opencode` adds its own 230MB binary, `@opencode/cli-linux-*`. That 
 the image and the build time. Keeping all four agent CLIs is deliberate: the image is a
 general-purpose agent sandbox, not a Claude-specific one. The npm cache is a BuildKit cache mount,
 so an interrupted build resumes rather than starting the download again.
+
+## Sync the published image
+
+`hack/agent.sh sync` keeps the local image and the Docker Hub copy aligned for the current commit.
+The commit sha is the tag on both sides, so "does this commit have an image?" is a tag lookup rather
+than an image comparison:
+
+```bash
+hack/agent.sh sync
+```
+
+- If the registry already has `<repo>:<sha>` and the local image is missing, sync pulls it.
+- If neither side has the tag, sync builds from this checkout.
+- If the local image exists and the registry lacks the tag, sync pushes it.
+- `latest` moves only when git history says `HEAD` is at or ahead of the commit `latest` points at.
+  Every image records that commit in the `org.opencontainers.image.revision` label, so sync reads it
+  from the remote manifest without pulling three gigabytes. A `latest` newer than this checkout is
+  left alone, and the local `latest` stays on this checkout's image so `shell` cannot run newer code
+  against an older mount; a `latest` that cannot be compared is left alone too, and `--force-latest`
+  overrides that guard.
+
+The tag is the commit, so commit the build-input changes first: a dirty tree still syncs the image
+for `HEAD`, not the one the working tree would build. An image published before the revision label
+existed cannot be ordered against `HEAD`, so the first sync that crosses one asks for
+`--force-latest` once. The repository is `chihayaanon0908/k8s-ai-platform-agent` by default;
+override it with `AGENT_IMAGE_REMOTE_REPOSITORY=<account>/<repository>`. Sync uses Docker's
+credential store, so run `docker login` once. `hack/agent.sh image` stays local and works offline;
+`sync` is the only command that talks to a registry.
 
 To fill only the Go module cache used by the container:
 
