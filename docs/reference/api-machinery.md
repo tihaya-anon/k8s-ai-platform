@@ -20,6 +20,7 @@ the `namespaces/<ns>` segment when the resource is cluster-scoped.
 
 ```bash
 kubectl api-resources                      # every resource, its group, and whether it is namespaced
+                                           # k9s: ctrl-a shows the same list as a pane
 kubectl api-versions                       # every group/version served
 kubectl explain dataset.spec --recursive   # the schema, served from the CRD itself
 kubectl get deployments -v=8 2>&1 | grep GET   # the URL kubectl actually asked for

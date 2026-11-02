@@ -23,13 +23,64 @@ no identity of its own: every request it makes is yours, under your RBAC.
 k9s
 ```
 
-Useful once inside: `:` opens the resource prompt, and it accepts custom resources by name, so
-`:datasets` lists this repository's own kind the same way `:pods` lists Pods. `?` lists the keys,
-`l` tails logs, `y` shows the YAML, `e` edits, `:events` is often the fastest answer to "why is this
-not starting".
+`:` opens the resource prompt and accepts anything the API server serves, custom resources included,
+so `:datasets` lists this repository's own kind the same way `:pods` lists Pods. `ctrl-a` lists
+every name the prompt will accept, which is `kubectl api-resources` in a pane.
 
 It is baked into `.devcontainer/Dockerfile` at a pin, alongside `kubectl`, `kind` and `helm`. Moving
 the version is a `K9S_VERSION` bump and a rebuild — see [agent-container.md](agent-container.md).
+
+### Keys
+
+Taken from the pinned v0.51.0. `?` prints the live list, which is the one to trust after a bump.
+
+| Key            | Does                                                      |
+| -------------- | --------------------------------------------------------- |
+| `d` / `y`      | describe / YAML of the selected row                       |
+| `l` / `p`      | logs / the previous container's logs                      |
+| `enter`        | drill in — a Deployment's Pods, a Pod's containers        |
+| `shift-j`      | jump to the owner, following one `ownerReference` hop     |
+| `shift-f`      | start a port-forward; `f` lists the ones already running  |
+| `e` / `ctrl-d` | edit / delete                                             |
+| `s`            | shell into a container, or scale a Deployment             |
+| `/`            | filter the current view; `0` widens it to every namespace |
+| `esc` / `q`    | back                                                      |
+
+`shift-j` is the one worth learning first. **Every child object carries an `ownerReference`** is a
+convention this platform holds itself to, and that key checks it without reading any YAML.
+
+### The same question, in each tool
+
+| Asking                 | kubectl                                                         | k9s                        |
+| ---------------------- | --------------------------------------------------------------- | -------------------------- |
+| what exists            | `kubectl get <resource>`                                        | `:<resource>`              |
+| …everywhere            | `kubectl get <resource> -A`                                     | `:<resource>` then `0`     |
+| …in one namespace      | `kubectl get <resource> -n <ns>`                                | `:<resource> <ns>`         |
+| why is it unhappy      | `kubectl describe <resource> <name>`                            | `:<resource>`, select, `d` |
+| the whole object       | `kubectl get <resource> <name> -o yaml`                         | `:<resource>`, select, `y` |
+| what did it print      | `kubectl logs -f <pod>`                                         | `:pods`, select, `l`       |
+| …before it crashed     | `kubectl logs -p <pod>`                                         | `:pods`, select, `p`       |
+| get me a shell         | `kubectl exec -it <pod> -- sh`                                  | `:pods`, select, `s`       |
+| reach it from the host | `kubectl port-forward <pod> 8080:8080`                          | `:pods`, select, `shift-f` |
+| what just happened     | `kubectl get events --sort-by=...`                              | `:events`                  |
+| what kinds are served  | `kubectl api-resources`                                         | `ctrl-a`                   |
+| who owns this object   | `kubectl get <r> <n> -o jsonpath='{.metadata.ownerReferences}'` | select, `shift-j`          |
+
+### What it will not do
+
+k9s reads and edits live objects. It has no answer for the commands that ask the API server
+something other than "what do you have", and those keep their `kubectl` form throughout the
+curriculum:
+
+- **Applying a manifest.** `e` edits an object that already exists; `kubectl apply -f` creates one
+  from a file. Nothing in k9s replaces it.
+- **Extracting a field.** There is no `-o jsonpath` or `-o custom-columns`; `y` gives you the whole
+  object and you read it.
+- **The wire.** `-v=8`, `--raw` and `kubectl explain` exist to show the HTTP request, the raw
+  response and the schema. k9s is the thing that hides all three.
+- **Asking about yourself.** `kubectl auth whoami` and `auth can-i` have no equivalent.
+- **Blocking in a script.** `kubectl wait` is what `hack/set-up-cluster.sh` uses; a TUI cannot be a
+  step in a script.
 
 ## Headlamp
 

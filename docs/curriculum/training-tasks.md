@@ -498,8 +498,8 @@ samples, watch it come up, then split traffic between two revisions and watch wh
 back into its own status. Read which fields you set and which fields KServe owns:
 
 ```bash
-kubectl get inferenceservice -A
-kubectl get inferenceservice <name> -o yaml   # note status.components and the traffic fields
+kubectl get inferenceservice -A                     # k9s: :inferenceservices, then 0
+kubectl get inferenceservice <name> -o yaml         # status.components and traffic fields; k9s: y
 kubectl get revision,service.serving.knative.dev -A
 ```
 
@@ -538,7 +538,7 @@ rejects invalid values before reconcile.
 make the plumbing visible:
 
 ```bash
-kubectl get certificate -A                     # what cert-manager issues for your manager
+kubectl get certificate -A                     # cert-manager's output; k9s: :certificates, 0
 kubectl get validatingwebhookconfiguration -o yaml | grep -A3 caBundle
 kubectl get secret -n <manager-ns> -o name | grep cert
 ```
@@ -605,9 +605,9 @@ this task.
 **Learn:** 1.2 created one queue. Here you read what a two-team setup looks like before building it:
 
 ```bash
-kubectl get clusterqueue -o yaml      # nominalQuota, borrowingLimit, cohort, preemption
-kubectl get resourceflavor -o yaml
-kubectl describe clusterqueue <name>  # admitted vs pending workloads
+kubectl get clusterqueue -o yaml      # nominalQuota, borrowingLimit, cohort; k9s: :clusterqueues, y
+kubectl get resourceflavor -o yaml    # k9s: :resourceflavors, then y
+kubectl describe clusterqueue <name>  # admitted vs pending; k9s: select, then d
 ```
 
 Say out loud what happens to a workload in queue A when queue B is idle, and what happens to it when
@@ -643,9 +643,9 @@ order.
 own:
 
 ```bash
-kubectl port-forward -n <manager-ns> deploy/<manager> 8080:8080
+kubectl port-forward -n <manager-ns> deploy/<manager> 8080:8080    # k9s: :deploy, select, shift-f
 curl -s localhost:8080/metrics | grep controller_runtime_reconcile
-kubectl get events --sort-by=.lastTimestamp -A | tail -20
+kubectl get events --sort-by=.lastTimestamp -A | tail -20          # k9s: :events, then 0
 ```
 
 `controller_runtime_reconcile_errors_total` and `..._time_seconds` come free from
@@ -781,7 +781,7 @@ anything. Note what makes an e2e test slow and what makes it flaky — they are 
 
 ```bash
 kubectl get node -o jsonpath='{.items[0].status.allocatable}' | tr ',' '\n'
-kubectl describe node | grep -A5 Allocatable
+kubectl describe node | grep -A5 Allocatable  # k9s: :nodes, select, then d
 ```
 
 Extended resources are just named counters the kubelet advertises. Once that lands, a fake device

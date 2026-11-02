@@ -54,6 +54,11 @@ kubectl get deploy -n kube-system coredns -o jsonpath='{.metadata.generation} {.
 kubectl get replicaset -n kube-system -o custom-columns=NAME:.metadata.name,OWNER:.metadata.ownerReferences[0].name
 ```
 
+k9s walks that second relationship instead of printing it: `:replicasets`, select a row, `shift-j`
+jumps to the Deployment that owns it. One hop per press, so a chain of owners is a chain of presses
+— which is the fastest way to confirm that a controller you wrote set the reference it was supposed
+to set.
+
 ## What happens to a write
 
 Every `create`, `update`, or `patch` runs this gauntlet inside the API server before anything is
@@ -109,7 +114,7 @@ server serves the full verb set at the new path, with the same watch semantics, 
 `/status` subresource. Nothing in [api-machinery.md](api-machinery.md) changes.
 
 ```bash
-kubectl get crd                         # every extension installed in this cluster
+kubectl get crd                         # every extension installed in this cluster; k9s: :crds
 kubectl get crd datasets.aiplatform.io -o jsonpath='{.spec.versions[*].name}{"\n"}'
 kubectl api-resources --api-group=aiplatform.io
 ```

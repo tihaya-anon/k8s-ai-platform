@@ -39,8 +39,32 @@ alias alert='notify-send --urgency=low -i "$([ $? = 0 ] && echo terminal || echo
 
 [[ -r ~/.zsh_aliases ]] && source ~/.zsh_aliases
 
+# Completions that a tool generates rather than ships. k9s is a Cobra program: `k9s completion
+# zsh` prints an fpath function, so nothing is vendored here -- a tracked copy would be a
+# generated file that silently disagrees with the pinned binary after a version bump.
+#
+# Written to a cache directory and regenerated only when it is missing or older than the binary,
+# rather than `eval "$(k9s completion zsh)"` at every start: that costs a process per shell, and
+# an fpath file lets compinit's own dump do the caching. This is also why it lives here and not
+# in .devcontainer/Dockerfile -- the same file is the host's .zshrc, and baking the completion
+# into the image alone would leave the host without it. The command guard is the same shape as
+# zoxide's and starship's below, so a machine without k9s simply skips it.
+#
+# Add another Cobra tool -- kubectl, helm, kind -- by naming it in the array.
+zsh_completions="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions"
+mkdir -p "$zsh_completions"
+for completion_tool in k9s; do
+    (( $+commands[$completion_tool] )) || continue
+    if [[ ! -s "$zsh_completions/_$completion_tool" ]] ||
+        [[ ${commands[$completion_tool]} -nt "$zsh_completions/_$completion_tool" ]]; then
+        $completion_tool completion zsh >| "$zsh_completions/_$completion_tool"
+    fi
+done
+unset completion_tool
+
 # Completion: menu selection, case-insensitive matching, colors from LS_COLORS.
-fpath=(/home/linuxbrew/.linuxbrew/share/zsh/site-functions(N-/) $fpath)
+fpath=("$zsh_completions" /home/linuxbrew/.linuxbrew/share/zsh/site-functions(N-/) $fpath)
+unset zsh_completions
 zmodload zsh/complist
 autoload -Uz compinit
 mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
