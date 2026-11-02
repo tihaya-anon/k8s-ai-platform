@@ -129,7 +129,19 @@
           "zsh": { "path": "/bin/zsh", "args": ["-l"] }
         },
         "terminal.integrated.defaultProfile.linux": "zsh",
+        // The Go tools are pinned in .devcontainer/Dockerfile and built into the image, so the
+        // editor must neither replace them nor nag about replacing them. autoUpdate stops the
+        // silent `go install`; checkForUpdates stops the prompt, which is not merely noise here:
+        // gopls is held at v0.21.1 because that is the last release whose go.mod builds on this
+        // repository's Go 1.25 -- v0.22 needs 1.26 and v0.24 needs 1.27 -- so the offered upgrade
+        // cannot compile. Worse if it could: the extension installs into /go/bin, which precedes
+        // /usr/local/bin on the golang image's PATH, so the new binary would shadow the pinned one
+        // until the next Rebuild silently dropped it again.
+        //
+        // Turn checkForUpdates back on when the toolchain moves past Go 1.26; raising
+        // GOPLS_VERSION belongs to that upgrade, not to a popup.
         "go.toolsManagement.autoUpdate": false,
+        "go.toolsManagement.checkForUpdates": "off",
         "go.lintTool": "golangci-lint-v2",
         "go.lintOnSave": "package",
         // The Makefile's pinned golangci-lint, so the editor and `make lint` read .golangci.yml
