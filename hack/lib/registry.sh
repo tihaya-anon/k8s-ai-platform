@@ -22,6 +22,18 @@
 #
 #   build_image         build "$image_repo:$(current_git_sha)" and "$image_repo:latest"
 
+# This file is sourced, so it has no shebang to tell shellcheck which shell to assume; the
+# directive does it instead. bash rather than sh: the code below uses arrays, `local` and
+# arithmetic conditions.
+#
+# SC2154 is off for the whole file rather than at each use. Every variable it flags is one of the
+# caller-set names listed above -- that is the contract, not an oversight, and six inline pragmas
+# would say the same thing six times while hiding the one place it matters. The cost is that a
+# genuine typo in a variable name goes unreported here, so a new caller-set variable belongs in
+# the list above where a reader can check it.
+# shellcheck shell=bash
+# shellcheck disable=SC2154
+
 die() {
   printf '%s: %s\n' "$prog" "$1" >&2
   exit 1

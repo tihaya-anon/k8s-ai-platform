@@ -29,7 +29,26 @@ for f in "${staged[@]}"; do
   *.md | *.json | *.jsonc | *.yaml | *.yml | *.go) targets+=("$f") ;;
   esac
 done
-[[ ${#targets[@]} -eq 0 ]] && exit 0
+# Shell scripts are a lint target, not a format target, so they are collected from `staged`
+# rather than added to `targets`: shellcheck has no --fix, and format.sh only ever rewrites files.
+# Detected by shebang as well as by extension, because hack/git-hooks/* and hack/agent-bin/* carry
+# no .sh suffix. The pattern does not match zsh -- there is no word boundary before the `sh` in
+# `zsh` -- and that is deliberate: shellcheck has no zsh mode at all and reports zsh's own glob
+# qualifiers as syntax errors.
+shell=()
+for f in "${staged[@]}"; do
+  case $f in
+  *.sh) shell+=("$f") ;;
+  *)
+    if head -n1 -- "$f" 2>/dev/null |
+      grep -qE '^#!.*(/|[[:space:]])(ba)?sh([[:space:]]|$)'; then
+      shell+=("$f")
+    fi
+    ;;
+  esac
+done
+
+[[ ${#targets[@]} -eq 0 && ${#shell[@]} -eq 0 ]] && exit 0
 
 # Partially staged files would have their unstaged hunks swept into the commit if
 # we reformatted the worktree copy and blindly restaged it. Warn and leave them.
@@ -38,7 +57,9 @@ for f in "${targets[@]}"; do
   if ! git diff --quiet -- "$f"; then partial+=("$f"); fi
 done
 
-./hack/format.sh "${targets[@]}"
+if [[ ${#targets[@]} -gt 0 ]]; then
+  ./hack/format.sh "${targets[@]}"
+fi
 
 for f in "${targets[@]}"; do
   skip=0
@@ -61,6 +82,17 @@ if [[ ${#md[@]} -gt 0 ]]; then
   else
     printf 'pre-commit: markdownlint-cli2 not installed; skipping the markdown gate.\n'
     printf '            npm install -g markdownlint-cli2\n'
+  fi
+fi
+
+if [[ ${#shell[@]} -gt 0 ]]; then
+  if have shellcheck; then
+    # -x, so a script that sources hack/lib/registry.sh is checked against the real file instead
+    # of being reported as an unfollowed source. Same invocation the VS Code extension makes.
+    shellcheck -x -- "${shell[@]}" || rc=1
+  else
+    printf 'pre-commit: shellcheck not installed; skipping the shell gate.\n'
+    printf '            it is in both container images; on the host, apt install shellcheck\n'
   fi
 fi
 

@@ -36,6 +36,7 @@ RUN for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
         make \
         procps \
         ripgrep \
+        shellcheck \
         tree \
         zsh \
         fd-find \

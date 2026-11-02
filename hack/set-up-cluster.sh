@@ -39,7 +39,11 @@ readonly HEADLAMP_CHART_REPO="https://kubernetes-sigs.github.io/headlamp/"
 readonly PROMETHEUS_COMMUNITY_CHART_REPO="https://prometheus-community.github.io/helm-charts"
 
 readonly WAIT_TIMEOUT="300s"
-readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Assigned and marked readonly separately: `readonly x="$(cmd)"` takes the exit status of
+# `readonly`, not of the subshell, so a failing `cd` here would leave REPO_ROOT empty under
+# `set -e` instead of stopping the script (SC2155).
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
 readonly HELM_CACHE_DIR="${HELM_CACHE_DIR:-$REPO_ROOT/.cache/helm}"
 
 log() {

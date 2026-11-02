@@ -108,6 +108,13 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
   file therefore names the key it is about and never its position: "see the mount below" is a
   comment that the next format run can make wrong. The plugin and Prettier itself are pinned in
   `package.json`; `npm ci` restores them, and `hack/format.sh` refuses to run without them.
+- **shellcheck owns shell scripts**, and it is a gate rather than a formatter: it has no `--fix`, so
+  it lives in `hack/git-hooks/pre-commit` next to the markdownlint and `gofmt -l` checks, not in
+  `hack/format.sh`. The hook picks up `*.sh` plus any staged file whose shebang names `sh` or
+  `bash`, and runs it with `-x` so a sourced `hack/lib/registry.sh` is followed. zsh files are
+  deliberately out of scope -- shellcheck has no zsh mode and reports zsh's glob qualifiers as
+  syntax errors -- which is also why `devcontainer.json` sets `shellcheck.ignorePatterns` for the
+  dotfiles in `hack/agent-home/`.
 - Once the Kubebuilder project exists, run the local gate before calling a change done:
   `make fmt vet test`.
 
