@@ -1,0 +1,4 @@
+# shellcheck source=... is written relative to the sourcing script, so resolve it that way
+# rather than from whatever directory shellcheck happened to be invoked in: the pre-commit hook
+# runs from the repo root, the VS Code extension runs from the file's own directory.
+source-path=SCRIPTDIR

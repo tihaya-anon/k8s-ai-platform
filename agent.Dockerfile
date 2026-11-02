@@ -36,7 +36,6 @@ RUN for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
         make \
         procps \
         ripgrep \
-        shellcheck \
         tree \
         zsh \
         fd-find \
@@ -55,6 +54,9 @@ FROM base AS editor-tools
 # container behaves like a session outside it rather than like a slightly different editor.
 ARG NVIM_VERSION=0.12.6
 ARG STARSHIP_VERSION=1.25.0
+# The pre-commit hook's shell gate runs in this container too, and must reach the same verdict it
+# reaches in the devcontainer -- so the same pin, not whatever bookworm's apt has (0.9.0).
+ARG SHELLCHECK_VERSION=v0.11.0
 # Neither zsh plugin cuts releases often enough to track the host's clones, so pin the commits the
 # host installer checked out. Debian's packages would be older than the host and drift silently.
 ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
@@ -112,9 +114,20 @@ RUN set -eu; \
       tar -C "/opt/zsh-plugins/${name}" --strip-components=1 -xzf "/tmp/${name}.tar.gz"; \
       test -r "/opt/zsh-plugins/${name}/${name}.zsh"; \
     done; \
-    rm -rf /tmp/nvim.tar.gz /tmp/starship.tar.gz /tmp/zsh-*.tar.gz; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) sc_arch=x86_64 ;; \
+      arm64) sc_arch=aarch64 ;; \
+    esac; \
+    curl $curl_opts -fsSL \
+      "${GITHUB_MIRROR}/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.${sc_arch}.tar.xz" \
+      -o /tmp/shellcheck.tar.xz; \
+    tar -C /tmp -xJf /tmp/shellcheck.tar.xz; \
+    mv "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck; \
+    rm -rf /tmp/nvim.tar.gz /tmp/starship.tar.gz /tmp/zsh-*.tar.gz \
+      /tmp/shellcheck.tar.xz "/tmp/shellcheck-${SHELLCHECK_VERSION}"; \
     nvim --version | head -1; \
-    starship --version | head -1
+    starship --version | head -1; \
+    shellcheck --version | grep version:
 
 FROM base AS agent-cli
 
@@ -311,6 +324,7 @@ COPY --from=agent-cli /opt/agent-cli /opt/agent-cli
 COPY --from=agent-cli /opt/opencode /opt/opencode
 COPY --from=editor-tools /opt/nvim /opt/nvim
 COPY --from=editor-tools /usr/local/bin/starship /usr/local/bin/starship
+COPY --from=editor-tools /usr/local/bin/shellcheck /usr/local/bin/shellcheck
 COPY --from=go-tools /opt/go-tools/bin/goimports /usr/local/bin/goimports
 RUN set -eu; \
     ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim; \

@@ -111,10 +111,12 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - **shellcheck owns shell scripts**, and it is a gate rather than a formatter: it has no `--fix`, so
   it lives in `hack/git-hooks/pre-commit` next to the markdownlint and `gofmt -l` checks, not in
   `hack/format.sh`. The hook picks up `*.sh` plus any staged file whose shebang names `sh` or
-  `bash`, and runs it with `-x` so a sourced `hack/lib/registry.sh` is followed. zsh files are
-  deliberately out of scope -- shellcheck has no zsh mode and reports zsh's glob qualifiers as
-  syntax errors -- which is also why `devcontainer.json` sets `shellcheck.ignorePatterns` for the
-  dotfiles in `hack/agent-home/`.
+  `bash`, and runs it with `-x` so a sourced `hack/lib/registry.sh` is followed. `.shellcheckrc`
+  sets `source-path=SCRIPTDIR` so that `# shellcheck source=` resolves against the sourcing script
+  rather than the working directory, which is what lets the hook (run from the repo root) and the
+  editor (run from the file's own directory) agree. zsh files are deliberately out of scope --
+  shellcheck has no zsh mode and reports zsh's glob qualifiers as syntax errors -- which is also why
+  `devcontainer.json` sets `shellcheck.ignorePatterns` for the dotfiles in `hack/agent-home/`.
 - Once the Kubebuilder project exists, run the local gate before calling a change done:
   `make fmt vet test`.
 
@@ -134,6 +136,7 @@ docs/reference/       Kubernetes background: components, API machinery, objects,
 docs/tooling/         agent-container.md, dashboards.md
 .markdownlint.json
 .prettierrc
+.shellcheckrc         source-path for the `# shellcheck source=` directives
 .prettierignore
 package.json          formatter toolchain pins; nothing here ships
 package-lock.json

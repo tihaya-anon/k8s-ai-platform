@@ -19,7 +19,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 1
 
 prog=devcontainer.sh
-# shellcheck source=hack/lib/registry.sh
+# shellcheck source=lib/registry.sh
 source "$repo_root/hack/lib/registry.sh"
 
 # Must match the "image" field in .devcontainer/devcontainer.json; check_json_image enforces that

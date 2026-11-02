@@ -84,7 +84,12 @@
         // -x, so a script that sources hack/lib/registry.sh is checked against the real file
         // rather than reported as an unfollowed source. Matches how the pre-commit hook runs it.
         "shellcheck.customArgs": ["-x"],
-        // The apt shellcheck from .devcontainer/Dockerfile, not the one the extension bundles:
+        // Workspace root as the working directory, so `# shellcheck source=` directives and
+        // .shellcheckrc resolve the way they do for the pre-commit hook, which runs from there.
+        // Left at its default the extension uses the edited file's own directory, and
+        // hack/agent.sh's `source=lib/registry.sh` then resolves against hack/ twice over.
+        "shellcheck.useWorkspaceRootAsCwd": true,
+        // The pinned shellcheck from .devcontainer/Dockerfile, not the one the extension bundles:
         // the hook gates on the former, and an editor that disagrees with the gate about what
         // passes is worse than no editor check. Same reasoning as go.alternateTools above.
         //
@@ -93,7 +98,7 @@
         // verbatim with no fallback, so a container built from an image without the apt package
         // gets no linting at all rather than degraded linting. That is the ordering rule for a
         // Rebuild: `hack/devcontainer.sh image` first, then Rebuild Container.
-        "shellcheck.executablePath": "/usr/bin/shellcheck",
+        "shellcheck.executablePath": "/usr/local/bin/shellcheck",
         "gopls": {
           "ui.semanticTokens": true,
           // Same import grouping as the goimports settings in .golangci.yml and hack/format.sh.

@@ -16,7 +16,7 @@ cd "$repo_root" || exit 1
 # the Dockerfile and its build arguments are this script's own. $prog is the prefix the library
 # puts on its messages, so it has to be set before the source.
 prog=agent.sh
-# shellcheck source=hack/lib/registry.sh
+# shellcheck source=lib/registry.sh
 source "$repo_root/hack/lib/registry.sh"
 
 image_repo=${AGENT_IMAGE_REPOSITORY:-k8s-ai-platform-agent}

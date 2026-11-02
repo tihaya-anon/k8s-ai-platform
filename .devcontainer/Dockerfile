@@ -102,9 +102,29 @@ ARG http_proxy
 ARG https_proxy
 ARG no_proxy
 ARG TARGETARCH
+
+# shellcheck publishes only .tar.xz, and `tar -J` shells out to xz, which the golang base does not
+# have. Installed here rather than taken from the final stage's list, because a download stage has
+# to stand on its own -- which also means repeating the mirror rewrite: that one lives in the final
+# stage and this image's sources are still pointed at deb.debian.org at this point.
+ARG APT_MIRROR=mirrors.aliyun.com
+RUN set -eu; \
+    export DEBIAN_FRONTEND=noninteractive; \
+    for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+        if [ -f "$f" ]; then sed -i "s|deb.debian.org|${APT_MIRROR}|g" "$f"; fi; \
+    done; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends xz-utils \
+    && rm -rf /var/lib/apt/lists/*
 ARG GITHUB_MIRROR=https://github.com
 ARG K9S_VERSION=v0.51.0
 ARG STARSHIP_VERSION=1.25.0
+# Downloaded rather than apt-installed: bookworm ships 0.9.0, and the VS Code extension nags that
+# it wants 0.11.0 or newer. The pin matters beyond the nag -- devcontainer.json points the
+# extension at this binary and the pre-commit hook runs the same one, so the editor and the gate
+# cannot disagree about what passes, and that is only true if the version is fixed here.
+# agent.Dockerfile pins the same version for the same reason.
+ARG SHELLCHECK_VERSION=v0.11.0
 ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
 ARG ZSH_SYNTAX_HIGHLIGHTING_COMMIT=e6683f20e5c38d3e5447f45845d04ddda75d0f23
 RUN set -eu; \
@@ -122,6 +142,15 @@ RUN set -eu; \
     curl $curl_opts -fsSL \
         "${GITHUB_MIRROR}/starship/starship/releases/download/v${STARSHIP_VERSION}/starship-${star_arch}.tar.gz" \
         | tar -C /opt/shell-tools/bin -xz starship; \
+    case "$arch" in \
+      amd64) sc_arch=x86_64 ;; \
+      arm64) sc_arch=aarch64 ;; \
+    esac; \
+    curl $curl_opts -fsSL \
+        "${GITHUB_MIRROR}/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.${sc_arch}.tar.xz" \
+        | tar -C /tmp -xJ; \
+    mv "/tmp/shellcheck-${SHELLCHECK_VERSION}/shellcheck" /opt/shell-tools/bin/shellcheck; \
+    rm -rf "/tmp/shellcheck-${SHELLCHECK_VERSION}"; \
     for plugin in "zsh-autosuggestions:${ZSH_AUTOSUGGESTIONS_COMMIT}" \
                   "zsh-syntax-highlighting:${ZSH_SYNTAX_HIGHLIGHTING_COMMIT}"; do \
       name="${plugin%%:*}"; commit="${plugin#*:}"; \
@@ -147,10 +176,7 @@ ARG no_proxy
 # apt, in one invocation, and deliberately a long list.
 #
 # The first group is this image's own: zsh and the small tools the golang image does not ship
-# (git, curl and make are already in the base). shellcheck is in that group because the pre-commit
-# hook gates on it -- and because devcontainer.json points the VS Code extension at this binary
-# rather than the one the extension bundles, so the editor and the hook cannot disagree about what
-# passes. Everything after it is the package set
+# (git, curl and make are already in the base). Everything after it is the package set
 # ghcr.io/devcontainers/features/common-utils installs, which is the real reason this layer is
 # big. That feature's install.sh builds a missing_package_list with dpkg-query and skips its apt
 # block when nothing is missing, so pre-installing the set here is what keeps a Rebuild from
@@ -184,7 +210,6 @@ RUN set -eu; \
     && apt-get install -y --no-install-recommends \
         fd-find \
         ripgrep \
-        shellcheck \
         zsh \
         apt-transport-https \
         apt-utils \
