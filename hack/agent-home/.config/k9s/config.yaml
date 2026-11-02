@@ -1,0 +1,24 @@
+# k9s UI settings, shared by this WSL host and the devcontainer, the same way
+# hack/agent-home/.config/starship.toml is.
+#
+# k9s does not look at the terminal's background. It opens with its dark stock skin whatever the
+# terminal is -- there is no OSC query and no COLORFGBG read in it, and termenv is only an
+# indirect dependency through lipgloss -- so the choice has to be written down somewhere, which is
+# what this file is.
+#
+# Two ways to get a light UI, and this is the one that needs no extra files: `invert` flips the
+# stock skin's colors (Oklch lightness inversion), keeping the relationships between them. The
+# other is `ui.skin`, which names a YAML under skins/ in this directory; k9s does not ship those
+# in the binary, so that route means vendoring a skin from its repository and is only worth it for
+# a palette the inversion cannot produce.
+#
+# Flip this to true on a light terminal. `k9s --invert` is the same switch for one session and
+# wins over this file, so try it before editing anything.
+#
+# Only `k9s` is required by k9s's own schema, so everything left out here keeps its default. k9s
+# writes this path only when it does not already exist -- per-context state goes to
+# clusters/<cluster>/<context>/config.yaml instead -- which is what makes a read-only bind mount
+# of this file safe.
+k9s:
+  ui:
+    invert: false

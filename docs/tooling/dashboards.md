@@ -30,6 +30,25 @@ every name the prompt will accept, which is `kubectl api-resources` in a pane.
 It is baked into `.devcontainer/Dockerfile` at a pin, alongside `kubectl`, `kind` and `helm`. Moving
 the version is a `K9S_VERSION` bump and a rebuild — see [agent-container.md](agent-container.md).
 
+### A light terminal
+
+k9s never looks at the terminal's background — no OSC query, no `COLORFGBG` — so it opens with its
+dark stock skin wherever it runs, and the choice has to be written down. Try the switch for one
+session first:
+
+```console
+k9s --invert
+```
+
+That flips the stock skin's colours rather than swapping in a different palette, so the
+relationships between them survive. To keep it, set `invert: true` in
+`hack/agent-home/.config/k9s/config.yaml`, which is bind-mounted into the container the same way
+`starship.toml` is; the flag wins over the file, so the preview above works either way.
+
+The other route is `ui.skin`, naming a YAML under `skins/` in the same directory. k9s does not ship
+those inside the binary, so it means vendoring a skin from its repository — worth it only for a
+palette the inversion cannot produce.
+
 ### Keys
 
 Taken from the pinned v0.51.0. `?` prints the live list, which is the one to trust after a bump.
