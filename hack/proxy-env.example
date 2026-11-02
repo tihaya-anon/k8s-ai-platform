@@ -20,6 +20,9 @@
 # adjacent ports (10808/10809 is the common pair) -- http_proxy must be the HTTP one. Check with
 # `ss -ltn` or the client's settings; pointing http_proxy at a SOCKS port fails in ways that look
 # like a dead network.
+# Sourced, never executed, so there is no shebang to tell shellcheck which shell to assume; sh
+# rather than bash because ~/.profile reads this file and that is not guaranteed to be bash.
+# shellcheck shell=sh
 proxy=http://127.0.0.1:10809
 
 export http_proxy="$proxy"

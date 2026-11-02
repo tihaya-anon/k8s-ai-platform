@@ -87,6 +87,12 @@
         // The apt shellcheck from .devcontainer/Dockerfile, not the one the extension bundles:
         // the hook gates on the former, and an editor that disagrees with the gate about what
         // passes is worse than no editor check. Same reasoning as go.alternateTools above.
+        //
+        // This path is load-bearing and unguarded. Left unset, the extension runs its own bundled
+        // binary and falls back to whatever `shellcheck` is on PATH; set, it uses the path
+        // verbatim with no fallback, so a container built from an image without the apt package
+        // gets no linting at all rather than degraded linting. That is the ordering rule for a
+        // Rebuild: `hack/devcontainer.sh image` first, then Rebuild Container.
         "shellcheck.executablePath": "/usr/bin/shellcheck",
         "gopls": {
           "ui.semanticTokens": true,
