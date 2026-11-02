@@ -10,11 +10,38 @@
 # Kept separate from agent.Dockerfile on purpose: that image carries the AI CLIs, Neovim and
 # the rest of the agent sandbox; this one is the lighter editor image.
 #
-# Built manually with --network=host (see devcontainer.json's image comment): the proxy at
-# 127.0.0.1:10808 is only reachable from the host network, and github.com / proxy.golang.org
-# are not reachable directly, so the bridge-network build the CLI runs cannot fetch them.
+# Built by hack/devcontainer.sh, not by the devcontainer CLI: the script pins the base to a
+# digest, passes the host's proxy and mirror settings through, and stamps the revision label that
+# `sync` reads back from the registry. It builds on the host network by default so that a proxy
+# bound to the host's loopback is reachable from the build; DEVCONTAINER_BUILD_NETWORK overrides
+# that on a host where the downloads below work directly.
 
 ARG GO_IMAGE=golang:1.25-bookworm
+
+# The Go language-server tools, compiled in a stage of their own and copied in as binaries. They
+# could be `go install`ed directly into the final image -- this file used to -- but that leaves
+# root's artifacts behind in GOPATH: /go/pkg/mod is a cache mount and vanishes, while
+# /go/pkg/sumdb is not and stays in the layer as root:0755. The agent user (uid 1000, created
+# later by common-utils) then downloads modules fine and dies verifying them, which fails
+# onCreateCommand, which makes VS Code skip the rest of the lifecycle -- including installing the
+# extensions from customizations.vscode. Building here keeps /go untouched in the final image, at
+# the 1777 the golang image sets, the same shape agent.Dockerfile's go-tools stage produces.
+#
+# gopls v0.22+ needs Go 1.26, so v0.21.x is the newest this toolchain builds. Two separate
+# `go install` calls: a single command cannot name two modules at different versions.
+FROM ${GO_IMAGE} AS go-tools
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
+ARG GOPLS_VERSION=v0.21.1
+ARG DELVE_VERSION=v1.27.2
+ARG GOPROXY=https://proxy.golang.org,direct
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    set -eu; \
+    GOPROXY="${GOPROXY}" GOBIN=/opt/go-tools/bin go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"; \
+    GOPROXY="${GOPROXY}" GOBIN=/opt/go-tools/bin go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
+
 FROM ${GO_IMAGE}
 
 # Proxy passthrough. With --network=host, 127.0.0.1 is the host, so the proxy is reachable and
@@ -30,10 +57,11 @@ ARG KUBECTL_VERSION=v1.34.8
 ARG STARSHIP_VERSION=1.25.0
 ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
 ARG ZSH_SYNTAX_HIGHLIGHTING_COMMIT=e6683f20e5c38d3e5447f45845d04ddda75d0f23
-ARG GOPLS_VERSION=v0.21.1
-ARG DELVE_VERSION=v1.27.2
 ARG GITHUB_MIRROR=https://github.com
-ARG GOPROXY=https://proxy.golang.org,direct
+
+# GOPLS_VERSION, DELVE_VERSION and GOPROXY are declared in the go-tools stage instead: an ARG is
+# scoped to the stage that declares it, so repeating them here would only add build-cache keys to
+# a stage that never reads them.
 
 # apt: zsh and the small tools the golang image does not ship. git/curl/make are already in
 # the base. The sources are rewritten to a China mirror: the CLI builds the features (common-utils
@@ -108,19 +136,14 @@ RUN set -eu; \
     done; \
     rm -f /tmp/zsh-*.tar.gz
 
-# The Go language-server tools, compiled once into the image instead of on every rebuild. The
-# Go extension looks them up in GOPATH/bin, which the golang image points at /go/bin. gopls
-# v0.22+ needs Go 1.26, so v0.21.x is the newest this toolchain builds. The module and build
-# caches are mount caches, so nothing but the two binaries lands in the layer. Two separate
-# `go install` calls: a single command cannot name two modules at different versions.
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg/mod \
-    set -eu; \
-    GOPROXY="${GOPROXY}" go install "golang.org/x/tools/gopls@${GOPLS_VERSION}"; \
-    GOPROXY="${GOPROXY}" go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
+# The two binaries from the stage above. /usr/local/bin rather than /go/bin: both are on the
+# golang image's PATH and that is how the Go extension finds a tool, but /go is world-writable, so
+# a baked binary there is one the container's own user could overwrite.
+COPY --from=go-tools /opt/go-tools/bin/gopls /usr/local/bin/gopls
+COPY --from=go-tools /opt/go-tools/bin/dlv /usr/local/bin/dlv
 
-# `go install` above ran as root and created /go/pkg as root:0755, which the agent user (uid 1000,
-# created later by common-utils) cannot write -- the Go extension then fails with "could not create
-# module cache: mkdir /go/pkg/mod: permission denied". The golang image makes /go world-writable
-# (1777), so restore that on the one subdirectory go install recreated.
-RUN chmod 1777 /go/pkg
+# The commit this image was built from. `hack/devcontainer.sh sync` reads it back from the registry
+# manifest to decide whether latest may move, without pulling the image. Declared last so a new
+# commit invalidates one metadata layer instead of the layers above it.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}"

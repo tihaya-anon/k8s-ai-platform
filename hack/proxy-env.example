@@ -1,0 +1,46 @@
+# Template for ~/.proxy_env on the host. Copy it, set the port your proxy actually listens on, and
+# keep it out of this repository -- it describes one machine, not the project.
+#
+#   cp hack/proxy-env.example ~/.proxy_env && $EDITOR ~/.proxy_env
+#
+# Two readers:
+#
+#   - the host's login shell, if you add `[ -r ~/.proxy_env ] && . ~/.proxy_env` to ~/.profile
+#     (bash reads ~/.bashrc for interactive non-login shells, so add it there too if you want it
+#     in every terminal);
+#   - the devcontainer's login shell, through the read-only bind mount in
+#     .devcontainer/devcontainer.json. Dev Containers' default userEnvProbe is
+#     loginInteractiveShell, so what this file exports also reaches the extension host -- which is
+#     what lets an extension that makes its own HTTPS calls, such as GitHub Actions, get out.
+#
+# The container uses --network=host, so 127.0.0.1 here is the same loopback the proxy binds on the
+# host; the address does not need translating.
+#
+# Mind which port is which. A v2rayN/clash-style client usually listens with SOCKS and HTTP on
+# adjacent ports (10808/10809 is the common pair) -- http_proxy must be the HTTP one. Check with
+# `ss -ltn` or the client's settings; pointing http_proxy at a SOCKS port fails in ways that look
+# like a dead network.
+proxy=http://127.0.0.1:10809
+
+export http_proxy="$proxy"
+export https_proxy="$proxy"
+export all_proxy="$proxy"
+
+# Both spellings, because tools disagree about which one they read: curl prefers the lowercase
+# names, many Go and Node programs read the uppercase ones, and some read only one of the pair.
+export HTTP_PROXY="$proxy"
+export HTTPS_PROXY="$proxy"
+export ALL_PROXY="$proxy"
+
+# What must NOT go through the proxy. The kind API server is published on the host's loopback and
+# the in-cluster addresses are only meaningful inside the cluster network, so sending either to an
+# outbound proxy turns a working kubectl into a timeout. .svc/.cluster.local cover in-cluster DNS;
+# the RFC1918 ranges cover the kind node addresses and any LAN registry.
+#
+# Go reads this variable too, so keep it in the form Go accepts: comma-separated hosts, domain
+# suffixes and CIDR blocks, no spaces, no scheme.
+no_proxy="localhost,127.0.0.1,::1,.svc,.cluster.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+export no_proxy
+export NO_PROXY="$no_proxy"
+
+unset proxy

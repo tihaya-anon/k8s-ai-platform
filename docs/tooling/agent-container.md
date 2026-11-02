@@ -102,6 +102,111 @@ The agent container below is a separate, stronger sandbox for running AI CLIs. K
 the devcontainer is the ordinary development environment, while `agent.Dockerfile` is opt-in. The
 agent container deliberately does not inherit these mounts.
 
+### Networking in the devcontainer
+
+The container runs with `--network=host`, overridable by setting `DEVCONTAINER_NETWORK` on the host
+(e.g. `bridge`) before VS Code starts.
+
+Host is the default for the **cluster work**, not for a proxy. `kind` publishes its API server on
+the host's `127.0.0.1`, and sharing that network namespace is what makes one `~/.kube/config` valid
+from the host and from inside the container at the same time — which is the whole reason
+`hack/set-up-cluster.sh` can run in either place. On `bridge`, the mounted kubeconfig points at a
+loopback address the container no longer shares and `kubectl` stops reaching a kind cluster. Treat
+the override as an escape hatch for a host where host networking is unavailable, not as a tidy-up.
+
+A proxy bound to the host's loopback being reachable is a consequence of the same namespace sharing,
+not the reason for it. The build network is separate and separately overridable with
+`DEVCONTAINER_BUILD_NETWORK`; on a host that reaches `github.com` and `proxy.golang.org` directly, a
+bridge build is fine.
+
+### Proxy settings in the devcontainer
+
+On a network that needs an outbound proxy, the container reads it from `~/.proxy_env` on the host,
+bind-mounted read-only and sourced by `hack/agent-home/.zprofile`. Copy the template and set your
+port:
+
+```bash
+cp hack/proxy-env.example ~/.proxy_env
+```
+
+`devcontainer.json` also has `${localEnv:http_proxy}` in `containerEnv`, but that is substituted
+from the environment of the **VS Code process on the host**, when the file is parsed. Launch VS Code
+from the desktop rather than from a shell that exports the proxy, and those resolve to empty. It is
+not `userEnvProbe`, which probes a shell _inside_ the container — nothing in `containerEnv` reads
+the host's `~/.profile`.
+
+The login shell is the dependable path precisely because `userEnvProbe` defaults to
+`loginInteractiveShell`: what `.zprofile` exports is applied to the terminals **and to the extension
+host**. That matters because the two halves of "the extension works" have different network paths.
+Installing an extension is done by the VS Code client on the host and pushed into the container, so
+extensions install fine with no proxy inside; but an extension that makes its own HTTPS calls —
+`github.vscode-github-actions` asking `api.github.com`, for one — runs in the container and fails
+with _unable to connect, please check internet connection_.
+
+On a host with no proxy at all, none of this does anything: `~/.proxy_env` stays empty and the guard
+in `.zprofile` makes it a no-op. Keep it anyway — it costs a mount and three lines, and it removes a
+dependency on how VS Code happened to be launched.
+
+`initializeCommand` runs `touch -a ~/.proxy_env` on the host before the container is created,
+because Docker turns a bind mount with a missing source into a directory at that path, which would
+then shadow the file written there later. `.zprofile` guards with `-r` and `-f`, so a host with no
+proxy, and the agent container (which has no such mount), are both silent no-ops.
+
+Get `no_proxy` right or `kubectl` breaks: the kind API server is on the host's loopback and
+in-cluster names only resolve inside the cluster, so both must bypass the proxy. The template's list
+covers them.
+
+### Building the devcontainer image
+
+The devcontainer opens a pre-built image rather than building from `.devcontainer/Dockerfile` on
+every create, so `kind`, `kubebuilder`, `kubectl`, `helm`, `starship`, the zsh plugins, `gopls` and
+`dlv` come out of the layer cache. `hack/devcontainer.sh` is to that image what `hack/agent.sh` is
+to the agent image, and shares its registry logic through `hack/lib/registry.sh`:
+
+```bash
+hack/devcontainer.sh image     # build locally, tagged with the commit sha and latest
+hack/devcontainer.sh sync      # pull or build, then push so local and Docker Hub agree
+```
+
+Three things the script does that a hand-typed `docker build` did not:
+
+- **It builds on the host network.** A localhost proxy is unreachable from the bridge network a
+  build normally gets, and `github.com` / `proxy.golang.org` are not reachable directly here, so a
+  bridge build hangs on the first download. The host's proxy variables are passed through as build
+  arguments instead of being written into the repository, so a host with no proxy builds direct.
+- **It checks the tag against `devcontainer.json`.** The `image` field is the one name VS Code and
+  the build have to agree on. They once drifted apart, and the symptom was that rebuilding changed
+  nothing: the build produced a tag nobody opened, and Rebuild Container reused the old image.
+- **It stamps `org.opencontainers.image.revision`**, which is what lets `sync` ask the registry "is
+  this commit already published?" without pulling the image.
+
+A build only puts the image on disk. VS Code picks it up on the next **Dev Containers: Rebuild
+Container** — reopening an existing container does not, and neither does it rerun the lifecycle
+commands or install the extensions from `customizations.vscode`.
+
+That last point is worth remembering as a debugging rule: **if `onCreateCommand` fails, the
+extensions do not get installed.** Dev Containers runs the lifecycle commands and the extension
+install in one `run-user-commands` step, and a non-zero exit aborts the rest of it with
+`Skipping any further user-provided commands`. "My extensions are missing" is therefore usually a
+`post-install.sh` failure, not an `extensions` list problem — read the **Dev Containers** output
+channel from the top, not the bottom.
+
+#### Why `.devcontainer/Dockerfile` builds Go tools in a separate stage
+
+`gopls` and `dlv` are compiled in a `go-tools` stage and copied into the final image as binaries,
+the same shape `agent.Dockerfile` uses. Running `go install` directly in the final stage works, but
+it leaves root's artifacts in `GOPATH`: `/go/pkg/mod` is a cache mount and disappears, while
+`/go/pkg/sumdb` is not, so root's copy of the checksum database stays in the layer as `root:0755`.
+The `agent` user that `common-utils` creates afterwards then downloads modules fine and fails
+_verifying_ them —
+
+```text
+go: open /go/pkg/sumdb/sum.golang.org/latest: permission denied
+```
+
+— which failed `onCreateCommand`, which cost the extensions. Building in a separate stage leaves
+`/go` in the final image exactly as the `golang` base ships it.
+
 ## Boundary
 
 The container is for reducing the agent's **marginal operational risk** compared with running it on

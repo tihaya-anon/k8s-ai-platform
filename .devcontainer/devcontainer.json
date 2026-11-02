@@ -2,13 +2,14 @@
   "name": "k8s-ai-platform",
   // The tools (kind/kubebuilder/kubectl/starship, zsh plugins, gopls, dlv) are baked into this
   // pre-built image, so a Rebuild is layer cache instead of re-downloading them on every create.
-  // The image must be built manually with --network=host, because the proxy at 127.0.0.1:10808 is
-  // unreachable from the bridge network the CLI builds on, and github.com/proxy.golang.org are not
-  // reachable directly. Rebuild it when .devcontainer/Dockerfile changes:
-  //   docker build --network=host \
-  //     --build-arg http_proxy=http://127.0.0.1:10808 \
-  //     --build-arg https_proxy=http://127.0.0.1:10808 \
-  //     -t k8s-ai-devcontainer:latest -f .devcontainer/Dockerfile .
+  // Rebuild it when .devcontainer/Dockerfile changes, then "Dev Containers: Rebuild Container":
+  //   hack/devcontainer.sh image     # local only
+  //   hack/devcontainer.sh sync      # and keep the Docker Hub copy aligned
+  // The script owns the build because this must not be a line anyone retypes: it passes the
+  // host's proxy environment through instead of hardcoding a port, builds on the host network so
+  // a localhost proxy is reachable (DEVCONTAINER_BUILD_NETWORK overrides it), and refuses to run
+  // if the tag it builds has drifted from the name below -- which once made a rebuild silently
+  // change nothing.
   // The user/docker/git setup is still done by the features below, applied on top of this image.
   "image": "chihayaanon0908/k8s-ai-devcontainer:latest",
   "features": {
@@ -48,7 +49,17 @@
   // here owned by the person on the host rather than by whoever uid 1000 happens to be.
   "remoteUser": "agent",
   "updateRemoteUserUID": true,
-  "runArgs": ["--network=host"],
+  // Host networking, overridable with DEVCONTAINER_NETWORK on the host (e.g. =bridge) before VS
+  // Code starts. Host is the default for the cluster work, not for the proxy it was first written
+  // for: the kind API server is published on the host's 127.0.0.1, and sharing that namespace is
+  // what makes one ~/.kube/config valid from both sides -- see the mount below. A localhost proxy,
+  // when there is one, is reachable for the same reason.
+  //
+  // So treat bridge as a real trade, not a tidy-up: on bridge the mounted kubeconfig points at a
+  // loopback address the container no longer shares, and kubectl stops working against a kind
+  // cluster. The escape hatch is here for a host where --network=host is unavailable or
+  // unwelcome, not as an everyday setting.
+  "runArgs": ["--network=${localEnv:DEVCONTAINER_NETWORK:host}"],
   "mounts": [
     "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/home/agent/.zshenv,type=bind,readonly",
     "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/home/agent/.zprofile,type=bind,readonly",
@@ -72,18 +83,38 @@
     // Commit identity and credential helpers. Read-only for the same reason; `git config
     // --global` belongs on the host, not in a container whose ~/.gitconfig disappears with it.
     "source=${localEnv:HOME}/.gitconfig,target=/home/agent/.gitconfig,type=bind,readonly",
+    // The host's proxy settings, read by ~/.zprofile. See hack/proxy-env.example for the shape,
+    // and initializeCommand below for why the host is guaranteed to have the file.
+    "source=${localEnv:HOME}/.proxy_env,target=/home/agent/.proxy_env,type=bind,readonly",
     // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
     // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
     // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
-    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume"
+    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume",
+    // The Go module cache. GOPATH is /go in the golang image, so this is $GOMODCACHE's parent.
+    // Without the volume it sits in the container's writable layer and a Rebuild throws it away,
+    // which means re-downloading the Kubernetes dependency tree -- minutes of network for seconds
+    // of CPU, the same trade hack/agent.sh's k8s-ai-go-pkg volume exists to avoid. Not shared with
+    // that volume: the two containers run different checkout paths and different users' uids, and
+    // a module cache is cheap to fill twice but confusing to debug when two writers disagree.
+    //
+    // Docker creates the mount point root-owned, so post-install.sh chowns it before anything
+    // writes there -- see the loop at the top of that script.
+    "source=k8s-ai-devcontainer-go-pkg,target=/go/pkg,type=volume"
   ],
   "containerEnv": {
     "LOCALBIN": "/home/agent/.cache/k8s-ai-platform/bin",
     // Pull the proxy from the host shell env instead of hardcoding a port, so the repo
-    // stays machine-independent. The default userEnvProbe (loginInteractiveShell) reads
-    // ~/.profile and ~/.bashrc, both of which source ~/.proxy_env; on a machine with no
-    // proxy these resolve to empty and the container just goes direct. --network=host
-    // makes the host loopback reachable inside the container.
+    // stays machine-independent; on a machine with no proxy these resolve to empty and the
+    // container just goes direct. --network=host makes the host loopback reachable inside
+    // the container.
+    //
+    // ${localEnv:...} is substituted from the environment of the VS Code process on the host,
+    // when this file is parsed. That is not userEnvProbe, which probes a shell *inside* the
+    // container: nothing here reads the host's ~/.profile. So VS Code must be started from a
+    // shell that already exports these -- launched from the desktop, they resolve to empty and
+    // everything inside the container that makes its own network calls (the GitHub Actions
+    // extension, for one) fails while the editor itself keeps working, because the client
+    // downloads extensions on the host side.
     "http_proxy": "${localEnv:http_proxy}",
     "https_proxy": "${localEnv:https_proxy}",
     "HTTP_PROXY": "${localEnv:HTTP_PROXY}",
@@ -154,5 +185,10 @@
       ]
     }
   },
+  // Runs on the host, before the container is created. Docker turns a bind mount whose source
+  // does not exist into a *directory* at that path on the host, which would then shadow the file
+  // the user later writes there; -a creates it empty without touching an existing one. The
+  // proxy mount above is the only mount here whose source is not something the host already has.
+  "initializeCommand": "touch -a \"$HOME/.proxy_env\"",
   "onCreateCommand": "bash .devcontainer/post-install.sh"
 }

@@ -12,6 +12,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 1
 
+# The image identity, registry probes and sync rules are shared with hack/devcontainer.sh; only
+# the Dockerfile and its build arguments are this script's own. $prog is the prefix the library
+# puts on its messages, so it has to be set before the source.
+prog=agent.sh
+# shellcheck source=hack/lib/registry.sh
+source "$repo_root/hack/lib/registry.sh"
+
 image_repo=${AGENT_IMAGE_REPOSITORY:-k8s-ai-platform-agent}
 image=${AGENT_IMAGE:-$image_repo:latest}
 # Where `hack/agent.sh sync` publishes this repository's image. The local repository stays
@@ -130,6 +137,10 @@ sandbox=(--cap-drop ALL --security-opt no-new-privileges)
 # way: hiding the output of a step that went wrong would be the one unforgivable version of this.
 verbose=0
 
+# Base image refresh policy, read by pull_base_image in hack/lib/registry.sh. Named generically
+# there because hack/devcontainer.sh has its own environment variable for the same switch.
+pull_policy=${AGENT_PULL:-missing}
+
 # sync refuses to move the remote latest tag backwards. --force-latest covers the case the script
 # cannot decide: a latest built before images carried the revision label, or a commit from another
 # clone that is not in this one.
@@ -163,11 +174,6 @@ creds_select=
 # Filled by everything after --, to run one command instead of an interactive shell.
 command_override=()
 
-die() {
-  printf 'agent.sh: %s\n' "$1" >&2
-  exit 1
-}
-
 # True when something already listens on the port in the host network namespace. The container
 # shares that namespace, so ss is seeing exactly the addresses OpenCode would try to bind.
 port_in_use() {
@@ -200,56 +206,6 @@ choose_opencode_port() {
     fi
   done
   die "no free port in AGENT_OPENCODE_PORT_RANGE=$range"
-}
-
-# Echo under -v, so what happened to the boundary can be put in the scrollback. %q rather than $*,
-# so what is printed is what could be pasted back into a shell -- the mount specifications and the
-# `sh -c` bodies are meaningless once their quoting is flattened.
-run() {
-  if ((verbose)); then
-    printf '+' >&2
-    printf ' %q' "$@" >&2
-    printf '\n' >&2
-  fi
-  "$@"
-}
-
-# For setup steps, whose output is worth seeing only when it fails or when asked for.
-run_step() {
-  if ((verbose)); then
-    run "$@"
-    return
-  fi
-
-  local log
-  log=$(mktemp)
-  if ! "$@" >"$log" 2>&1; then
-    printf 'agent.sh: this step failed:' >&2
-    printf ' %q' "$@" >&2
-    printf '\n\n' >&2
-    cat "$log" >&2
-    rm -f "$log"
-    exit 1
-  fi
-  rm -f "$log"
-}
-
-# The base images are moving tags, so the build has to resolve them to a digest either way -- and
-# resolving is what pins the build, not pulling. On a network where Docker Hub is slow or
-# unreachable, pulling on every build re-downloads whatever upstream changed for a base whose
-# layers are already local, and can fail outright before the build starts. Reuse the local image by
-# default and let AGENT_PULL=always restore the refresh.
-pull_base_image() {
-  case ${AGENT_PULL:-missing} in
-  missing)
-    if docker image inspect "$1" >/dev/null 2>&1; then
-      return 0
-    fi
-    run_step docker pull "$1"
-    ;;
-  always) run_step docker pull "$1" ;;
-  *) die "AGENT_PULL must be missing or always, got: ${AGENT_PULL}" ;;
-  esac
 }
 
 parse_options() {
@@ -389,10 +345,6 @@ resolve_credentials() {
   fi
 }
 
-current_git_sha() {
-  git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit'
-}
-
 build_image() {
   local git_sha commit_image
   git_sha=$(current_git_sha)
@@ -408,8 +360,8 @@ build_image() {
   # is there, so the build stays pinned without the pull.
   pull_base_image "$node_image"
   pull_base_image "$go_image"
-  node_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$node_image")
-  go_digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$go_image")
+  node_digest=$(base_image_digest "$node_image")
+  go_digest=$(base_image_digest "$go_image")
 
   local build_flags=(--network "${AGENT_BUILD_NETWORK:-host}")
   local build_args=(
@@ -453,157 +405,6 @@ ensure_image() {
   fi
 
   die "no agent image found: $image (run ./hack/agent.sh image first)"
-}
-
-# Remote probes go through buildx's imagetools: it reads the manifest and image config without
-# downloading the layers, and uses the same credential store as docker push. `docker manifest
-# inspect` cannot read a label, and pulling three gigabytes to answer "is this commit published?"
-# would make sync cost more than an unconditional build.
-#
-# A missing tag and a failed query must not look alike: treating "not logged in" as "not published"
-# would build an image that cannot be pushed either, and hide the one error worth reading.
-remote_ref_exists() {
-  local ref=$1 err
-  err=$(mktemp)
-  if docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$ref" >/dev/null 2>"$err"; then
-    rm -f "$err"
-    return 0
-  fi
-  if grep -qiE 'not found|manifest unknown|name unknown' "$err"; then
-    rm -f "$err"
-    return 1
-  fi
-  printf 'agent.sh: cannot query %s (is docker logged in to its registry?):\n' "$ref" >&2
-  cat "$err" >&2
-  rm -f "$err"
-  exit 1
-}
-
-remote_manifest_digest() {
-  docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$1" 2>/dev/null || true
-}
-
-# The OCI revision label agent.Dockerfile stamps on every build. Empty for an image built before
-# the label existed, or for a multi-platform index (where .Image is keyed by platform); callers
-# treat that as "cannot tell" rather than as "not this commit".
-remote_image_revision() {
-  docker buildx imagetools inspect \
-    --format '{{index .Image.Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true
-}
-
-push_ref() {
-  local local_ref=$1 remote_ref=$2
-  run_step docker tag "$local_ref" "$remote_ref"
-  run_step docker push "$remote_ref"
-}
-
-# How the remote latest relates to this checkout, decided by the revision label and git history:
-#   advance -- this checkout is the same as, or newer than, what latest points at
-#   same    -- latest already is this commit
-#   behind  -- latest is a descendant of HEAD, so pushing would roll it back
-#   diverged -- the histories do not share a descendant relationship
-#   unknown -- no label and no digest match, so there is nothing to compare
-latest_state() {
-  local git_sha=$1 rev head_full latest_digest sha_digest
-  if ! remote_ref_exists "$remote_image_repo:latest"; then
-    printf 'advance\n'
-    return 0
-  fi
-
-  rev=$(remote_image_revision "$remote_image_repo:latest")
-  head_full=$(git rev-parse HEAD 2>/dev/null || true)
-
-  if [[ -n $rev && -n $head_full && $head_full == "$rev"* ]]; then
-    printf 'same\n'
-    return 0
-  fi
-  if [[ -n $rev ]] && git cat-file -e "${rev}^{commit}" 2>/dev/null; then
-    if git merge-base --is-ancestor "$rev" HEAD; then
-      printf 'advance\n'
-    elif git merge-base --is-ancestor HEAD "$rev"; then
-      printf 'behind\n'
-    else
-      printf 'diverged\n'
-    fi
-    return 0
-  fi
-
-  # A latest pushed before the label existed can still identify itself through its digest: the
-  # commit tag is pushed before this runs, so equal digests mean latest is this commit.
-  latest_digest=$(remote_manifest_digest "$remote_image_repo:latest")
-  sha_digest=$(remote_manifest_digest "$remote_image_repo:$git_sha")
-  if [[ -n $latest_digest && $latest_digest == "$sha_digest" ]]; then
-    printf 'same\n'
-  else
-    printf 'unknown\n'
-  fi
-}
-
-# Align the local and published images for this checkout. The commit tag is the identity: if the
-# registry already has it, a machine without the image pulls instead of paying for a rebuild; if
-# neither side has it, this checkout is the only source and the build is followed by a push. The
-# remote latest then follows the same rule, advancing only when git history says HEAD is at or
-# ahead of it.
-sync_image() {
-  local git_sha local_ref local_latest remote_ref remote_latest state
-  git_sha=$(current_git_sha)
-  local_ref="$image_repo:$git_sha"
-  local_latest="$image_repo:latest"
-  remote_ref="$remote_image_repo:$git_sha"
-  remote_latest="$remote_image_repo:latest"
-
-  local has_local=0 has_remote=0
-  if docker image inspect "$local_ref" >/dev/null 2>&1; then
-    has_local=1
-  fi
-  if remote_ref_exists "$remote_ref"; then
-    has_remote=1
-  fi
-
-  if ((has_remote)) && ! ((has_local)); then
-    printf 'agent.sh: pulling %s, the image for this commit\n' "$remote_ref" >&2
-    run_step docker pull "$remote_ref"
-    run_step docker tag "$remote_ref" "$local_ref"
-    has_local=1
-  fi
-
-  if ! ((has_local)); then
-    build_image
-    has_local=1
-  fi
-
-  if ! ((has_remote)); then
-    printf 'agent.sh: pushing %s\n' "$remote_ref" >&2
-    push_ref "$local_ref" "$remote_ref"
-  fi
-
-  state=$(latest_state "$git_sha")
-  case $state in
-  advance)
-    printf 'agent.sh: moving %s to %s\n' "$remote_latest" "$git_sha" >&2
-    push_ref "$local_ref" "$remote_latest"
-    ;;
-  same) ;;
-  behind)
-    # latest is ahead of this checkout. Pulling it would leave `shell` running newer code against
-    # an older mount, so the local pointer stays on this commit even though the registry's is ahead.
-    printf 'agent.sh: %s is newer than this checkout; leaving it alone and keeping local latest on %s\n' \
-      "$remote_latest" "$git_sha" >&2
-    ;;
-  diverged | unknown)
-    if ((force_latest)); then
-      printf 'agent.sh: --force-latest: moving %s to %s\n' "$remote_latest" "$git_sha" >&2
-      push_ref "$local_ref" "$remote_latest"
-    else
-      printf 'agent.sh: not moving %s (%s); rerun with --force-latest to override\n' "$remote_latest" "$state" >&2
-    fi
-    ;;
-  esac
-
-  # The local latest is the image `shell` and `prepare` run, so it always follows this checkout
-  # rather than the registry. The commit tag is what sync keeps identical on both sides.
-  run_step docker tag "$local_ref" "$local_latest"
-  printf 'agent.sh: %s is now present locally and remotely\n' "$remote_ref" >&2
 }
 
 # The named volumes are created root-owned by the daemon; the agent user has to be able to write

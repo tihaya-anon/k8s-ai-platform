@@ -42,3 +42,14 @@ export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/.cache/uv}"
 # agent container this guard is what skips it.
 [[ -r "$HOME/.zsh_env" ]] && source "$HOME/.zsh_env"
 [[ -r "$HOME/.mirrors" ]] && source "$HOME/.mirrors"
+
+# The host's proxy settings, bind-mounted read-only by .devcontainer/devcontainer.json. This is
+# load-bearing beyond the terminal: Dev Containers' default userEnvProbe is loginInteractiveShell,
+# so whatever this login shell exports is applied to the extension host too -- which is how an
+# extension that makes its own network calls (the GitHub Actions one, for instance) reaches the
+# internet. Reading it here rather than relying on ${localEnv:...} in devcontainer.json is what
+# makes it independent of how VS Code was launched; see hack/proxy-env.example for the shape.
+#
+# -f as well as -r: on a host that never had the file the mount can leave an empty directory
+# behind, and the agent container has no mount for it at all. Both cases must be a silent no-op.
+[[ -r "$HOME/.proxy_env" && -f "$HOME/.proxy_env" ]] && source "$HOME/.proxy_env"

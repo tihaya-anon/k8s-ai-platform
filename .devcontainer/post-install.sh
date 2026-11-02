@@ -11,7 +11,10 @@ set -euo pipefail
 # -- and this script no longer runs as root, so those directories have to be handed to the user
 # before anything writes under them. Same job as prepare_volumes() in hack/agent.sh, and the only
 # place this script needs root for something that is not an install.
-for dir in "$HOME/.cache" "$HOME/.config" "$HOME/.kube"; do
+# /go/pkg is the Go module cache volume (GOPATH is /go in the golang image). It is listed here
+# rather than left to Go, because Go creates what it needs *under* the mount point but cannot
+# create the root-owned mount point's contents in the first place.
+for dir in "$HOME/.cache" "$HOME/.config" "$HOME/.kube" /go/pkg; do
   if [ -d "$dir" ]; then sudo chown "$(id -u):$(id -g)" "$dir"; fi
 done
 sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/k8s-ai-platform"
