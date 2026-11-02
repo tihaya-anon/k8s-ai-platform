@@ -45,7 +45,16 @@ if [[ ${#md[@]} -gt 0 ]] && have markdownlint-cli2; then
 fi
 
 if [[ ${#prettier[@]} -gt 0 ]] && have prettier; then
-  prettier --write --ignore-unknown --log-level warn "${prettier[@]}" || status=1
+  # .prettierrc loads prettier-plugin-sort-json, which Prettier resolves from the repository's
+  # node_modules -- not from whichever global install provided the `prettier` on PATH. Without the
+  # tree, Prettier fails on every file with a plugin-resolution error that says nothing about the
+  # real fix, so name it here instead.
+  if [[ ! -d $repo_root/node_modules/prettier-plugin-sort-json ]]; then
+    echo "format.sh: the Prettier plugins are not installed; run 'npm ci'" >&2
+    status=1
+  else
+    prettier --write --ignore-unknown --log-level warn "${prettier[@]}" || status=1
+  fi
 fi
 
 # goimports is a superset of gofmt -- it applies the same formatting and also adds

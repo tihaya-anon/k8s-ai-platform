@@ -419,6 +419,14 @@ The image pins `markdownlint-cli2` and `prettier` alongside the agent CLIs, so `
 behaves identically inside the container and on the host. Both degrade to a warning when a formatter
 is missing, which would otherwise mean the container silently accepted markdown the host rejects.
 
+One part of Prettier's behaviour cannot come from the image: JSON key sorting is a plugin, and
+Prettier resolves a plugin named in `.prettierrc` from the repository, not from the global install
+that put `prettier` on `PATH`. So `package.json` pins both, `npm ci` restores them into a gitignored
+`node_modules/`, and `hack/format.sh` stops with that instruction rather than letting Prettier fail
+per file with a resolution error. The devcontainer runs `npm ci` in `post-install.sh`; the agent
+container shares the same workspace, so the tree is already there. Both packages are pure
+JavaScript, which is what makes one `node_modules/` valid for the host and both containers at once.
+
 OpenCode is configured by the tracked `opencode.json` to run the same `hack/format.sh` after its
 `write`, `edit` and `patch` tools change a file. The built-in `gofmt` and `prettier` formatters are
 disabled there, so `hack/format.sh` remains the one formatter and handles Go imports, Markdown

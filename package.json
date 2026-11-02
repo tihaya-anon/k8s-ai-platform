@@ -1,0 +1,9 @@
+{
+  "name": "k8s-ai-platform-tooling",
+  "private": true,
+  "description": "Formatter toolchain only. This is a Go repository; nothing here ships.",
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "prettier-plugin-sort-json": "4.2.0"
+  }
+}

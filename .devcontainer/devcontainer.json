@@ -1,106 +1,4 @@
 {
-  "name": "k8s-ai-platform",
-  // The tools (kind/kubebuilder/kubectl/starship, zsh plugins, gopls, dlv) are baked into this
-  // pre-built image, so a Rebuild is layer cache instead of re-downloading them on every create.
-  // Rebuild it when .devcontainer/Dockerfile changes, then "Dev Containers: Rebuild Container":
-  //   hack/devcontainer.sh image     # local only
-  //   hack/devcontainer.sh sync      # and keep the Docker Hub copy aligned
-  // The script owns the build because this must not be a line anyone retypes: it passes the
-  // host's proxy environment through instead of hardcoding a port, builds on the host network so
-  // a localhost proxy is reachable (DEVCONTAINER_BUILD_NETWORK overrides it), and refuses to run
-  // if the tag it builds has drifted from the name below -- which once made a rebuild silently
-  // change nothing.
-  // The user/docker/git setup is still done by the features below, applied on top of this image.
-  "image": "chihayaanon0908/k8s-ai-devcontainer:latest",
-  "features": {
-    // The golang image has no non-root user, so this creates one. Running as root was not a
-    // cosmetic choice: the workspace is a bind mount, so every file the container wrote -- git's
-    // .git/config, HEAD and packed-refs among them -- came back to the host owned by root, and
-    // hack/agent.sh's container, which runs as uid 1000, then could not rewrite them.
-    //
-    // 1000:1000 is what agent.Dockerfile creates, so a file written here and a file written there
-    // have the same owner. updateRemoteUserUID (below) still adjusts it if the host's uid differs.
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "username": "agent",
-      "userUid": "1000",
-      "userGid": "1000",
-      // zsh is baked by .devcontainer/Dockerfile, at the same pins agent.Dockerfile uses, and the
-      // dotfiles are bind-mounted read-only below. Letting this feature install zsh would also
-      // install oh-my-zsh and write its own ~/.zshrc over the mount point.
-      "installZsh": false,
-      "installOhMyZsh": false,
-      "upgradePackages": false
-    },
-    // The host's Docker, not a nested one: with --network=host a nested dockerd creates its bridges
-    // and routes in the host's network namespace, and its kind network shadowed the host's.
-    //
-    // dockerDashComposeVersion: none skips the standalone docker-compose download from github.com,
-    // which is not reachable from the bridge network the feature build runs on (it hung 135s and
-    // failed the install). The `docker compose` v2 plugin still comes from the apt moby-compose
-    // package, so compose works; only the legacy standalone `docker-compose` command is absent.
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "dockerDashComposeVersion": "none"
-    },
-    "ghcr.io/devcontainers/features/git:1": {}
-  },
-  // The editor, its terminals and every lifecycle command run as this user; the container's own
-  // init stays root so the docker-outside-of-docker feature can still chown the socket proxy.
-  // updateRemoteUserUID is the default and is written out because it is what keeps files written
-  // here owned by the person on the host rather than by whoever uid 1000 happens to be.
-  "remoteUser": "agent",
-  "updateRemoteUserUID": true,
-  // Host networking, overridable with DEVCONTAINER_NETWORK on the host (e.g. =bridge) before VS
-  // Code starts. Host is the default for the cluster work, not for the proxy it was first written
-  // for: the kind API server is published on the host's 127.0.0.1, and sharing that namespace is
-  // what makes one ~/.kube/config valid from both sides -- see the mount below. A localhost proxy,
-  // when there is one, is reachable for the same reason.
-  //
-  // So treat bridge as a real trade, not a tidy-up: on bridge the mounted kubeconfig points at a
-  // loopback address the container no longer shares, and kubectl stops working against a kind
-  // cluster. The escape hatch is here for a host where --network=host is unavailable or
-  // unwelcome, not as an everyday setting.
-  "runArgs": ["--network=${localEnv:DEVCONTAINER_NETWORK:host}"],
-  "mounts": [
-    "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/home/agent/.zshenv,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/home/agent/.zprofile,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/home/agent/.zshrc,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/home/agent/.zsh_aliases,type=bind,readonly",
-    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/home/agent/.config/starship.toml,type=bind,readonly",
-    // The cluster scripts (hack/set-up-cluster.sh, shutdown-cluster.sh) run *inside* this
-    // container: it has the host Docker socket, --network=host and kind/kubectl/helm baked in, so
-    // kind, docker and helm behave exactly as on the host. That makes the mount writable -- the
-    // scripts run `kind create cluster` / `kind export kubeconfig`, which update this file -- and
-    // the kind API server is exposed on the host's 127.0.0.1, which --network=host shares, so the
-    // same kubeconfig works from the container and the host.
-    "source=${localEnv:HOME}/.kube/config,target=/home/agent/.kube/config,type=bind",
-    // git push over SSH reads the host's key through ~/.ssh/config (the remote is
-    // git@github.com). Read-only: the container borrows the host's git identity, it does not own
-    // it, and a session here must not be able to rotate the keys. A bind mount keeps the host's
-    // 0600 mode and uid, which is the identity updateRemoteUserUID already gives `agent`, so ssh's
-    // permission checks pass. This is the devcontainer, not the agent sandbox: the latter still
-    // gets no host keys unless --creds says so.
-    "source=${localEnv:HOME}/.ssh,target=/home/agent/.ssh,type=bind,readonly",
-    // Commit identity and credential helpers. Read-only for the same reason; `git config
-    // --global` belongs on the host, not in a container whose ~/.gitconfig disappears with it.
-    "source=${localEnv:HOME}/.gitconfig,target=/home/agent/.gitconfig,type=bind,readonly",
-    // The host's proxy settings, read by ~/.zprofile. See hack/proxy-env.example for the shape,
-    // and initializeCommand below for why the host is guaranteed to have the file.
-    "source=${localEnv:HOME}/.proxy_env,target=/home/agent/.proxy_env,type=bind,readonly",
-    // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
-    // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
-    // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
-    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume",
-    // The Go module cache. GOPATH is /go in the golang image, so this is $GOMODCACHE's parent.
-    // Without the volume it sits in the container's writable layer and a Rebuild throws it away,
-    // which means re-downloading the Kubernetes dependency tree -- minutes of network for seconds
-    // of CPU, the same trade hack/agent.sh's k8s-ai-go-pkg volume exists to avoid. Not shared with
-    // that volume: the two containers run different checkout paths and different users' uids, and
-    // a module cache is cheap to fill twice but confusing to debug when two writers disagree.
-    //
-    // Docker creates the mount point root-owned, so post-install.sh chowns it before anything
-    // writes there -- see the loop at the top of that script.
-    "source=k8s-ai-devcontainer-go-pkg,target=/go/pkg,type=volume"
-  ],
   "containerEnv": {
     "LOCALBIN": "/home/agent/.cache/k8s-ai-platform/bin",
     // Pull the proxy from the host shell env instead of hardcoding a port, so the repo
@@ -216,10 +114,112 @@
       ]
     }
   },
+  "features": {
+    // The golang image has no non-root user, so this creates one. Running as root was not a
+    // cosmetic choice: the workspace is a bind mount, so every file the container wrote -- git's
+    // .git/config, HEAD and packed-refs among them -- came back to the host owned by root, and
+    // hack/agent.sh's container, which runs as uid 1000, then could not rewrite them.
+    //
+    // 1000:1000 is what agent.Dockerfile creates, so a file written here and a file written there
+    // have the same owner. "updateRemoteUserUID" still adjusts it if the host's uid differs.
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "agent",
+      "userUid": "1000",
+      "userGid": "1000",
+      // zsh is baked by .devcontainer/Dockerfile, at the same pins agent.Dockerfile uses, and the
+      // dotfiles are bind-mounted read-only by "mounts". Letting this feature install zsh also
+      // install oh-my-zsh and write its own ~/.zshrc over the mount point.
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "upgradePackages": false
+    },
+    // The host's Docker, not a nested one: with --network=host a nested dockerd creates its bridges
+    // and routes in the host's network namespace, and its kind network shadowed the host's.
+    //
+    // dockerDashComposeVersion: none skips the standalone docker-compose download from github.com,
+    // which is not reachable from the bridge network the feature build runs on (it hung 135s and
+    // failed the install). The `docker compose` v2 plugin still comes from the apt moby-compose
+    // package, so compose works; only the legacy standalone `docker-compose` command is absent.
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "dockerDashComposeVersion": "none"
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  // The tools (kind/kubebuilder/kubectl/starship, zsh plugins, gopls, dlv) are baked into this
+  // pre-built image, so a Rebuild is layer cache instead of re-downloading them on every create.
+  // Rebuild it when .devcontainer/Dockerfile changes, then "Dev Containers: Rebuild Container":
+  //   hack/devcontainer.sh image     # local only
+  //   hack/devcontainer.sh sync      # and keep the Docker Hub copy aligned
+  // The script owns the build because this must not be a line anyone retypes: it passes the
+  // host's proxy environment through instead of hardcoding a port, builds on the host network so
+  // a localhost proxy is reachable (DEVCONTAINER_BUILD_NETWORK overrides it), and refuses to run
+  // if the tag it builds has drifted from the "image" value -- which once made a rebuild silently
+  // change nothing.
+  // The user/docker/git setup is still done by "features", applied on top of this image.
+  "image": "chihayaanon0908/k8s-ai-devcontainer:latest",
   // Runs on the host, before the container is created. Docker turns a bind mount whose source
   // does not exist into a *directory* at that path on the host, which would then shadow the file
   // the user later writes there; -a creates it empty without touching an existing one. The
-  // proxy mount above is the only mount here whose source is not something the host already has.
+  // ~/.proxy_env mount is the only one in "mounts" whose source is not something the host has.
   "initializeCommand": "touch -a \"$HOME/.proxy_env\"",
-  "onCreateCommand": "bash .devcontainer/post-install.sh"
+  "mounts": [
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshenv,target=/home/agent/.zshenv,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zprofile,target=/home/agent/.zprofile,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/home/agent/.zshrc,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/home/agent/.zsh_aliases,type=bind,readonly",
+    "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/home/agent/.config/starship.toml,type=bind,readonly",
+    // The cluster scripts (hack/set-up-cluster.sh, shutdown-cluster.sh) run *inside* this
+    // container: it has the host Docker socket, --network=host and kind/kubectl/helm baked in, so
+    // kind, docker and helm behave exactly as on the host. That makes the mount writable -- the
+    // scripts run `kind create cluster` / `kind export kubeconfig`, which update this file -- and
+    // the kind API server is exposed on the host's 127.0.0.1, which --network=host shares, so the
+    // same kubeconfig works from the container and the host.
+    "source=${localEnv:HOME}/.kube/config,target=/home/agent/.kube/config,type=bind",
+    // git push over SSH reads the host's key through ~/.ssh/config (the remote is
+    // git@github.com). Read-only: the container borrows the host's git identity, it does not own
+    // it, and a session here must not be able to rotate the keys. A bind mount keeps the host's
+    // 0600 mode and uid, which is the identity updateRemoteUserUID already gives `agent`, so ssh's
+    // permission checks pass. This is the devcontainer, not the agent sandbox: the latter still
+    // gets no host keys unless --creds says so.
+    "source=${localEnv:HOME}/.ssh,target=/home/agent/.ssh,type=bind,readonly",
+    // Commit identity and credential helpers. Read-only for the same reason; `git config
+    // --global` belongs on the host, not in a container whose ~/.gitconfig disappears with it.
+    "source=${localEnv:HOME}/.gitconfig,target=/home/agent/.gitconfig,type=bind,readonly",
+    // The host's proxy settings, read by ~/.zprofile. See hack/proxy-env.example for the shape,
+    // and "initializeCommand" for why the host is guaranteed to have the file.
+    "source=${localEnv:HOME}/.proxy_env,target=/home/agent/.proxy_env,type=bind,readonly",
+    // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
+    // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
+    // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
+    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume",
+    // The Go module cache. GOPATH is /go in the golang image, so this is $GOMODCACHE's parent.
+    // Without the volume it sits in the container's writable layer and a Rebuild throws it away,
+    // which means re-downloading the Kubernetes dependency tree -- minutes of network for seconds
+    // of CPU, the same trade hack/agent.sh's k8s-ai-go-pkg volume exists to avoid. Not shared with
+    // that volume: the two containers run different checkout paths and different users' uids, and
+    // a module cache is cheap to fill twice but confusing to debug when two writers disagree.
+    //
+    // Docker creates the mount point root-owned, so post-install.sh chowns it before anything
+    // writes there -- see the loop at the top of that script.
+    "source=k8s-ai-devcontainer-go-pkg,target=/go/pkg,type=volume"
+  ],
+  "name": "k8s-ai-platform",
+  "onCreateCommand": "bash .devcontainer/post-install.sh",
+  // The editor, its terminals and every lifecycle command run as this user; the container's own
+  // init stays root so the docker-outside-of-docker feature can still chown the socket proxy.
+  // updateRemoteUserUID is the default and is written out because it is what keeps files written
+  // here owned by the person on the host rather than by whoever uid 1000 happens to be.
+  "remoteUser": "agent",
+  // Host networking, overridable with DEVCONTAINER_NETWORK on the host (e.g. =bridge) before VS
+  // Code starts. Host is the default for the cluster work, not for the proxy it was first written
+  // for: the kind API server is published on the host's 127.0.0.1, and sharing that namespace is
+  // what makes one ~/.kube/config valid from both sides -- see that entry in "mounts". A localhost
+  // proxy, when there is one, is reachable for the same reason.
+  //
+  // So treat bridge as a real trade, not a tidy-up: on bridge the mounted kubeconfig points at a
+  // loopback address the container no longer shares, and kubectl stops working against a kind
+  // cluster. The escape hatch is here for a host where --network=host is unavailable or
+  // unwelcome, not as an everyday setting.
+  "runArgs": ["--network=${localEnv:DEVCONTAINER_NETWORK:host}"],
+  "updateRemoteUserUID": true
 }

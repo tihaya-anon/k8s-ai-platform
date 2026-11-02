@@ -17,6 +17,12 @@
 # that on a host where the downloads below work directly.
 
 ARG GO_IMAGE=golang:1.25-bookworm
+# Same pin as agent.Dockerfile. Node is here only for the repository's formatter toolchain:
+# Prettier's JSON key sorting is a plugin, and a plugin has to be resolvable from the repository
+# rather than from whichever global install is on PATH, so package.json owns the pins and
+# post-install.sh restores them with `npm ci`.
+ARG NODE_IMAGE=node:24-bookworm
+FROM ${NODE_IMAGE} AS node
 
 # The Go language-server tools, compiled in a stage of their own and copied in as binaries. They
 # could be `go install`ed directly into the final image -- this file used to -- but that leaves
@@ -43,6 +49,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     GOPROXY="${GOPROXY}" GOBIN=/opt/go-tools/bin go install "github.com/go-delve/delve/cmd/dlv@${DELVE_VERSION}"
 
 FROM ${GO_IMAGE}
+
+# node, npm and npx. A whole-prefix copy, the shape agent.Dockerfile uses: the golang image's
+# /usr/local/go is untouched because COPY merges into the directory rather than replacing it.
+COPY --from=node /usr/local/ /usr/local/
 
 # Proxy passthrough. With --network=host, 127.0.0.1 is the host, so the proxy is reachable and
 # github.com / proxy.golang.org go through it. Overridable via --build-arg for other networks.

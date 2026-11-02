@@ -34,12 +34,24 @@ done
 # through sudo like the chown above.
 sudo chsh -s /bin/zsh "$(id -un)"
 
+# The formatter toolchain, from package.json. `npm ci` rather than `npm install`: it installs the
+# lockfile's exact tree and fails if package.json has drifted from it, which is what keeps this
+# container, hack/agent.sh's container and the host on the same Prettier and the same
+# prettier-plugin-sort-json. node_modules/ is gitignored, so this is also what makes a fresh clone
+# able to format at all.
+#
+# It lands in the workspace bind mount, which both containers and the host share. Both packages are
+# pure JavaScript, so one tree is valid everywhere; a dependency with a native binding would not be.
+npm ci --no-audit --no-fund
+
 # Into $LOCALBIN (a volume, see devcontainer.json) at the Makefile's pins; the editor's linter,
 # hack/format.sh and Go Annotations' marker definitions all read them from there. Go Annotations
 # only watches the workspace's bin/, so controller-gen has to be there before the editor starts.
 make goimports golangci-lint controller-gen
 
 go version
+node --version
+npm --version
 kind version
 kubebuilder version
 kubectl version --client

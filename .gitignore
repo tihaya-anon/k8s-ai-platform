@@ -7,6 +7,9 @@
 # Local Pi background task logs
 /.pi/tasks/
 
+# Formatter toolchain, restored from package-lock.json by `npm ci`
+/node_modules/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~

@@ -102,8 +102,12 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro Go on `PATH`.
 - Comments explain _why_ a constraint exists, not what the line does.
 - Diagrams are Mermaid, not ASCII art.
-- Once workflow helpers exist, keep one owner per formatting concern: Prettier for wrapping,
-  markdownlint for Markdown structure, `gofmt` for Go.
+- Once workflow helpers exist, keep one owner per formatting concern: Prettier for wrapping and for
+  JSON key order, markdownlint for Markdown structure, `gofmt` for Go.
+- **JSON keys are sorted by Prettier**, through `prettier-plugin-sort-json`. A comment in a JSON
+  file therefore names the key it is about and never its position: "see the mount below" is a
+  comment that the next format run can make wrong. The plugin and Prettier itself are pinned in
+  `package.json`; `npm ci` restores them, and `hack/format.sh` refuses to run without them.
 - Once the Kubebuilder project exists, run the local gate before calling a change done:
   `make fmt vet test`.
 
@@ -124,6 +128,8 @@ docs/tooling/         agent-container.md, dashboards.md
 .markdownlint.json
 .prettierrc
 .prettierignore
+package.json          formatter toolchain pins; nothing here ships
+package-lock.json
 .gitignore
 ```
 
