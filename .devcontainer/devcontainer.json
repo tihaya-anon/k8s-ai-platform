@@ -69,6 +69,25 @@
         // Go Annotations reads its Kubebuilder marker definitions from controller-gen. It looks in
         // bin/ by default, but here LOCALBIN is elsewhere; this is the Makefile's pinned one.
         "goAnnotations.markers.controllerGenPath": "/home/agent/.cache/k8s-ai-platform/bin/controller-gen",
+        // shellcheck cannot read zsh. It has no zsh mode at all, so the extension lints these as
+        // bash and reports zsh's own syntax as errors -- `(N)` and `(N-/)` glob qualifiers in
+        // .zprofile and .zshrc parse as unescaped subshells, which then swallow the rest of the
+        // file. Nothing in those files is wrong and nothing in them can be written to satisfy it,
+        // so the fix is to stop pointing the linter at them. They keep the shellscript language
+        // association, because that is also what gives them highlighting.
+        "shellcheck.ignorePatterns": {
+          "**/.zprofile": true,
+          "**/.zsh_aliases": true,
+          "**/.zshenv": true,
+          "**/.zshrc": true
+        },
+        // -x, so a script that sources hack/lib/registry.sh is checked against the real file
+        // rather than reported as an unfollowed source. Matches how the pre-commit hook runs it.
+        "shellcheck.customArgs": ["-x"],
+        // The apt shellcheck from .devcontainer/Dockerfile, not the one the extension bundles:
+        // the hook gates on the former, and an editor that disagrees with the gate about what
+        // passes is worse than no editor check. Same reasoning as go.alternateTools above.
+        "shellcheck.executablePath": "/usr/bin/shellcheck",
         "gopls": {
           "ui.semanticTokens": true,
           // Same import grouping as the goimports settings in .golangci.yml and hack/format.sh.
@@ -140,10 +159,19 @@
     // which is not reachable from the bridge network the feature build runs on (it hung 135s and
     // failed the install). The `docker compose` v2 plugin still comes from the apt moby-compose
     // package, so compose works; only the legacy standalone `docker-compose` command is absent.
+    //
+    // The CLI, buildx and the compose plugin are baked into .devcontainer/Dockerfile from the
+    // China mirror; install.sh skips its own download when `docker` is already on PATH, so what
+    // is left here is the part an image build cannot do -- the group GID at container start.
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
       "dockerDashComposeVersion": "none"
     },
-    "ghcr.io/devcontainers/features/git:1": {}
+    // os-provided, not the default "latest". "latest" means *build git from source*: apt-install
+    // build-essential and the curl/expat/gettext headers, fetch the tarball from github.com, then
+    // `make install` -- minutes, on the bridge network the feature build runs on, for a tool the
+    // golang:1.25-bookworm base already ships at 2.39. This pins it to that apt package, which
+    // makes the layer a no-op. Raise it only if something here needs a git newer than bookworm's.
+    "ghcr.io/devcontainers/features/git:1": { "version": "os-provided" }
   },
   // The tools (kind/kubebuilder/kubectl/starship, zsh plugins, gopls, dlv) are baked into this
   // pre-built image, so a Rebuild is layer cache instead of re-downloading them on every create.

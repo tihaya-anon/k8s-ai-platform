@@ -7,6 +7,24 @@ set -euo pipefail
 # linking the baked zsh plugins into $HOME, and the LOCALBIN tools that live on the named volume
 # (so they persist across rebuilds and `make` skips them once present).
 
+# Every external command this script runs, checked before any of them does work. A missing binary
+# otherwise reaches the Dev Containers log as a bare "exit code 127" with no name attached: `set
+# -e` stops the script at the `command not found`, and the CLI reports the status rather than the
+# message -- which makes a one-word problem look like a lifecycle problem, and makes VS Code skip
+# the rest of onCreate including the extension install. Checking up front also fails in a second
+# instead of after the two minutes `npm ci` and `make` spend first.
+missing=()
+for cmd in sudo chsh zsh git curl make go node npm docker kind kubebuilder kubectl k9s starship; do
+  command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "post-install.sh: not on PATH: ${missing[*]}" >&2
+  echo "  sudo and chsh come from the common-utils feature and docker from" >&2
+  echo "  docker-outside-of-docker; everything else is baked by .devcontainer/Dockerfile." >&2
+  echo "  Scroll up to that feature's or that layer's output for why it is absent." >&2
+  exit 1
+fi
+
 # Docker creates a named volume's mount point, and every missing parent of a mount, owned by root
 # -- and this script no longer runs as root, so those directories have to be handed to the user
 # before anything writes under them. Same job as prepare_volumes() in hack/agent.sh, and the only

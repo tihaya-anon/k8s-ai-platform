@@ -81,7 +81,7 @@ build_image() {
   # Mirrors keep their defaults in the Dockerfile and are passed only when the host sets them, so
   # there is one source of truth and a slow network can still override it. Same rule as agent.sh.
   local mirror_var
-  for mirror_var in APT_MIRROR GITHUB_MIRROR; do
+  for mirror_var in APT_MIRROR DOCKER_MIRROR GITHUB_MIRROR; do
     if [[ -n ${!mirror_var:-} ]]; then
       build_args+=(--build-arg "$mirror_var=${!mirror_var}")
     fi
