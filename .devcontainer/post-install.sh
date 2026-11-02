@@ -32,7 +32,7 @@ fi
 # /go/pkg is the Go module cache volume (GOPATH is /go in the golang image). It is listed here
 # rather than left to Go, because Go creates what it needs *under* the mount point but cannot
 # create the root-owned mount point's contents in the first place.
-for dir in "$HOME/.cache" "$HOME/.config" "$HOME/.config/k9s" "$HOME/.kube" /go/pkg; do
+for dir in "$HOME/.cache" "$HOME/.config" "$HOME/.kube" /go/pkg; do
   if [ -d "$dir" ]; then sudo chown "$(id -u):$(id -g)" "$dir"; fi
 done
 sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/k8s-ai-platform"

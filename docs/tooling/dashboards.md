@@ -32,20 +32,33 @@ the version is a `K9S_VERSION` bump and a rebuild — see [agent-container.md](a
 
 ### A light terminal
 
-k9s never looks at the terminal's background — no OSC query, no `COLORFGBG` — so it opens with its
-dark stock skin wherever it runs, and the choice has to be written down. Try the switch for one
-session first:
+k9s never looks at the terminal's background — no OSC query, no `COLORFGBG`, and `termenv` is only
+an indirect dependency through lipgloss — so it opens with its dark stock skin wherever it runs. The
+switch is a flag:
 
 ```console
 k9s --invert
 ```
 
 That flips the stock skin's colours rather than swapping in a different palette, so the
-relationships between them survive. To keep it, set `invert: true` in
-`hack/agent-home/.config/k9s/config.yaml`, which is bind-mounted into the container the same way
-`starship.toml` is; the flag wins over the file, so the preview above works either way.
+relationships between them survive.
 
-The other route is `ui.skin`, naming a YAML under `skins/` in the same directory. k9s does not ship
+`invert` is a config key as well as a flag, so `~/.config/k9s/config.yaml` can make it stick:
+
+```yaml
+k9s:
+  ui:
+    invert: true
+```
+
+Nothing in this repository writes that file, on purpose — which theme a terminal uses is a property
+of the machine, not of the project, and the two sides of a shared dotfile need not agree. Two things
+to know before reaching for it: inside the container that path is in the container's own filesystem,
+so a Rebuild discards it and the flag is the durable answer there; and k9s writes `config.yaml` only
+when it is absent, so one you create is yours to keep — per-context state goes to
+`clusters/<cluster>/<context>/config.yaml` beside it either way.
+
+The third route is `ui.skin`, naming a YAML under `skins/` in the same directory. k9s does not ship
 those inside the binary, so it means vendoring a skin from its repository — worth it only for a
 palette the inversion cannot produce.
 

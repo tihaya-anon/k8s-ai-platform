@@ -207,11 +207,6 @@
     "source=${localWorkspaceFolder}/hack/agent-home/.zshrc,target=/home/agent/.zshrc,type=bind,readonly",
     "source=${localWorkspaceFolder}/hack/agent-home/.zsh_aliases,target=/home/agent/.zsh_aliases,type=bind,readonly",
     "source=${localWorkspaceFolder}/hack/agent-home/.config/starship.toml,target=/home/agent/.config/starship.toml,type=bind,readonly",
-    // Read-only like the rest, and safe to be: k9s writes config.yaml only when it is absent, and
-    // keeps its per-context state under clusters/ beside it. post-install.sh has to chown
-    // ~/.config/k9s, because Docker creates a mount's missing parents owned by root and k9s needs
-    // to write that sibling directory.
-    "source=${localWorkspaceFolder}/hack/agent-home/.config/k9s/config.yaml,target=/home/agent/.config/k9s/config.yaml,type=bind,readonly",
     // The cluster scripts (hack/set-up-cluster.sh, shutdown-cluster.sh) run *inside* this
     // container: it has the host Docker socket, --network=host and kind/kubectl/helm baked in, so
     // kind, docker and helm behave exactly as on the host. That makes the mount writable -- the
