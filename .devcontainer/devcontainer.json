@@ -129,6 +129,25 @@
           "zsh": { "path": "/bin/zsh", "args": ["-l"] }
         },
         "terminal.integrated.defaultProfile.linux": "zsh",
+        // Keep the enclosing declarations pinned to the top of the editor while scrolling.
+        //
+        // defaultModel is the setting that decides *what* sticks, and it is written out rather
+        // than left at its default because the other two models answer a different question. The
+        // outline model asks the language server for the document's symbols, so in Go what sticks
+        // is `func`, `type`, the method a body belongs to -- declarations. foldingProviderModel
+        // and indentationModel stick whatever happens to be foldable or indented, which means an
+        // `if` or a `for` pushes the function name off the top, exactly when the name is what is
+        // worth seeing. Where no symbol provider answers -- YAML and JSON, so most of config/ --
+        // VS Code falls back to the folding model on its own, which is the right behaviour there.
+        //
+        // maxLineCount stays at its default of 5: Go declarations nest about two deep, but a
+        // kustomize overlay or a CRD manifest nests further and that is where the extra rows pay.
+        "editor.stickyScroll.enabled": true,
+        "editor.stickyScroll.defaultModel": "outlineModel",
+        "editor.stickyScroll.scrollWithEditor": true,
+        // The same idea in the Explorer and the other trees: the directory a file sits in stays
+        // visible while scrolling a long listing.
+        "workbench.tree.enableStickyScroll": true,
         // The Go tools are pinned in .devcontainer/Dockerfile and built into the image, so the
         // editor must neither replace them nor nag about replacing them. autoUpdate stops the
         // silent `go install`; checkForUpdates stops the prompt, which is not merely noise here:
