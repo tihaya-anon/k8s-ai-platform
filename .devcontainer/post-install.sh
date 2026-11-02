@@ -43,6 +43,7 @@ go version
 kind version
 kubebuilder version
 kubectl version --client
+k9s version --short
 docker --version
 zsh --version
 starship --version | head -1

@@ -120,7 +120,7 @@ docs/product/         requirements.md, architecture.md
 docs/curriculum/      training-tasks.md and one file per deep-taught task
 docs/log/             progress.md
 docs/reference/       Kubernetes background: components, API machinery, objects, validation
-docs/tooling/         agent-container.md
+docs/tooling/         agent-container.md, dashboards.md
 .markdownlint.json
 .prettierrc
 .prettierignore

@@ -61,3 +61,5 @@ left unimplemented on purpose.
 
 - [tooling/agent-container.md](tooling/agent-container.md) — the optional development container, how
   it is built, and what it mounts.
+- [tooling/dashboards.md](tooling/dashboards.md) — k9s, Headlamp and the opt-in Grafana stack: what
+  each one answers, and why the console authenticates as a ServiceAccount token.

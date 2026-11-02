@@ -16,6 +16,10 @@ readonly CERT_MANAGER_VERSION="v1.17.0"
 readonly KSERVE_VERSION="v0.20.0"
 readonly KUEUE_VERSION="0.19.5"
 readonly GATEWAY_API_VERSION="v1.3.0"
+readonly HEADLAMP_VERSION="0.46.0"
+# Opt-in, see ensure_observability(). Pinned here anyway so that turning it on does not also mean
+# picking a version under time pressure.
+readonly KUBE_PROMETHEUS_STACK_VERSION="92.17.0"
 
 # Deployments that must report Available before the next layer is installed.
 # Helm's --wait only covers resources in its own chart, so cross-chart ordering
@@ -23,6 +27,16 @@ readonly GATEWAY_API_VERSION="v1.3.0"
 readonly CERT_MANAGER_DEPLOYMENTS=(cert-manager cert-manager-webhook cert-manager-cainjector)
 readonly KSERVE_DEPLOYMENTS=(kserve-controller-manager)
 readonly KUEUE_DEPLOYMENTS=(kueue-controller-manager)
+readonly HEADLAMP_DEPLOYMENTS=(headlamp)
+
+readonly HEADLAMP_NAMESPACE="headlamp"
+readonly OBSERVABILITY_NAMESPACE="observability"
+
+# Charts that are still published to a classic HTTP chart repository rather than as OCI artifacts.
+# `helm pull --repo` reads the repository's index.yaml for this one command, so neither of these
+# needs `helm repo add` and the host keeps no repo list this script depends on.
+readonly HEADLAMP_CHART_REPO="https://kubernetes-sigs.github.io/headlamp/"
+readonly PROMETHEUS_COMMUNITY_CHART_REPO="https://prometheus-community.github.io/helm-charts"
 
 readonly WAIT_TIMEOUT="300s"
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -97,9 +111,12 @@ ensure_cluster() {
   fi
 }
 
-# Download an OCI chart once and reuse the pinned archive on later runs. The cache is deliberately
+# Download a chart once and reuse the pinned archive on later runs. The cache is deliberately
 # outside Git: charts are reproducible inputs, not source files, and can be reacquired from their
 # pinned upstream versions when the cache is removed.
+# HELM_REPO, when set by the caller, names a classic HTTP chart repository and $chart is then the
+# plain chart name inside it. Passed as an environment variable rather than another positional so
+# that the OCI callers below -- the majority -- keep reading as they did.
 helm_chart() {
   local chart="$1" version="$2"
   local name="${chart##*/}"
@@ -114,7 +131,11 @@ helm_chart() {
   local temporary archive
   temporary="$(mktemp -d "$HELM_CACHE_DIR/.download.XXXXXX")"
   log "caching Helm chart $name $version" >&2
-  helm pull "$chart" --version "$version" --destination "$temporary" >/dev/null
+  local -a pull_args=(--version "$version" --destination "$temporary")
+  if [ -n "${HELM_REPO:-}" ]; then
+    pull_args+=(--repo "$HELM_REPO")
+  fi
+  helm pull "$chart" "${pull_args[@]}" >/dev/null
   archive="$(find "$temporary" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
   if [ -z "$archive" ]; then
     rm -rf "$temporary"
@@ -306,6 +327,51 @@ ensure_kueue() {
   wait_for_deployments kueue-system "${KUEUE_DEPLOYMENTS[@]}"
 }
 
+# Headlamp is a read-mostly web console for the objects in this cluster: Deployments, Pods, Events,
+# and -- the reason it is here rather than the Kubernetes Dashboard -- the custom resources this
+# repository defines, which it renders from their CRD schemas without a plugin.
+#
+# It runs in the cluster because that is what makes its service account the thing the API server
+# authenticates; the browser reaches it through hack/dashboard.sh, which port-forwards rather than
+# exposing a NodePort. A kind node's ports are only reachable at all if they were mapped at create
+# time, and a console bound to a host port is a console anything on the host can talk to.
+#
+# The chart's default clusterRoleBinding gives its service account cluster-admin. That is accepted
+# here and nowhere else: this is a local single-node training cluster, and the alternative --
+# curating a read-only ClusterRole -- would hide exactly the RBAC errors a platform under
+# development should surface.
+ensure_headlamp() {
+  HELM_REPO="$HEADLAMP_CHART_REPO" \
+    helm_release headlamp headlamp "$HEADLAMP_NAMESPACE" "$HEADLAMP_VERSION"
+  wait_for_deployments "$HEADLAMP_NAMESPACE" "${HEADLAMP_DEPLOYMENTS[@]}"
+}
+
+# Prometheus, Grafana, node-exporter and kube-state-metrics, off by default.
+#
+# Off because it is the only layer here that is not needed to run the platform: it answers "how is
+# the reconciler behaving over time", which is a question worth asking once there is a reconciler
+# worth watching. It also costs roughly a gigabyte of memory on a single kind node, which is a poor
+# trade on a laptop that is mostly running envtest.
+#
+# Turn it on with WITH_OBSERVABILITY=1 hack/set-up-cluster.sh. Turning it off again is
+# `helm uninstall kube-prometheus-stack -n observability`: this script converges what is asked for
+# and does not remove what a previous run installed.
+ensure_observability() {
+  if [ "${WITH_OBSERVABILITY:-0}" != "1" ]; then
+    log "skipping the observability stack; enable it with WITH_OBSERVABILITY=1"
+    return
+  fi
+
+  # The chart ships its CRDs in crds/, which Helm installs but never upgrades. A version bump that
+  # changes the Prometheus CRDs therefore needs `kubectl apply` of the new ones, or a reinstall --
+  # the same trap KServe sidesteps by publishing kserve-crd as its own chart.
+  HELM_REPO="$PROMETHEUS_COMMUNITY_CHART_REPO" \
+    helm_release kube-prometheus-stack kube-prometheus-stack \
+      "$OBSERVABILITY_NAMESPACE" "$KUBE_PROMETHEUS_STACK_VERSION" \
+      --set grafana.defaultDashboardsTimezone=browser \
+      --set prometheus.prometheusSpec.retention=24h
+}
+
 main() {
   normalize_proxy_env
   ensure_cli_tools
@@ -314,7 +380,10 @@ main() {
   ensure_cert_manager
   ensure_kserve
   ensure_kueue
+  ensure_headlamp
+  ensure_observability
   log "cluster $CLUSTER_NAME is ready"
+  log "open the web console with: hack/dashboard.sh"
 }
 
 main "$@"

@@ -159,9 +159,10 @@ covers them.
 ### Building the devcontainer image
 
 The devcontainer opens a pre-built image rather than building from `.devcontainer/Dockerfile` on
-every create, so `kind`, `kubebuilder`, `kubectl`, `helm`, `starship`, the zsh plugins, `gopls` and
-`dlv` come out of the layer cache. `hack/devcontainer.sh` is to that image what `hack/agent.sh` is
-to the agent image, and shares its registry logic through `hack/lib/registry.sh`:
+every create, so `kind`, `kubebuilder`, `kubectl`, `k9s`, `helm`, `starship`, the zsh plugins,
+`gopls` and `dlv` come out of the layer cache. (`k9s` is the terminal console for the cluster — see
+[dashboards.md](dashboards.md).) `hack/devcontainer.sh` is to that image what `hack/agent.sh` is to
+the agent image, and shares its registry logic through `hack/lib/registry.sh`:
 
 ```bash
 hack/devcontainer.sh image     # build locally, tagged with the commit sha and latest

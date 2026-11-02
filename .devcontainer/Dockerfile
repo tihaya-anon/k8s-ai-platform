@@ -54,6 +54,7 @@ ARG no_proxy
 ARG KIND_VERSION=v0.32.0
 ARG KUBEBUILDER_VERSION=4.9.0
 ARG KUBECTL_VERSION=v1.34.8
+ARG K9S_VERSION=v0.51.0
 ARG STARSHIP_VERSION=1.25.0
 ARG ZSH_AUTOSUGGESTIONS_COMMIT=85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
 ARG ZSH_SYNTAX_HIGHLIGHTING_COMMIT=e6683f20e5c38d3e5447f45845d04ddda75d0f23
@@ -81,7 +82,9 @@ RUN set -eu; \
         zsh \
     && rm -rf /var/lib/apt/lists/*
 
-# Single-binary K8s tools plus starship. The stall guard and retries are load-bearing: a
+# Single-binary K8s tools plus starship. k9s is in here rather than in the cluster: it reads
+# ~/.kube/config like kubectl does, so it needs no install into the cluster and no RBAC of its
+# own -- see docs/tooling/dashboards.md. The stall guard and retries are load-bearing: a
 # proxy can accept the connection and then send nothing, and without --speed-limit/--speed-time
 # curl waits on that socket forever. Same reasoning as agent.Dockerfile.
 ARG TARGETARCH
@@ -98,6 +101,9 @@ RUN set -eu; \
         "${GITHUB_MIRROR}/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_linux_${arch}"; \
     chmod +x /tmp/kubebuilder; \
     mv /tmp/kubebuilder /usr/local/bin/kubebuilder; \
+    curl $curl_opts -fsSL \
+        "${GITHUB_MIRROR}/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_${arch}.tar.gz" \
+        | tar -C /usr/local/bin -xz k9s; \
     case "$arch" in \
       amd64) star_arch=x86_64-unknown-linux-gnu ;; \
       arm64) star_arch=aarch64-unknown-linux-musl ;; \
