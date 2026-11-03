@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
   - ml_v1alpha1_dataset.yaml
+- ml_v1alpha1_trainingjob.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

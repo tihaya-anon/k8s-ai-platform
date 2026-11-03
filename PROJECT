@@ -22,4 +22,13 @@ resources:
     defaulting: true
     validation: true
     webhookVersion: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: aiplatform.io
+  group: ml
+  kind: TrainingJob
+  path: github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1
+  version: v1alpha1
 version: "3"

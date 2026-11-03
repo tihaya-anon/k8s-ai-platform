@@ -25,3 +25,11 @@ resources:
   - dataset_admin_role.yaml
   - dataset_editor_role.yaml
   - dataset_viewer_role.yaml
+# For each CRD, "Admin", "Editor" and "Viewer" roles are scaffolded by
+# default, aiding admins in cluster management. Those roles are
+# not used by the k8s-ai-platform itself. You can comment the following lines
+# if you do not want those helpers be installed with your Project.
+- trainingjob_admin_role.yaml
+- trainingjob_editor_role.yaml
+- trainingjob_viewer_role.yaml
+
