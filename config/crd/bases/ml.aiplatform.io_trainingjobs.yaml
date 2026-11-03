@@ -39,10 +39,21 @@ spec:
           spec:
             description: spec defines the desired state of TrainingJob
             properties:
-              foo:
-                description: foo is an example field of TrainingJob. Edit trainingjob_types.go
-                  to remove/update
+              baseModel:
+                description: BaseModel the trained weights this run starts from
                 type: string
+              dataset:
+                description: Dataset the registered dataset this run trains on, by
+                  name
+                type: string
+              image:
+                description: Image the container holding the training code, framework
+                  and GPU libraries
+                type: string
+            required:
+            - baseModel
+            - dataset
+            - image
             type: object
           status:
             description: status defines the observed state of TrainingJob

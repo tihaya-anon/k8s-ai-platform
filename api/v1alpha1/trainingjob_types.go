@@ -25,14 +25,20 @@ import (
 
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// +required
 
-	// foo is an example field of TrainingJob. Edit trainingjob_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// Dataset the registered dataset this run trains on, by name
+	Dataset *string `json:"dataset"`
+
+	// +required
+
+	// BaseModel the trained weights this run starts from
+	BaseModel *string `json:"baseModel"`
+
+	// +required
+
+	// Image the container holding the training code, framework and GPU libraries
+	Image *string `json:"image"`
 }
 
 // TrainingJobStatus defines the observed state of TrainingJob.
