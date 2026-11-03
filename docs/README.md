@@ -17,9 +17,12 @@ rates.
    and required platform behavior.
 2. [product/architecture.md](product/architecture.md) — the design that follows from it. What this
    repository owns, what Kueue and KServe own, and the five custom resources.
-3. [curriculum/training-tasks.md](curriculum/training-tasks.md) — the task list, built from a blank
+3. [product/domain.md](product/domain.md) — the dictionary: every domain term and every field, what
+   it means and which platform decision depends on it. Look a word up here rather than reading it
+   end to end; it exists so that nothing else has to explain "golden dataset" twice.
+4. [curriculum/training-tasks.md](curriculum/training-tasks.md) — the task list, built from a blank
    repository. Start with "How a task runs now".
-4. [log/progress.md](log/progress.md) — one entry per task: what changed, how it was proved, the
+5. [log/progress.md](log/progress.md) — one entry per task: what changed, how it was proved, the
    quiz, and the review.
 
 If a task assumes a Kubernetes mechanism you have not met yet, look in `reference/` first.

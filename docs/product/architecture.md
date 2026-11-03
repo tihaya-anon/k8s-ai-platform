@@ -51,6 +51,11 @@ carrying policy, lineage, or a stable interface across a runtime swap — ideall
 Five, all namespaced. The namespace is the team boundary, which is also Kueue's `LocalQueue`
 boundary and the RBAC boundary. That alignment is deliberate and worth not breaking.
 
+This section decides which objects exist and how they relate. What each field _means_, and which
+platform decision would be impossible without it, is in [domain.md](domain.md) — including the
+vocabulary the rest of these documents use without stopping to explain: artifact, lineage, base
+model, golden dataset, gate, canary.
+
 ### `Dataset`
 
 A versioned, immutable input. No Kubernetes analogue; a pure platform object.

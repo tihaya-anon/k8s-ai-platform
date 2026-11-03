@@ -169,7 +169,10 @@ kubebuilder create api \
 ```
 
 Allow it to create the resource and the controller scaffold when prompted, but keep the controller
-logic empty until Level 1. Then edit `api/v1alpha1/dataset_types.go` yourself:
+logic empty until Level 1. Then edit `api/v1alpha1/dataset_types.go` yourself. The list below is
+what to build; what each field _means_ and why the platform needs it is in
+[domain.md](../product/domain.md#dataset) — read that first if `golden` or the two `checksum` fields
+look arbitrary.
 
 - `spec.uri`: non-empty dataset artifact location.
 - `spec.owner`: non-empty human or team owner used for accountability and incident routing.

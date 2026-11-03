@@ -4,6 +4,9 @@ This platform is an internal AI model operations system for running training, ev
 inference, and online inference on shared Kubernetes infrastructure. The user stories below describe
 how different people interact with the system and what each workflow must make visible.
 
+Terms used throughout — artifact, lineage, fine-tuning, golden dataset, gate, canary — are defined
+in [domain.md](domain.md), so the stories below can use them without stopping.
+
 ## Users And Responsibilities
 
 | User                        | Goal                                                      | Primary Platform Objects                                             | Success Signal                                                                      |
