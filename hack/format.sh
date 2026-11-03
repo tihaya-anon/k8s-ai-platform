@@ -18,12 +18,21 @@ if [[ ${#files[@]} -eq 0 ]]; then
   mapfile -t files < <(git ls-files)
 fi
 
-md=() prettier=() go=()
+# Prettier decides for itself which of these it handles, through --ignore-unknown below, and
+# .prettierignore decides which it must not touch. This script used to keep its own extension
+# list as well, and it drifted twice: .prettierrc carries no .json suffix and .pi/*.ts was never
+# listed, so both went unformatted while sitting in a repository that formats everything else.
+# A second, partial copy of "what Prettier supports" is one owner too many.
+#
+# markdownlint and the Go formatter still dispatch by extension, because neither has an
+# equivalent of --ignore-unknown.
+md=() go=()
+existing=()
 for f in "${files[@]}"; do
   [[ -f $f ]] || continue
+  existing+=("$f")
   case $f in
-  *.md) md+=("$f") prettier+=("$f") ;;
-  *.json | *.jsonc | *.yaml | *.yml) prettier+=("$f") ;;
+  *.md) md+=("$f") ;;
   *.go)
     # controller-gen rewrites its own output on every `make generate`, so formatting
     # it just produces a diff the next generator run reverts. golangci-lint skips
@@ -44,7 +53,7 @@ if [[ ${#md[@]} -gt 0 ]] && have markdownlint-cli2; then
   markdownlint-cli2 --fix "${md[@]}" >/dev/null 2>&1
 fi
 
-if [[ ${#prettier[@]} -gt 0 ]] && have prettier; then
+if [[ ${#existing[@]} -gt 0 ]] && have prettier; then
   # .prettierrc loads prettier-plugin-sort-json, which Prettier resolves from the repository's
   # node_modules -- not from whichever global install provided the `prettier` on PATH. Without the
   # tree, Prettier fails on every file with a plugin-resolution error that says nothing about the
@@ -53,7 +62,7 @@ if [[ ${#prettier[@]} -gt 0 ]] && have prettier; then
     echo "format.sh: the Prettier plugins are not installed; run 'npm ci'" >&2
     status=1
   else
-    prettier --write --ignore-unknown --log-level warn "${prettier[@]}" || status=1
+    prettier --write --ignore-unknown --log-level warn "${existing[@]}" || status=1
   fi
 fi
 

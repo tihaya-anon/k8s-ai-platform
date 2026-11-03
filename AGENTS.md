@@ -107,7 +107,10 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - Comments explain _why_ a constraint exists, not what the line does.
 - Diagrams are Mermaid, not ASCII art.
 - Once workflow helpers exist, keep one owner per formatting concern: Prettier for wrapping and for
-  JSON key order, markdownlint for Markdown structure, `gofmt` for Go.
+  JSON key order, markdownlint for Markdown structure, `gofmt` for Go. Neither `hack/format.sh` nor
+  the pre-commit hook keeps a list of the extensions Prettier handles — they hand it every file and
+  let `--ignore-unknown` decide, because a second copy of that list drifts: `.prettierrc` carries no
+  `.json` suffix and `.pi/*.ts` was never listed, so both sat unformatted.
 - **A file a generator writes into is not Prettier's.** `.prettierignore` holds the list, and
   `kustomization.yaml` is on it for a sharper reason than churn: Kubebuilder appends at its
   `# +kubebuilder:scaffold:` markers at column 0, Prettier indents block sequences by two, and one

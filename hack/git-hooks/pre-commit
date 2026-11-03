@@ -23,16 +23,16 @@ have() { command -v "$1" >/dev/null 2>&1; }
 mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACMR)
 [[ ${#staged[@]} -eq 0 ]] && exit 0
 
-targets=()
-for f in "${staged[@]}"; do
-  case $f in
-  *.md | *.json | *.jsonc | *.yaml | *.yml | *.go) targets+=("$f") ;;
-  esac
-done
-# Shell scripts are a lint target, not a format target, so they are collected from `staged`
-# rather than added to `targets`: shellcheck has no --fix, and format.sh only ever rewrites files.
-# Detected by shebang as well as by extension, because hack/git-hooks/* and hack/agent-bin/* carry
-# no .sh suffix. The pattern does not match zsh -- there is no word boundary before the `sh` in
+# Everything staged goes to format.sh, which decides what it can format -- the same reason that
+# script no longer keeps an extension list of its own. This one had the matching list and the
+# matching gap: .ts and .prettierrc reached neither. A file the formatters leave alone is restaged
+# unchanged, which `git add` treats as a no-op.
+targets=("${staged[@]}")
+
+# Shell scripts need a second pass, because shellcheck is a gate and not a formatter: it has no
+# --fix, so it reports rather than rewrites and its findings have to stop the commit. Detected by
+# shebang as well as by extension, because hack/git-hooks/* and hack/agent-bin/* carry no .sh
+# suffix. The pattern does not match zsh -- there is no word boundary before the `sh` in
 # `zsh` -- and that is deliberate: shellcheck has no zsh mode at all and reports zsh's own glob
 # qualifiers as syntax errors.
 shell=()
@@ -48,8 +48,6 @@ for f in "${staged[@]}"; do
   esac
 done
 
-[[ ${#targets[@]} -eq 0 && ${#shell[@]} -eq 0 ]] && exit 0
-
 # Partially staged files would have their unstaged hunks swept into the commit if
 # we reformatted the worktree copy and blindly restaged it. Warn and leave them.
 partial=()
@@ -62,9 +60,7 @@ done
 # allowed a kustomization.yaml that is not valid YAML into a commit: the errors were printed and
 # the commit proceeded. Formatting stays silent when it succeeds; failing to format is a gate.
 rc=0
-if [[ ${#targets[@]} -gt 0 ]]; then
-  ./hack/format.sh "${targets[@]}" || rc=1
-fi
+./hack/format.sh "${targets[@]}" || rc=1
 
 for f in "${targets[@]}"; do
   skip=0
