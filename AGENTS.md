@@ -99,6 +99,10 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
   model gates.
 - **No `if kind` in Go.** Cluster differences live in kustomize overlays under
   `config/overlays/{kind,cloud}` once those overlays exist.
+- **No provider branches in `hack/` scripts either.** The scripts run on kind or on the host's k3s,
+  and everything that differs between them lives in `hack/lib/cluster.sh`; a script calls its
+  functions rather than testing `CLUSTER_PROVIDER`. See
+  [docs/tooling/cluster-providers.md](docs/tooling/cluster-providers.md).
 - **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro Go on `PATH`.
 - Comments explain _why_ a constraint exists, not what the line does.
 - Diagrams are Mermaid, not ASCII art.

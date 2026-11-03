@@ -31,8 +31,9 @@ const (
 	certmanagerVersion = "v1.18.2"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
-	defaultKindBinary  = "kind"
-	defaultKindCluster = "kind"
+	// The script, not this package, knows how each cluster provider imports an image, so the Go
+	// side never asks which provider it is running against.
+	loadImageScript = "hack/load-image.sh"
 )
 
 func warnError(err error) {
@@ -133,18 +134,11 @@ func IsCertManagerCRDsInstalled() bool {
 	return false
 }
 
-// LoadImageToKindClusterWithName loads a local docker image to the kind cluster
-func LoadImageToKindClusterWithName(name string) error {
-	cluster := defaultKindCluster
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
-	}
-	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
-	kindBinary := defaultKindBinary
-	if v, ok := os.LookupEnv("KIND"); ok {
-		kindBinary = v
-	}
-	cmd := exec.Command(kindBinary, kindOptions...)
+// LoadImageToClusterWithName loads a local docker image into the e2e cluster, kind or k3s. The
+// provider and, for kind, the cluster name come from the environment (CLUSTER_PROVIDER,
+// KIND_CLUSTER), which Run passes through to the script.
+func LoadImageToClusterWithName(name string) error {
+	cmd := exec.Command(loadImageScript, name)
 	_, err := Run(cmd)
 	return err
 }

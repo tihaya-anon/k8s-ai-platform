@@ -59,6 +59,8 @@ left unimplemented on purpose.
 
 ## Tooling
 
+- [tooling/cluster-providers.md](tooling/cluster-providers.md) — the cluster scripts on kind or on
+  the host's k3s: how the provider is chosen, and what differs between the two.
 - [tooling/agent-container.md](tooling/agent-container.md) — the optional development container, how
   it is built, and what it mounts.
 - [tooling/dashboards.md](tooling/dashboards.md) — k9s, Headlamp and the opt-in Grafana stack: what

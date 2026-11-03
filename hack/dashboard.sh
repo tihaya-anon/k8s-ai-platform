@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Open a web console for the local kind cluster: Headlamp by default, Grafana when the optional
-# observability stack is installed.
+# Open a web console for the local cluster (kind or the host's k3s; see hack/lib/cluster.sh):
+# Headlamp by default, Grafana when the optional observability stack is installed.
 #
 # Both consoles need the same two things, and they are the two things this script does: credentials
 # to log in with, and a local port forwarded to the Service.
@@ -39,6 +39,9 @@ fail() {
   exit 1
 }
 
+# shellcheck source=lib/cluster.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/cluster.sh"
+
 ensure_cli_tools() {
   command -v kubectl >/dev/null 2>&1 || fail "kubectl is not installed"
 }
@@ -46,8 +49,10 @@ ensure_cli_tools() {
 # Same reasoning as hack/set-up-cluster.sh: name the context rather than trusting whichever one is
 # current. Forwarding a port into the wrong cluster is quiet and confusing.
 ensure_context() {
-  kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null 2>&1 \
-    || fail "no kubeconfig context kind-${CLUSTER_NAME}; create the cluster with hack/set-up-cluster.sh"
+  local context
+  context="$(cluster_context)"
+  kubectl config use-context "$context" >/dev/null 2>&1 \
+    || fail "no kubeconfig context ${context}; create the cluster with hack/set-up-cluster.sh"
 }
 
 wait_for_deployment() {
@@ -153,6 +158,7 @@ do_grafana() {
 }
 
 main() {
+  resolve_cluster_provider
   ensure_cli_tools
   ensure_context
 

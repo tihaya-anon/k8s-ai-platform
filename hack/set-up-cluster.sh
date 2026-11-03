@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# Create or converge the local kind cluster used for platform development.
+# Create or converge the local cluster used for platform development: a kind
+# cluster, or the host's k3s. hack/lib/cluster.sh owns the difference; see it
+# for how the provider is chosen.
 #
 # Re-running this script is safe and is the normal way to apply a version bump:
 # every step declares desired state rather than branching on "did I already do
@@ -55,6 +57,9 @@ fail() {
   exit 1
 }
 
+# shellcheck source=lib/cluster.sh
+source "$REPO_ROOT/hack/lib/cluster.sh"
+
 normalize_proxy_env() {
   # Some Linux desktops export uppercase proxy variables for containers as
   # host.docker.internal while lowercase variables point at the host loopback.
@@ -74,8 +79,10 @@ normalize_proxy_env() {
 ensure_cli_tools() {
   local cmd
   local missing=0
+  local -a provider_tools
+  mapfile -t provider_tools < <(cluster_cli_tools)
 
-  for cmd in docker kubectl kind helm curl; do
+  for cmd in kubectl helm curl "${provider_tools[@]}"; do
     if command -v "$cmd" >/dev/null 2>&1; then
       printf '  %-8s ok\n' "$cmd"
     else
@@ -90,28 +97,23 @@ ensure_cli_tools() {
 }
 
 ensure_cluster() {
-  # Capture first, match second: `kind get clusters | grep -q` lets grep close
-  # the pipe on its first match and SIGPIPE kind.
-  local clusters
-  clusters="$(kind get clusters 2>/dev/null || true)"
-
-  if printf '%s\n' "$clusters" | grep -Fxq -- "$CLUSTER_NAME"; then
-    log "kind cluster $CLUSTER_NAME already exists"
+  if cluster_exists; then
+    log "$(cluster_describe) already exists"
   else
-    log "creating kind cluster $CLUSTER_NAME on Kubernetes $KUBERNETES_VERSION"
-    kind create cluster \
-      --name "$CLUSTER_NAME" \
-      --image "kindest/node:${KUBERNETES_VERSION}"
+    cluster_create "$KUBERNETES_VERSION"
   fi
 
   # Point kubectl at this cluster explicitly. Relying on "whatever the current
   # context happens to be" is how you install KServe into a production cluster.
-  kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
+  local context
+  context="$(cluster_context)"
+  kubectl config use-context "$context" >/dev/null \
+    || fail "no kubeconfig context $context for the $CLUSTER_PROVIDER cluster"
 
   local actual
   actual="$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}')"
-  if [ "$actual" != "$KUBERNETES_VERSION" ]; then
-    fail "cluster $CLUSTER_NAME runs $actual, expected $KUBERNETES_VERSION; delete it with hack/shutdown-cluster.sh and re-run"
+  if ! cluster_version_matches "$actual" "$KUBERNETES_VERSION"; then
+    fail "cluster runs $actual, expected $KUBERNETES_VERSION; $(cluster_version_hint "$KUBERNETES_VERSION")"
   fi
 }
 
@@ -150,66 +152,25 @@ helm_chart() {
   printf '%s\n' "$cached"
 }
 
-# Load chart images into the kind node before Kubernetes schedules pods. In this
-# development setup the host Docker daemon can reach registries, while the kind
-# node may inherit a proxy that points at host.docker.internal, which Linux kind
-# nodes cannot resolve by default. Preloading keeps the cluster setup independent
-# of in-node registry access.
+# Load chart images into the cluster before Kubernetes schedules pods, on the
+# providers that need it (see cluster_preloads_images in hack/lib/cluster.sh).
+# The host Docker daemon can reach registries; preloading keeps the cluster
+# setup independent of in-node registry access.
 preload_image() {
   local image="$1"
 
-  log "preloading image $image into kind cluster"
+  log "preloading image $image into the $CLUSTER_PROVIDER cluster"
   docker pull "$image" >/dev/null
-
-  if docker save "$image" \
-    | docker exec -i "${CLUSTER_NAME}-control-plane" \
-        ctr --namespace=k8s.io images import - >/dev/null; then
-    return
-  fi
-
-  # Docker's containerd image store can export an incomplete archive for some
-  # OCI-indexed images. Fall back to flattening the image filesystem while
-  # preserving the runtime fields Kubernetes needs to start the container.
-  log "docker save could not be imported for $image; flattening local image"
-  local entrypoint cmd user workdir container
-  local -a changes envs
-  changes=()
-  entrypoint="$(docker image inspect "$image" --format '{{json .Config.Entrypoint}}')"
-  cmd="$(docker image inspect "$image" --format '{{json .Config.Cmd}}')"
-  user="$(docker image inspect "$image" --format '{{.Config.User}}')"
-  workdir="$(docker image inspect "$image" --format '{{.Config.WorkingDir}}')"
-  mapfile -t envs < <(docker image inspect "$image" --format '{{range .Config.Env}}{{println .}}{{end}}')
-
-  if [ "$entrypoint" != "null" ]; then
-    changes+=(--change "ENTRYPOINT $entrypoint")
-  fi
-  if [ "$cmd" != "null" ]; then
-    changes+=(--change "CMD $cmd")
-  fi
-  if [ -n "$user" ]; then
-    changes+=(--change "USER $user")
-  fi
-  if [ -n "$workdir" ]; then
-    changes+=(--change "WORKDIR $workdir")
-  fi
-  local env
-  for env in "${envs[@]}"; do
-    if [ -n "$env" ]; then
-      changes+=(--change "ENV $env")
-    fi
-  done
-
-  container="$(docker create "$image")"
-  docker export "$container" | docker import "${changes[@]}" - "$image" >/dev/null
-  docker rm "$container" >/dev/null
-  docker save "$image" \
-    | docker exec -i "${CLUSTER_NAME}-control-plane" \
-        ctr --namespace=k8s.io images import - >/dev/null
+  cluster_load_image "$image"
 }
 
 preload_helm_images() {
   local release="$1" chart="$2" namespace="$3"
   shift 3
+
+  if ! cluster_preloads_images; then
+    return
+  fi
 
   local images image
   mapfile -t images < <(
@@ -225,7 +186,7 @@ preload_helm_images() {
   fi
 
   for image in "${images[@]}"; do
-    if docker exec "${CLUSTER_NAME}-control-plane" crictl inspecti "$image" >/dev/null 2>&1; then
+    if cluster_has_image "$image"; then
       continue
     fi
     preload_image "$image"
@@ -378,6 +339,7 @@ ensure_observability() {
 
 main() {
   normalize_proxy_env
+  resolve_cluster_provider
   ensure_cli_tools
   ensure_cluster
   ensure_gateway_api
@@ -386,7 +348,7 @@ main() {
   ensure_kueue
   ensure_headlamp
   ensure_observability
-  log "cluster $CLUSTER_NAME is ready"
+  log "$(cluster_describe) is ready"
   log "open the web console with: hack/dashboard.sh"
 }
 
