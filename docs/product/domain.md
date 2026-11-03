@@ -75,11 +75,19 @@ for the markers.
 
 | Field      | What it is                                                  | Why the platform needs it                                                                                                                        | Constraints           |
 | ---------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| `uri`      | where the dataset's bytes actually live                     | the only way to reach the artifact; also the identity a drift check re-resolves                                                                  | required, 1–128 chars |
+| `uri`      | where the dataset's bytes actually live                     | the only way to reach the artifact, and the address a drift check re-resolves                                                                    | required, 1–128 chars |
 | `owner`    | the human or team accountable for it                        | incident routing and accountability — a failing dataset needs someone to wake, and "the platform" is not a someone                               | required, 1–128 chars |
 | `rows`     | how many records the registrant says it has                 | a claim to check the artifact against, so a truncated upload is caught at registration rather than by a model that trains on a tenth of the data | optional, minimum 1   |
 | `checksum` | the artifact digest the registrant says it has              | the other half of the same check, and the one that catches a silent rewrite rather than a truncation                                             | optional, 1–256 chars |
 | `golden`   | whether this dataset is approved as an evaluation yardstick | makes the dataset a policy input: an `Evaluation` scores only against golden data, so flipping this bit changes what the promotion gate means    | defaults to `false`   |
+
+`uri` is an address, not an identity. Two `Dataset`s may carry the same one, and nothing stops them:
+uniqueness in Kubernetes is `metadata.name` and nothing else, because there is no unique index on a
+spec field. A webhook that listed siblings to reject a duplicate would race a concurrent create and
+read a possibly stale cache, so it can only ever warn — which is what
+`internal/webhook/v1alpha1/dataset_webhook.go` does. Two registrations of one URI whose checksums
+disagree is a signal a human should see, not an error. What identifies _content_ is `checksum`; what
+identifies the _object_ is its name.
 
 `rows` and `checksum` are claims, deliberately. They are what the registrant asserts, and the
 controller writes what it actually found into `status`. The pair existing on both sides is the
@@ -104,11 +112,23 @@ A user's training request. In progress — task [1.2](../curriculum/1.2-kueue-an
 
 | Field               | What it is                                                           | Why the platform needs it                                                                                                                                                                  | Constraints                         |
 | ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| the `Dataset`       | the registered dataset this run trains on, **by name**               | the first lineage edge, and an admission check: a job pointing at a missing or non-`Ready` dataset is refused at submission rather than discovered as a crash loop inside a GPU allocation | a reference, never an embedded copy |
+| the `Dataset`       | the registered dataset this run trains on, by `metadata.name`        | the first lineage edge, and an admission check: a job pointing at a missing or non-`Ready` dataset is refused at submission rather than discovered as a crash loop inside a GPU allocation | a reference, never an embedded copy |
 | the base model      | the trained weights this run starts from                             | the second lineage edge and its own licence; also the dominant term in GPU memory, so it decides whether the resource request below can ever fit                                           | required for fine-tuning            |
 | the image           | the container holding the training code, framework and GPU libraries | the code version, and the third lineage edge                                                                                                                                               | pin by digest, not tag              |
 | GPU and CPU request | what the Pod asks the scheduler for                                  | the only number Kueue can do arithmetic on against `nominalQuota`, so it has to land on the Pod template where Kueue reads it                                                              | must reach the Pod template         |
 | the queue           | the `LocalQueue` this run belongs to                                 | where the job meets the team boundary and the fairness policy — whose quota it spends and who preempts it                                                                                  | defaulted per namespace             |
+
+**By name** means the `metadata.name` of a `Dataset` in the _same namespace_ — not a UID, not a
+`corev1.ObjectReference`, not the object itself. Same namespace because architecture.md aligns the
+namespace with the team boundary, Kueue's `LocalQueue` boundary and the RBAC boundary, so a
+reference that crossed it would let a job read data its submitter has no permission to read. A name
+rather than a richer reference because the kind is already fixed — it is always a `Dataset` — so
+`apiVersion` and `kind` would be noise, and a pinned `resourceVersion` would be worse than noise.
+The exact Go shape, a bare string or a one-field reference struct, is 1.2's to choose.
+
+A name is not the same question as what lineage records. This field is an _input_, resolved and
+validated when the job is admitted; the lineage reference a `ModelVersion` carries is a _record_ of
+what happened, and it has to survive the deletion of what it points at. That is 1.3's problem.
 
 Two rules the field list does not state. **A reference, not a copy**: embedding a `Dataset` object
 into the spec snapshots it, so the copy cannot be checked for `Ready`, goes stale the moment the
