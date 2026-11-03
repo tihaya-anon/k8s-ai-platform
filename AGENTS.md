@@ -108,6 +108,11 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
 - Diagrams are Mermaid, not ASCII art.
 - Once workflow helpers exist, keep one owner per formatting concern: Prettier for wrapping and for
   JSON key order, markdownlint for Markdown structure, `gofmt` for Go.
+- **A file a generator writes into is not Prettier's.** `.prettierignore` holds the list, and
+  `kustomization.yaml` is on it for a sharper reason than churn: Kubebuilder appends at its
+  `# +kubebuilder:scaffold:` markers at column 0, Prettier indents block sequences by two, and one
+  `kubebuilder create api` after one format run leaves a file that is not valid YAML. The
+  scaffolder's column 0 wins, because it is the one doing the writing.
 - **JSON keys are sorted by Prettier**, through `prettier-plugin-sort-json`. A comment in a JSON
   file therefore names the key it is about and never its position: "see the mount below" is a
   comment that the next format run can make wrong. The plugin and Prettier itself are pinned in

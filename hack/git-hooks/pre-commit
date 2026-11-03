@@ -57,8 +57,13 @@ for f in "${targets[@]}"; do
   if ! git diff --quiet -- "$f"; then partial+=("$f"); fi
 done
 
+# A non-zero status here is not "a file changed", it is "a formatter could not do its job" --
+# Prettier failing to parse a file, or the plugin tree being absent. Letting that through is what
+# allowed a kustomization.yaml that is not valid YAML into a commit: the errors were printed and
+# the commit proceeded. Formatting stays silent when it succeeds; failing to format is a gate.
+rc=0
 if [[ ${#targets[@]} -gt 0 ]]; then
-  ./hack/format.sh "${targets[@]}"
+  ./hack/format.sh "${targets[@]}" || rc=1
 fi
 
 for f in "${targets[@]}"; do
@@ -75,7 +80,6 @@ fi
 md=()
 for f in "${targets[@]}"; do [[ $f == *.md ]] && md+=("$f"); done
 
-rc=0
 if [[ ${#md[@]} -gt 0 ]]; then
   if have markdownlint-cli2; then
     markdownlint-cli2 "${md[@]}" || rc=1
