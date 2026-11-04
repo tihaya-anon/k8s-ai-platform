@@ -20,26 +20,48 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=128
+	// +required
+
+	// Owner non-empty human or team owner used for accountability and incident routing
+	Owner *string `json:"owner"`
+
 	// +required
 
 	// Dataset the registered dataset this run trains on, by name
 	Dataset *string `json:"dataset"`
 
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	// +required
 
 	// BaseModel the trained weights this run starts from
 	BaseModel *string `json:"baseModel"`
 
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
 	// +required
 
 	// Image the container holding the training code, framework and GPU libraries
 	Image *string `json:"image"`
+
+	// +required
+
+	// Queue points to the LocalQueue this run belongs to, by name
+	Queue *string `json:"queue"`
 }
+
+type TrainingJobPhase string
+
+const (
+	TrainingJobPhasePending TrainingJobPhase = "Pending"
+	TrainingJobPhaseRunning TrainingJobPhase = "Running"
+	TrainingJobPhaseSuccess TrainingJobPhase = "Success"
+	TrainingJobPhaseFailed  TrainingJobPhase = "Failed"
+)
 
 // TrainingJobStatus defines the observed state of TrainingJob.
 type TrainingJobStatus struct {
@@ -62,6 +84,17 @@ type TrainingJobStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// +kubebuilder:validation:Enum=Pending;Running;Success;Failed
+	// +required
+
+	// Phase short display summary, one of Pending, Running, Success or Failed
+	Phase TrainingJobPhase `json:"phase"`
+
+	// +optional
+
+	// LastResolvedTime timestamp of the last successful metadata resolution
+	LastResolvedTime metav1.Time `json:"lastResolvedTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true

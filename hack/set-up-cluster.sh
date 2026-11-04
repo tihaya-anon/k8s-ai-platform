@@ -16,7 +16,7 @@ readonly CLUSTER_NAME="k8s-ai-platform"
 readonly KUBERNETES_VERSION="v1.36.1"
 readonly CERT_MANAGER_VERSION="v1.17.0"
 readonly KSERVE_VERSION="v0.20.0"
-readonly KUEUE_VERSION="0.19.5"
+readonly KUEUE_VERSION="0.20.4"
 readonly GATEWAY_API_VERSION="v1.3.0"
 readonly HEADLAMP_VERSION="0.46.0"
 # Opt-in, see ensure_observability(). Pinned here anyway so that turning it on does not also mean

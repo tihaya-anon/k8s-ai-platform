@@ -4,6 +4,9 @@
 # Locally cached Helm charts and Gateway API manifests
 /.cache/
 
+# Pids and logs of background processes started by hack/ scripts
+/.run/
+
 # Local Pi background task logs
 /.pi/tasks/
 

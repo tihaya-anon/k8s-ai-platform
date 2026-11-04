@@ -8,10 +8,18 @@
 #
 # Neither is exposed as a NodePort. A kind node's host ports have to be mapped when the cluster is
 # created, and a console on a fixed host port is reachable by anything on the host for as long as
-# the cluster runs; a port-forward lives and dies with this process.
+# the cluster runs; a port-forward lives and dies with the process holding it.
+#
+# That process is detached rather than held in the foreground, because the terminal that starts a
+# console is usually the terminal you then want to run kubectl in. The price of detaching is that
+# something has to remember the process: its pid and its output go to .run/, and `stop` reads them
+# back. A pidfile is only ever a hint -- the pid may have exited, or been reused -- so every read
+# of it checks that the live process is still the kubectl port-forward this script started.
 #
 # Usage:
-#   hack/dashboard.sh [headlamp|grafana] [local-port]
+#   hack/dashboard.sh [headlamp|grafana] [local-port]   start, in the background
+#   hack/dashboard.sh stop [headlamp|grafana|all]       stop a background console
+#   hack/dashboard.sh status                            what is running
 
 set -euo pipefail
 
@@ -29,6 +37,17 @@ readonly GRAFANA_SERVICE="kube-prometheus-stack-grafana"
 readonly GRAFANA_PORT="3000"
 
 readonly WAIT_TIMEOUT="120s"
+
+# How long to watch a freshly started port-forward before declaring it up. kubectl prints
+# "Forwarding from ..." once it is listening, and exits within the same moment when the port is
+# taken or the Service is gone, so a short poll separates the two without guessing.
+readonly FORWARD_READY_TIMEOUT="10"
+
+# Repository-local rather than /tmp: it is the same directory on every shell and in the
+# devcontainer, it is gitignored next to .cache/, and a stale file in it is visible to whoever
+# wonders why a port is busy.
+RUN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.run"
+readonly RUN_DIR
 
 log() {
   printf '==> %s\n' "$*"
@@ -119,16 +138,148 @@ grafana_credentials() {
     "$user" "$password" "$OBSERVABILITY_NAMESPACE" "$secret"
 }
 
-forward() {
-  local namespace="$1" service="$2" service_port="$3" port="$4"
+pid_file() {
+  printf '%s/dashboard-%s.pid\n' "$RUN_DIR" "$1"
+}
+
+log_file() {
+  printf '%s/dashboard-%s.log\n' "$RUN_DIR" "$1"
+}
+
+# The Service a console's forward points at. Used to recognize the process again, so it has to be
+# the same name start_forward passes to kubectl.
+console_service() {
+  case "$1" in
+    headlamp) printf '%s\n' "$HEADLAMP_SERVICE" ;;
+    grafana) printf '%s\n' "$GRAFANA_SERVICE" ;;
+    *) fail "unknown console '${1}'" ;;
+  esac
+}
+
+# Print the pid of a running forward for this console, or nothing. A pid read from a file says only
+# that something with that number once existed, so the command line is checked too: pids are reused,
+# and killing an unrelated process would be this script's fault, not the operating system's.
+forward_pid() {
+  local console="$1" file pid args
+  file="$(pid_file "$console")"
+
+  [ -f "$file" ] || return 1
+  pid="$(cat "$file")"
+  [ -n "$pid" ] || return 1
+
+  args="$(ps -o args= -p "$pid" 2>/dev/null || true)"
+  case "$args" in
+    *kubectl*port-forward*"svc/$(console_service "$console")"*) printf '%s\n' "$pid" ;;
+    *)
+      rm -f "$file"
+      return 1
+      ;;
+  esac
+}
+
+# The local port a running forward is on, read back from its command line rather than remembered in
+# a second file: one source of truth for what is actually listening.
+forward_port() {
+  ps -o args= -p "$1" 2>/dev/null | sed -nE 's/.* ([0-9]+):[0-9]+( .*)?$/\1/p'
+}
+
+start_forward() {
+  local console="$1" namespace="$2" service="$3" service_port="$4" port="$5"
+
+  local pid
+  if pid="$(forward_pid "$console")"; then
+    fail "$console is already forwarded on localhost:$(forward_port "$pid") (pid $pid); stop it with: $0 stop $console"
+  fi
+
+  mkdir -p "$RUN_DIR"
+  local log_path
+  log_path="$(log_file "$console")"
 
   # Bound to loopback on purpose, which is also kubectl's default: the devcontainer runs with
   # --network=host, so 127.0.0.1 here is the loopback the browser on the host opens, and nothing
   # else on the network can reach it.
   log "forwarding localhost:${port} to svc/${service} in ${namespace}"
-  exec kubectl port-forward --namespace "$namespace" \
+  kubectl port-forward --namespace "$namespace" \
     --address 127.0.0.1 \
-    "svc/${service}" "${port}:${service_port}"
+    "svc/${service}" "${port}:${service_port}" \
+    >"$log_path" 2>&1 &
+
+  pid=$!
+  # Detach from this shell's job table so that the forward survives the terminal that started it;
+  # the pidfile, not the parent shell, is what owns it from here.
+  disown "$pid" 2>/dev/null || true
+  printf '%s\n' "$pid" >"$(pid_file "$console")"
+
+  wait_for_forward "$console" "$pid" "$log_path"
+}
+
+# kubectl prints "Forwarding from" once it is listening and exits almost immediately when it cannot
+# (port already taken, Service gone), so watching both for a few seconds is the honest readiness
+# check. Reporting success on a process that has already died is the failure worth avoiding here.
+wait_for_forward() {
+  local console="$1" pid="$2" log_path="$3" waited=0
+  local deadline=$((FORWARD_READY_TIMEOUT * 2))
+
+  while [ "$waited" -lt "$deadline" ]; do
+    if grep -q 'Forwarding from' "$log_path" 2>/dev/null; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$(pid_file "$console")"
+      cat "$log_path" >&2
+      fail "the port-forward for $console exited immediately; see the output above"
+    fi
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+
+  fail "the port-forward for $console did not start within ${FORWARD_READY_TIMEOUT}s; see $log_path"
+}
+
+stop_forward() {
+  local console="$1" pid
+
+  if ! pid="$(forward_pid "$console")"; then
+    log "$console is not forwarded"
+    return 0
+  fi
+
+  log "stopping $console (pid $pid)"
+  kill "$pid" 2>/dev/null || true
+
+  # TERM is enough for kubectl, which closes the listener and exits; the wait is so that the port is
+  # free by the time this script returns and a restart on the same port cannot race it.
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 20 ]; do
+    sleep 0.5
+    waited=$((waited + 1))
+  done
+  kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+
+  rm -f "$(pid_file "$console")"
+}
+
+do_stop() {
+  case "${1:-all}" in
+    all)
+      stop_forward headlamp
+      stop_forward grafana
+      ;;
+    headlamp | grafana) stop_forward "$1" ;;
+    *) fail "unknown console '${1}'; expected headlamp, grafana or all" ;;
+  esac
+}
+
+do_status() {
+  local console pid
+  for console in headlamp grafana; do
+    if pid="$(forward_pid "$console")"; then
+      printf '%-8s running on http://localhost:%s (pid %s, log %s)\n' \
+        "$console" "$(forward_port "$pid")" "$pid" "$(log_file "$console")"
+    else
+      printf '%-8s not running\n' "$console"
+    fi
+  done
 }
 
 do_headlamp() {
@@ -137,11 +288,11 @@ do_headlamp() {
   wait_for_deployment "$HEADLAMP_NAMESPACE" "$HEADLAMP_DEPLOYMENT" \
     "run hack/set-up-cluster.sh"
 
+  start_forward headlamp "$HEADLAMP_NAMESPACE" "$HEADLAMP_SERVICE" 80 "$port"
+
   printf '\nHeadlamp: http://localhost:%s\n\n' "$port"
   headlamp_credentials
-  printf '\nStop the console with Ctrl-C.\n\n'
-
-  forward "$HEADLAMP_NAMESPACE" "$HEADLAMP_SERVICE" 80 "$port"
+  printf '\nStop the console with: %s stop headlamp\n\n' "$0"
 }
 
 do_grafana() {
@@ -150,14 +301,28 @@ do_grafana() {
   wait_for_deployment "$OBSERVABILITY_NAMESPACE" "$GRAFANA_DEPLOYMENT" \
     "the observability stack is optional; install it with WITH_OBSERVABILITY=1 hack/set-up-cluster.sh"
 
+  start_forward grafana "$OBSERVABILITY_NAMESPACE" "$GRAFANA_SERVICE" 80 "$port"
+
   printf '\nGrafana: http://localhost:%s\n\n' "$port"
   grafana_credentials
-  printf '\nStop the console with Ctrl-C.\n\n'
-
-  forward "$OBSERVABILITY_NAMESPACE" "$GRAFANA_SERVICE" 80 "$port"
+  printf '\nStop the console with: %s stop grafana\n\n' "$0"
 }
 
 main() {
+  # stop and status act on processes on this machine, not on the cluster, so they deliberately run
+  # before any provider or context check: a forward left behind by a cluster that has since been
+  # deleted is exactly the one you want to be able to stop.
+  case "${1:-headlamp}" in
+    stop)
+      do_stop "${2:-all}"
+      return
+      ;;
+    status)
+      do_status
+      return
+      ;;
+  esac
+
   resolve_cluster_provider
   ensure_cli_tools
   ensure_context
@@ -165,7 +330,7 @@ main() {
   case "${1:-headlamp}" in
     headlamp) do_headlamp "${2:-}" ;;
     grafana) do_grafana "${2:-}" ;;
-    *) fail "unknown console '${1}'; expected headlamp or grafana" ;;
+    *) fail "unknown console '${1}'; expected headlamp, grafana, stop or status" ;;
   esac
 }
 

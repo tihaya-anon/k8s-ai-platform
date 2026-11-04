@@ -42,9 +42,13 @@ var datasetlog = logf.Log.WithName("dataset-resource")
 
 // SetupDatasetWebhookWithManager registers the webhook for Dataset in the manager.
 func SetupDatasetWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).For(&mlv1alpha1.Dataset{}).
-		WithValidator(&DatasetCustomValidator{Client: mgr.GetClient()}).
-		WithDefaulter(&DatasetCustomDefaulter{}).
+	// controller-runtime 0.25 made the webhook builder generic: the object moves from .For() into
+	// the constructor, and WithValidator/WithDefaulter now take the typed admission.Validator[T] /
+	// admission.Defaulter[T]. The untyped interfaces these two types implement are reached through
+	// WithCustomValidator / WithCustomDefaulter.
+	return ctrl.NewWebhookManagedBy(mgr, &mlv1alpha1.Dataset{}).
+		WithCustomValidator(&DatasetCustomValidator{Client: mgr.GetClient()}).
+		WithCustomDefaulter(&DatasetCustomDefaulter{}).
 		Complete()
 }
 

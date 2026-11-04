@@ -103,7 +103,7 @@ is the IoC container, Kubebuilder markers are annotations, reconcilers are the s
   and everything that differs between them lives in `hack/lib/cluster.sh`; a script calls its
   functions rather than testing `CLUSTER_PROVIDER`. See
   [docs/tooling/cluster-providers.md](docs/tooling/cluster-providers.md).
-- **The toolchain is Go 1.25**, installed under `~/.local/go` and ahead of the distro Go on `PATH`.
+- **The toolchain is Go 1.27**, installed under `~/.local/go` and ahead of the distro Go on `PATH`.
 - Comments explain _why_ a constraint exists, not what the line does.
 - Diagrams are Mermaid, not ASCII art.
 - Once workflow helpers exist, keep one owner per formatting concern: Prettier for wrapping and for

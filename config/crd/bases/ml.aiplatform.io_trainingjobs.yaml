@@ -41,6 +41,8 @@ spec:
             properties:
               baseModel:
                 description: BaseModel the trained weights this run starts from
+                maxLength: 256
+                minLength: 1
                 type: string
               dataset:
                 description: Dataset the registered dataset this run trains on, by
@@ -49,11 +51,25 @@ spec:
               image:
                 description: Image the container holding the training code, framework
                   and GPU libraries
+                maxLength: 256
+                minLength: 1
+                type: string
+              owner:
+                description: Owner non-empty human or team owner used for accountability
+                  and incident routing
+                maxLength: 128
+                minLength: 1
+                type: string
+              queue:
+                description: Queue points to the LocalQueue this run belongs to, by
+                  name
                 type: string
             required:
             - baseModel
             - dataset
             - image
+            - owner
+            - queue
             type: object
           status:
             description: status defines the observed state of TrainingJob
@@ -127,6 +143,22 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              lastResolvedTime:
+                description: LastResolvedTime timestamp of the last successful metadata
+                  resolution
+                format: date-time
+                type: string
+              phase:
+                description: Phase short display summary, one of Pending, Running,
+                  Success or Failed
+                enum:
+                - Pending
+                - Running
+                - Success
+                - Failed
+                type: string
+            required:
+            - phase
             type: object
         required:
         - spec

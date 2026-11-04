@@ -123,7 +123,9 @@ get real views — including the owner-reference tree that links a parent object
 controller created — without writing a plugin.
 
 ```console
-hack/dashboard.sh
+hack/dashboard.sh                 # start it, in the background
+hack/dashboard.sh status          # what is forwarded, on which port
+hack/dashboard.sh stop            # stop every console; `stop headlamp` stops one
 ```
 
 That script does two things. It mints a bearer token with `kubectl create token`, and it forwards a
@@ -138,7 +140,12 @@ Both are worth understanding rather than copying:
   nothing behind when it expires.
 - **The port-forward.** A kind node only has the host ports that were mapped when the cluster was
   created, so a NodePort would mean recreating the cluster; and a console on a fixed host port stays
-  reachable for as long as the cluster runs. The forward lives and dies with the script.
+  reachable for as long as the cluster runs. The forward lives and dies with the process holding it,
+  which is why `stop` exists: the script detaches `kubectl port-forward` rather than holding the
+  terminal, writes its pid and its output under `.run/`, and reads them back to stop it. The pidfile
+  is treated as a hint and never as the truth — pids are reused, so `status` and `stop` both check
+  that the process still on that pid is the port-forward this script started, and discard the file
+  when it is not.
 
 The chart's default `clusterRoleBinding` binds Headlamp's ServiceAccount to `cluster-admin`. That is
 accepted on this cluster and should not be copied to a shared one: it is a local single-node

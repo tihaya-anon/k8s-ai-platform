@@ -21,7 +21,7 @@
 # bound to the host's loopback is reachable from the build; DEVCONTAINER_BUILD_NETWORK overrides
 # that on a host where the downloads below work directly.
 
-ARG GO_IMAGE=golang:1.25-bookworm
+ARG GO_IMAGE=golang:1.27-bookworm
 # Same pin as agent.Dockerfile. Node is here only for the repository's formatter toolchain:
 # Prettier's JSON key sorting is a plugin, and a plugin has to be resolvable from the repository
 # rather than from whichever global install is on PATH, so package.json owns the pins and

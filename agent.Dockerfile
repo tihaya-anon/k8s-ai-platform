@@ -6,7 +6,7 @@
 # Defaults are human-readable tags; hack/agent.sh resolves them to immutable RepoDigests before
 # building so a moving Docker Hub tag does not silently change the sandbox.
 ARG NODE_IMAGE=node:24-bookworm
-ARG GO_IMAGE=golang:1.25-bookworm
+ARG GO_IMAGE=golang:1.27-bookworm
 FROM ${NODE_IMAGE} AS node
 
 FROM ${GO_IMAGE} AS base
