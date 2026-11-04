@@ -27,10 +27,43 @@ every generated file, script, and reconciler is something its maintainer can acc
 
 ### Prerequisites
 
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+**Use the devcontainer.** Open the repository in VS Code and run **Dev Containers: Reopen in
+Container**; `.devcontainer/` is the ordinary human development environment and everything below
+assumes it. This is a strong recommendation rather than a convenience:
+
+- Every version this repository holds itself to is baked into the image at a pin -- Go,
+  `controller-gen`, `golangci-lint`, `kubectl`, `kind`, `helm`, `kubebuilder`, `k9s`, `shellcheck`,
+  `gopls`, Prettier, markdownlint. A host that drifts from one of them disagrees with CI and with
+  the pre-commit hook about what passes.
+- The pre-commit hook _gates_ on `shellcheck` and markdownlint. A host missing one does not fail the
+  commit; it skips that gate and says so in a line that is easy to miss.
+- `--network=host` plus the host's Docker socket means `kind`, `kubectl` and `helm` behave exactly
+  as they do outside, and one `~/.kube/config` is valid on both sides. Cluster work costs nothing
+  for being done in a container.
+
+There is no file-system penalty to pay for that on Linux or on WSL2, as long as the checkout lives
+in the Linux file system: the bind mount is the same ext4, and the container sees it at native
+speed. A checkout under `/mnt/c` is the case that is genuinely slow, and it is slow for a native
+WSL2 shell too -- the fix there is to move the checkout, not to leave the container.
+
+Working on the host anyway means installing these yourself, at the versions
+`.devcontainer/Dockerfile` and the `Makefile` pin:
+
+- Go 1.27+ (the module's `go` directive is `1.27.0`)
+- Docker 17.03+
+- kubectl v1.11.3+, and access to a Kubernetes v1.11.3+ cluster -- `hack/set-up-cluster.sh` creates
+  a local one on kind or the host's k3s
+- `shellcheck`, for the pre-commit hook's shell gate
+
+`.vscode/` is deliberately absent and git-ignored. Editor settings live in
+`.devcontainer/devcontainer.json` under `customizations.vscode`, because a workspace
+`.vscode/settings.json` silently _overrides_ those -- which is how an editor can end up pointed at a
+linter path that does not exist inside the container, and lint nothing at all without saying so.
+
+Two further pieces of tooling have their own documents:
+[docs/tooling/agent-container.md](docs/tooling/agent-container.md) for the AI agent sandbox, which
+is a different container from this one, and
+[docs/tooling/cluster-providers.md](docs/tooling/cluster-providers.md) for kind versus k3s.
 
 ### To Deploy on the cluster
 

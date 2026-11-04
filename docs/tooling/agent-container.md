@@ -6,8 +6,10 @@ default, but it is not enabled automatically: nothing uses it until you run `hac
 
 This is different from the product image in the root `Dockerfile`, and it is also different from
 Kubebuilder's generated `.devcontainer/`. The generated devcontainer is the ordinary human
-development environment. `agent.Dockerfile` is an agent sandbox with Go, Make, Git, small CLI tools
-for editing and testing, and the `claude`, `pi`, `codex` and `opencode` CLIs. It does not bake any
+development environment, and the recommended one -- the prerequisites in
+[README.md](../../README.md) say why a host checkout is the worse trade, and why there is no
+`.vscode/` here. `agent.Dockerfile` is an agent sandbox with Go, Make, Git, small CLI tools for
+editing and testing, and the `claude`, `pi`, `codex` and `opencode` CLIs. It does not bake any
 model-provider credentials into the image.
 
 Quick start from the repository root:
