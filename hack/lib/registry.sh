@@ -110,6 +110,32 @@ current_git_sha() {
   git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit'
 }
 
+# Where a build sends its cache and picks it back up, appended to the caller's build flags.
+#
+# BuildKit keeps that cache inside the builder, where it is invisible and unmanaged: Docker Desktop
+# prunes it when the disk image fills, and everything a prune discards has to be downloaded again.
+# Measured on this checkout, the builder held 55GB of it, 36GB reclaimable, and the expensive half
+# is the npm stages. A local export puts the same content in a directory the host owns, so a build
+# after a prune costs an import instead of a re-download.
+#
+# mode=max is load-bearing. The default, min, exports only the layers the final image can reach, so
+# for these Dockerfiles it would keep the cheap tail and drop every stage worth caching -- go-tools,
+# agent-cli and editor-tools are all intermediate.
+#
+# --cache-from is dropped when the directory holds no export yet: BuildKit treats that as a failed
+# import and warns about it, which would be the first line of every build in a fresh clone.
+append_build_cache_flags() {
+  local -n flags=$1
+  local dir=$2
+  [[ -n $dir ]] || return 0
+
+  mkdir -p "$dir"
+  if [[ -f $dir/index.json ]]; then
+    flags+=(--cache-from "type=local,src=$dir")
+  fi
+  flags+=(--cache-to "type=local,dest=$dir,mode=max")
+}
+
 # Remote probes go through buildx's imagetools: it reads the manifest and image config without
 # downloading the layers, and uses the same credential store as docker push. `docker manifest
 # inspect` cannot read a label, and pulling three gigabytes to answer "is this commit published?"

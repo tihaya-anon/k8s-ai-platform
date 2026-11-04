@@ -311,6 +311,18 @@ host's `~/.zsh_env` is the usual place, since that file is private and already s
 `NVIM_RELEASE_BASE` exists because GitHub proxies cache small assets well and the 11MB Neovim
 tarball badly; the NJU mirror carries it at LAN speed under a layout of its own.
 
+BuildKit's cache lives inside the builder, where Docker Desktop prunes it once the disk image fills
+— measured on this checkout, 55GB of cache with 36GB of it reclaimable, which is the whole npm and
+Go half of this image. The build therefore also exports its cache to
+`${XDG_CACHE_HOME:-~/.cache}/k8s-ai-platform/buildkit` and imports it on the next run, so a build
+after a prune costs a cache import instead of a re-download. The export uses `mode=max` on purpose:
+the default, `min`, exports only the layers the final image reaches, and every expensive stage in
+this Dockerfile is an intermediate one. `AGENT_BUILD_CACHE` points it somewhere else, and setting it
+to an empty value disables the export; `hack/devcontainer.sh` has the same pair under
+`DEVCONTAINER_BUILD_CACHE`, in a directory of its own because the two images share no layers. The
+export runs only after a successful build, so a failed build leaves the previous export in place —
+the builder's in-memory cache is what makes the immediate retry cheap.
+
 To override the base images deliberately:
 
 ```bash

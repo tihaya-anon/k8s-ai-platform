@@ -144,6 +144,13 @@ verbose=0
 # there because hack/devcontainer.sh has its own environment variable for the same switch.
 pull_policy=${AGENT_PULL:-missing}
 
+# Where the build's cache is exported to, read by append_build_cache_flags. The builder's own cache
+# is what Docker Desktop prunes when its disk image fills, and the layers worth keeping -- the npm
+# install, the Go tool install -- are exactly what a prune takes. The `-` rather than `:-` is
+# deliberate: AGENT_BUILD_CACHE= with nothing after it disables the export, which a default would
+# have silently replaced with the path.
+build_cache_dir=${AGENT_BUILD_CACHE-${XDG_CACHE_HOME:-$HOME/.cache}/k8s-ai-platform/buildkit}
+
 # sync refuses to move the remote latest tag backwards. --force-latest covers the case the script
 # cannot decide: a latest built before images carried the revision label, or a commit from another
 # clone that is not in this one.
@@ -367,6 +374,7 @@ build_image() {
   go_digest=$(base_image_digest "$go_image")
 
   local build_flags=(--network "${AGENT_BUILD_NETWORK:-host}")
+  append_build_cache_flags build_flags "$build_cache_dir"
   local build_args=(
     --build-arg NODE_IMAGE="$node_digest"
     --build-arg GO_IMAGE="$go_digest"
@@ -574,6 +582,11 @@ Environment:
                  docker build network mode (default: host, so localhost proxies work)
   AGENT_PULL     base image refresh policy: missing (default) resolves node/golang from a local
                  image and pulls only when it is absent; always pulls the moving tags every build
+  AGENT_BUILD_CACHE
+                 directory the build cache is exported to and imported from (default:
+                 ${XDG_CACHE_HOME:-~/.cache}/k8s-ai-platform/buildkit). Exporting survives the
+                 cache prunes Docker Desktop performs when its disk image fills, so a rebuilt
+                 layer does not cost the npm download again. Set it to an empty value to disable
   APT_MIRROR     Debian package mirror for the image build (default: the Dockerfile's, which is
                  mirrors.aliyun.com)
   GITHUB_MIRROR  prefix for GitHub release downloads in the image build (default: the

@@ -33,6 +33,11 @@ verbose=0
 force_latest=0
 pull_policy=${DEVCONTAINER_PULL:-missing}
 
+# Same export as agent.sh, kept in its own directory because the two images share no layers and one
+# export would otherwise evict the other's entries. Empty disables it; see the note in agent.sh for
+# why the `-` is deliberate.
+build_cache_dir=${DEVCONTAINER_BUILD_CACHE-${XDG_CACHE_HOME:-$HOME/.cache}/k8s-ai-platform/devcontainer-buildkit}
+
 # The whole point of this script: a build tagged with anything other than what devcontainer.json
 # names produces an image VS Code will never open, and Rebuild Container then quietly reuses the
 # old one. Comparing is cheap; debugging "I rebuilt and nothing changed" is not.
@@ -70,6 +75,7 @@ build_image() {
   # proxy.golang.org directly this buys nothing, so DEVCONTAINER_BUILD_NETWORK=bridge is a
   # supported choice rather than a broken one.
   local build_flags=(--network "${DEVCONTAINER_BUILD_NETWORK:-host}")
+  append_build_cache_flags build_flags "$build_cache_dir"
   local build_args=(
     --build-arg GO_IMAGE="$go_digest"
     --build-arg GIT_SHA="$git_sha"
@@ -140,6 +146,10 @@ Environment:
   DEVCONTAINER_PULL
                  base image refresh policy: missing (default) resolves the base from a local image
                  and pulls only when it is absent; always pulls the moving tag every build
+  DEVCONTAINER_BUILD_CACHE
+                 directory the build cache is exported to and imported from (default:
+                 ${XDG_CACHE_HOME:-~/.cache}/k8s-ai-platform/devcontainer-buildkit). Empty
+                 disables the export; see AGENT_BUILD_CACHE in hack/agent.sh for the reason
   DEVCONTAINER_BUILD_NETWORK
                  docker build network mode (default: host, so localhost proxies work)
   APT_MIRROR     Debian package mirror for the image build (default: the Dockerfile's, which is
