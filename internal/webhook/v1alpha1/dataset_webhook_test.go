@@ -36,16 +36,16 @@ var _ = Describe("Dataset Webhook", func() {
 	var (
 		obj       *mlv1alpha1.Dataset
 		oldObj    *mlv1alpha1.Dataset
-		validator DatasetCustomValidator
-		defaulter DatasetCustomDefaulter
+		validator DatasetValidator
+		defaulter DatasetDefaulter
 	)
 
 	BeforeEach(func() {
 		obj = &mlv1alpha1.Dataset{}
 		oldObj = &mlv1alpha1.Dataset{}
-		validator = DatasetCustomValidator{}
+		validator = DatasetValidator{}
 		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
-		defaulter = DatasetCustomDefaulter{}
+		defaulter = DatasetDefaulter{}
 		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
 		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
 		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
@@ -59,8 +59,8 @@ var _ = Describe("Dataset Webhook", func() {
 	Context("When creating Dataset under Validating Webhook", func() {
 		// The warning is advisory by construction, so every spec here asserts that
 		// the create is still admitted.
-		newValidator := func(existing ...client.Object) DatasetCustomValidator {
-			return DatasetCustomValidator{
+		newValidator := func(existing ...client.Object) DatasetValidator {
+			return DatasetValidator{
 				Client: fake.NewClientBuilder().WithScheme(scheme.Scheme).WithObjects(existing...).Build(),
 			}
 		}

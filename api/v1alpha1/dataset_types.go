@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -136,7 +137,7 @@ type Dataset struct {
 	// +optional
 
 	// metadata is a standard object metadata
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// +required
 
@@ -146,7 +147,7 @@ type Dataset struct {
 	// +optional
 
 	// status defines the observed state of Dataset
-	Status DatasetStatus `json:"status,omitempty,omitzero"`
+	Status DatasetStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
@@ -154,10 +155,13 @@ type Dataset struct {
 // DatasetList contains a list of Dataset
 type DatasetList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []Dataset `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Dataset{}, &DatasetList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &Dataset{}, &DatasetList{})
+		return nil
+	})
 }

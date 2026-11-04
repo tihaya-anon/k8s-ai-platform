@@ -68,7 +68,7 @@ ARG no_proxy
 ARG TARGETARCH
 ARG GITHUB_MIRROR=https://github.com
 ARG KIND_VERSION=v0.32.0
-ARG KUBEBUILDER_VERSION=4.9.0
+ARG KUBEBUILDER_VERSION=4.16.0
 ARG KUBECTL_VERSION=v1.34.8
 # Helm is here because hack/set-up-cluster.sh installs KServe/Kueue with it and the VS Code
 # Kubernetes extension wants it for its chart features. Pinned to the host's version.

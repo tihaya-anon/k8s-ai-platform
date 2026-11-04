@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // TrainingJobSpec defines the desired state of TrainingJob
@@ -106,7 +107,7 @@ type TrainingJob struct {
 
 	// metadata is a standard object metadata
 	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitzero"`
 
 	// spec defines the desired state of TrainingJob
 	// +required
@@ -114,7 +115,7 @@ type TrainingJob struct {
 
 	// status defines the observed state of TrainingJob
 	// +optional
-	Status TrainingJobStatus `json:"status,omitempty,omitzero"`
+	Status TrainingJobStatus `json:"status,omitzero"`
 }
 
 // +kubebuilder:object:root=true
@@ -122,10 +123,13 @@ type TrainingJob struct {
 // TrainingJobList contains a list of TrainingJob
 type TrainingJobList struct {
 	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []TrainingJob `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&TrainingJob{}, &TrainingJobList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &TrainingJob{}, &TrainingJobList{})
+		return nil
+	})
 }

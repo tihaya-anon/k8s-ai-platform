@@ -25,7 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -60,7 +60,7 @@ var _ = Describe("Dataset Controller", func() {
 		// recorder is a parameter rather than a local: a transition is only
 		// observable against the phase the previous pass left behind, and a fresh
 		// recorder per pass could never tell "emitted once" from "emitted again".
-		reconcileWith := func(recorder record.EventRecorder, found artifact.Metadata) {
+		reconcileWith := func(recorder events.EventRecorder, found artifact.Metadata) {
 			GinkgoHelper()
 			controllerReconciler := &DatasetReconciler{
 				Client:   k8sClient,
@@ -105,7 +105,7 @@ var _ = Describe("Dataset Controller", func() {
 			controllerReconciler := &DatasetReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
 					"sample.uri": {Rows: 1, Checksum: "placeholder"},
 				}},
@@ -128,7 +128,7 @@ var _ = Describe("Dataset Controller", func() {
 			controllerReconciler := &DatasetReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Err: errors.NewServiceUnavailable("store down")},
 			}
 
@@ -151,7 +151,7 @@ var _ = Describe("Dataset Controller", func() {
 			controllerReconciler := &DatasetReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
 					"sample.uri": {Rows: 0, Checksum: "placeholder"},
 				}},
@@ -181,7 +181,7 @@ var _ = Describe("Dataset Controller", func() {
 		})
 
 		It("should clear a row count that an emptied artifact has invalidated", func() {
-			recorder := record.NewFakeRecorder(10)
+			recorder := events.NewFakeRecorder(10)
 
 			By("observing a usable artifact first")
 			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
@@ -199,7 +199,7 @@ var _ = Describe("Dataset Controller", func() {
 
 		DescribeTable("should go Failed when the artifact no longer matches the claim", func(
 			found artifact.Metadata, wantMessages ...string) {
-			recorder := record.NewFakeRecorder(10)
+			recorder := events.NewFakeRecorder(10)
 			reconcileWith(recorder, found)
 
 			drifted := &mlv1alpha1.Dataset{}
@@ -239,7 +239,7 @@ var _ = Describe("Dataset Controller", func() {
 		)
 
 		It("should fail a Ready Dataset whose artifact was rewritten under it", func() {
-			recorder := record.NewFakeRecorder(10)
+			recorder := events.NewFakeRecorder(10)
 
 			By("resolving the artifact the registrant actually registered")
 			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
@@ -291,7 +291,7 @@ var _ = Describe("Dataset Controller", func() {
 			controllerReconciler := &DatasetReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
 					"sample.uri": {Rows: 50, Checksum: "whatever-the-store-holds"},
 				}},

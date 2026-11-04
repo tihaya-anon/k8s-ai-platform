@@ -69,7 +69,7 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
 		By("deploying the controller-manager")
-		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", projectImage))
+		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
@@ -144,7 +144,7 @@ var _ = Describe("Manager", Ordered, func() {
 		It("should run successfully", func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
-				// Get the name of the controller-manager pod
+				By("getting the name of the controller-manager pod")
 				cmd := exec.Command("kubectl", "get",
 					"pods", "-l", "control-plane=controller-manager",
 					"-o", "go-template={{ range .items }}"+
@@ -161,7 +161,7 @@ var _ = Describe("Manager", Ordered, func() {
 				controllerPodName = podNames[0]
 				g.Expect(controllerPodName).To(ContainSubstring("controller-manager"))
 
-				// Validate the pod's status
+				By("validating the pod's status")
 				cmd = exec.Command("kubectl", "get",
 					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
 					"-n", namespace,
@@ -192,24 +192,52 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(token).NotTo(BeEmpty())
 
-			By("waiting for the metrics endpoint to be ready")
-			verifyMetricsEndpointReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "endpoints", metricsServiceName, "-n", namespace)
+			By("ensuring the controller pod is ready")
+			verifyControllerPodReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "pod", controllerPodName, "-n", namespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("8443"), "Metrics endpoint is not ready")
+				g.Expect(output).To(Equal("True"), "Controller pod not ready")
 			}
-			Eventually(verifyMetricsEndpointReady).Should(Succeed())
+			Eventually(verifyControllerPodReady, 3*time.Minute, time.Second).Should(Succeed())
 
 			By("verifying that the controller manager is serving the metrics server")
 			verifyMetricsServerStarted := func(g Gomega) {
 				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("controller-runtime.metrics\tServing metrics server"),
+				g.Expect(output).To(ContainSubstring("Serving metrics server"),
 					"Metrics server not yet started")
 			}
-			Eventually(verifyMetricsServerStarted).Should(Succeed())
+			Eventually(verifyMetricsServerStarted, 3*time.Minute, time.Second).Should(Succeed())
+
+			By("waiting for the webhook service endpoints to be ready")
+			verifyWebhookEndpointsReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "endpointslices.discovery.k8s.io", "-n", namespace,
+					"-l", "kubernetes.io/service-name=k8s-ai-platform-webhook-service",
+					"-o", "jsonpath={range .items[*]}{range .endpoints[*]}{.addresses[*]}{end}{end}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "Webhook endpoints should exist")
+				g.Expect(output).ShouldNot(BeEmpty(), "Webhook endpoints not yet ready")
+			}
+			Eventually(verifyWebhookEndpointsReady, 3*time.Minute, time.Second).Should(Succeed())
+
+			By("verifying the mutating webhook server is ready")
+			verifyMutatingWebhookReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "mutatingwebhookconfigurations.admissionregistration.k8s.io",
+					"k8s-ai-platform-mutating-webhook-configuration",
+					"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred(), "MutatingWebhookConfiguration should exist")
+				g.Expect(output).ShouldNot(BeEmpty(), "Mutating webhook CA bundle not yet injected")
+			}
+			Eventually(verifyMutatingWebhookReady, 3*time.Minute, time.Second).Should(Succeed())
+
+			By("waiting additional time for webhook server to stabilize")
+			time.Sleep(5 * time.Second)
+
+			// +kubebuilder:scaffold:e2e-metrics-webhooks-readiness
 
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
@@ -222,7 +250,9 @@ var _ = Describe("Manager", Ordered, func() {
 							"name": "curl",
 							"image": "curlimages/curl:latest",
 							"command": ["/bin/sh", "-c"],
-							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"args": [
+								"for i in $(seq 1 30); do curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics && exit 0 || sleep 2; done; exit 1"
+							],
 							"securityContext": {
 								"readOnlyRootFilesystem": true,
 								"allowPrivilegeEscalation": false,
@@ -324,7 +354,7 @@ func serviceAccountToken() (string, error) {
 		"kind": "TokenRequest"
 	}`
 
-	// Temporary file to store the token request
+	By("creating temporary file to store the token request")
 	secretName := fmt.Sprintf("%s-token-request", serviceAccountName)
 	tokenRequestFile := filepath.Join("/tmp", secretName)
 	err := os.WriteFile(tokenRequestFile, []byte(tokenRequestRawString), os.FileMode(0o644))
@@ -334,7 +364,7 @@ func serviceAccountToken() (string, error) {
 
 	var out string
 	verifyTokenCreation := func(g Gomega) {
-		// Execute kubectl command to create the token
+		By("executing kubectl command to create the token")
 		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
 			namespace,
@@ -344,7 +374,7 @@ func serviceAccountToken() (string, error) {
 		output, err := cmd.CombinedOutput()
 		g.Expect(err).NotTo(HaveOccurred())
 
-		// Parse the JSON output to extract the token
+		By("parsing the JSON output to extract the token")
 		var token tokenRequest
 		err = json.Unmarshal(output, &token)
 		g.Expect(err).NotTo(HaveOccurred())

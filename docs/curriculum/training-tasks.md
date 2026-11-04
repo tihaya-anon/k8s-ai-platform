@@ -51,7 +51,7 @@ Required tools:
 - Docker or another container runtime usable by kind.
 - `kubectl`.
 - `kind`.
-- `kubebuilder` v4.9.x.
+- `kubebuilder` v4.16.x.
 - Optional but useful now: `controller-gen`, `kustomize`, and `setup-envtest`; Kubebuilder's
   scaffolded Makefile will also install pinned local copies later.
 
@@ -108,10 +108,10 @@ it is needed.
 
 ### 0.2 Initialize the Kubebuilder project
 
-**You build:** Kubebuilder v4.9.0 is stricter than "docs are okay": it refuses to initialize in a
-directory containing non-scaffold entries such as `docs/`. Keep this repository as the committed
-learning baseline, but run Kubebuilder in a temporary empty directory and copy the generated
-scaffold back:
+**You build:** Kubebuilder v4.9.0, the version this curriculum was first written against, refused to
+initialize in a directory containing non-scaffold entries such as `docs/`; v4.16 no longer does.
+Either way, keep this repository as the committed learning baseline, but run Kubebuilder in a
+temporary empty directory and copy the generated scaffold back:
 
 ```bash
 mkdir -p ../k8s-ai-platform-scaffold

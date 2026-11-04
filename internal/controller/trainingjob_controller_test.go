@@ -32,13 +32,16 @@ import (
 
 var _ = Describe("TrainingJob Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const (
+			resourceName      = "test-resource"
+			resourceNamespace = "default"
+		)
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: resourceNamespace,
 		}
 		trainingjob := &mlv1alpha1.TrainingJob{}
 
@@ -49,7 +52,7 @@ var _ = Describe("TrainingJob Controller", func() {
 				resource := &mlv1alpha1.TrainingJob{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
-						Namespace: "default",
+						Namespace: resourceNamespace,
 					},
 					// TODO(user): Specify other spec details if needed.
 				}

@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +42,7 @@ import (
 type DatasetReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
+	Recorder       events.EventRecorder
 	Resolver       artifact.Resolver
 	ResyncInterval time.Duration
 }
@@ -64,7 +64,7 @@ const (
 
 const defaultResyncInterval = 10 * time.Minute
 
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=ml.aiplatform.io,resources=datasets/finalizers,verbs=update
@@ -153,7 +153,10 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		if dset.Status.Phase == mlv1alpha1.DatasetPhaseFailed {
 			eventType = corev1.EventTypeWarning
 		}
-		r.Recorder.Eventf(&dset, eventType, string(dset.Status.Phase), "Dataset %s: %s", dset.Status.Phase, condition.Message)
+		// events.k8s.io/v1 requires an action, the verb the controller was performing; the phase it
+		// arrived at stays the reason, which is what `kubectl get events` groups by.
+		r.Recorder.Eventf(&dset, nil, eventType, string(dset.Status.Phase), "Reconcile",
+			"Dataset %s: %s", dset.Status.Phase, condition.Message)
 	}
 
 	// The artifact store has no watch: an untouched Dataset is only re-resolved

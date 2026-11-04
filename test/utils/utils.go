@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	certmanagerVersion = "v1.18.2"
+	certmanagerVersion = "v1.21.1"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
 	// The script, not this package, knows how each cluster provider imports an image, so the Go
@@ -147,8 +147,8 @@ func LoadImageToClusterWithName(name string) error {
 // according to line breakers, and ignores the empty elements in it.
 func GetNonEmptyLines(output string) []string {
 	var res []string
-	elements := strings.Split(output, "\n")
-	for _, element := range elements {
+	elements := strings.SplitSeq(output, "\n")
+	for element := range elements {
 		if element != "" {
 			res = append(res, element)
 		}
@@ -180,7 +180,7 @@ func UncommentCode(filename, target, prefix string) error {
 
 	idx := strings.Index(strContent, target)
 	if idx < 0 {
-		return fmt.Errorf("unable to find the code %q to be uncomment", target)
+		return fmt.Errorf("unable to find the code %q to be uncommented", target)
 	}
 
 	out := new(bytes.Buffer)

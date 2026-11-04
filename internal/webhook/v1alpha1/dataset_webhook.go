@@ -24,13 +24,11 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apivalidation "k8s.io/apimachinery/pkg/api/validation"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
@@ -42,36 +40,27 @@ var datasetlog = logf.Log.WithName("dataset-resource")
 
 // SetupDatasetWebhookWithManager registers the webhook for Dataset in the manager.
 func SetupDatasetWebhookWithManager(mgr ctrl.Manager) error {
-	// controller-runtime 0.25 made the webhook builder generic: the object moves from .For() into
-	// the constructor, and WithValidator/WithDefaulter now take the typed admission.Validator[T] /
-	// admission.Defaulter[T]. The untyped interfaces these two types implement are reached through
-	// WithCustomValidator / WithCustomDefaulter.
 	return ctrl.NewWebhookManagedBy(mgr, &mlv1alpha1.Dataset{}).
-		WithCustomValidator(&DatasetCustomValidator{Client: mgr.GetClient()}).
-		WithCustomDefaulter(&DatasetCustomDefaulter{}).
+		WithDefaulter(&DatasetDefaulter{}).
+		WithValidator(&DatasetValidator{Client: mgr.GetClient()}).
 		Complete()
 }
 
 // +kubebuilder:webhook:path=/mutate-ml-aiplatform-io-v1alpha1-dataset,mutating=true,failurePolicy=fail,sideEffects=None,groups=ml.aiplatform.io,resources=datasets,verbs=create;update,versions=v1alpha1,name=mdataset-v1alpha1.kb.io,admissionReviewVersions=v1
 
-// DatasetCustomDefaulter struct is responsible for setting default values on the custom resource of the
+// DatasetDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind Dataset when those are created or updated.
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type DatasetCustomDefaulter struct {
+type DatasetDefaulter struct {
 	// TODO(user): Add more fields as needed for defaulting
 }
 
-var _ webhook.CustomDefaulter = &DatasetCustomDefaulter{}
+var _ admission.Defaulter[*mlv1alpha1.Dataset] = &DatasetDefaulter{}
 
-// Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind Dataset.
-func (d *DatasetCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
-	dataset, ok := obj.(*mlv1alpha1.Dataset)
-
-	if !ok {
-		return fmt.Errorf("expected an Dataset object but got %T", obj)
-	}
+// Default implements admission.Defaulter so a webhook will be registered for the Kind Dataset.
+func (d *DatasetDefaulter) Default(_ context.Context, dataset *mlv1alpha1.Dataset) error {
 	datasetlog.Info("Defaulting for Dataset", "name", dataset.GetName())
 
 	// TODO(user): fill in your defaulting logic.
@@ -80,27 +69,22 @@ func (d *DatasetCustomDefaulter) Default(_ context.Context, obj runtime.Object) 
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: The 'path' attribute must follow a specific pattern and should not be modified directly here.
-// Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
+// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-ml-aiplatform-io-v1alpha1-dataset,mutating=false,failurePolicy=fail,sideEffects=None,groups=ml.aiplatform.io,resources=datasets,verbs=create;update,versions=v1alpha1,name=vdataset-v1alpha1.kb.io,admissionReviewVersions=v1
 
-// DatasetCustomValidator struct is responsible for validating the Dataset resource
+// DatasetValidator struct is responsible for validating the Dataset resource
 // when it is created, updated, or deleted.
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
-type DatasetCustomValidator struct {
+type DatasetValidator struct {
 	Client client.Client
 }
 
-var _ webhook.CustomValidator = &DatasetCustomValidator{}
+var _ admission.Validator[*mlv1alpha1.Dataset] = &DatasetValidator{}
 
-// ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
-func (v *DatasetCustomValidator) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	dataset, ok := obj.(*mlv1alpha1.Dataset)
-	if !ok {
-		return nil, fmt.Errorf("expected a Dataset object but got %T", obj)
-	}
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type Dataset.
+func (v *DatasetValidator) ValidateCreate(ctx context.Context, dataset *mlv1alpha1.Dataset) (admission.Warnings, error) {
 	datasetlog.Info("Validation for Dataset upon creation", "name", dataset.GetName())
 
 	// A name collision is deliberately not checked here. The storage layer refuses
@@ -119,7 +103,7 @@ func (v *DatasetCustomValidator) ValidateCreate(ctx context.Context, obj runtime
 // the platform cannot keep. Two registrations of one URI are a signal a human
 // should see, which is what admission.Warnings is for: a disagreeing checksum
 // means one of the two claims is wrong, and the create is still admitted.
-func (v *DatasetCustomValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1alpha1.Dataset) admission.Warnings {
+func (v *DatasetValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1alpha1.Dataset) admission.Warnings {
 	if v.Client == nil || dataset.Spec.Uri == nil {
 		return nil
 	}
@@ -163,18 +147,11 @@ func (v *DatasetCustomValidator) warnOnDuplicateURI(ctx context.Context, dataset
 	return warnings
 }
 
-// ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
-func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	dataset, ok := newObj.(*mlv1alpha1.Dataset)
-	if !ok {
-		return nil, fmt.Errorf("expected a Dataset object for the newObj but got %T", newObj)
-	}
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type Dataset.
+func (v *DatasetValidator) ValidateUpdate(
+	_ context.Context, oldDataset, dataset *mlv1alpha1.Dataset,
+) (admission.Warnings, error) {
 	datasetlog.Info("Validation for Dataset upon update", "name", dataset.GetName())
-
-	oldDataset, ok := oldObj.(*mlv1alpha1.Dataset)
-	if !ok {
-		return nil, fmt.Errorf("expected a Dataset object for the oldObj but got %T", oldObj)
-	}
 
 	// A Dataset is lineage: what a model was trained on must still be true after
 	// the fact, so the registered artifact and the claims about it are frozen.
@@ -201,12 +178,8 @@ func (v *DatasetCustomValidator) ValidateUpdate(_ context.Context, oldObj, newOb
 		mlv1alpha1.GroupVersion.WithKind(mlv1alpha1.DatasetKind).GroupKind(), dataset.Name, frozen)
 }
 
-// ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type Dataset.
-func (v *DatasetCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	dataset, ok := obj.(*mlv1alpha1.Dataset)
-	if !ok {
-		return nil, fmt.Errorf("expected a Dataset object but got %T", obj)
-	}
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type Dataset.
+func (v *DatasetValidator) ValidateDelete(_ context.Context, dataset *mlv1alpha1.Dataset) (admission.Warnings, error) {
 	datasetlog.Info("Validation for Dataset upon deletion", "name", dataset.GetName())
 
 	// TODO(user): fill in your validation logic upon object deletion.
