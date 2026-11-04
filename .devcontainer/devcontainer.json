@@ -196,7 +196,7 @@
   // if the tag it builds has drifted from the "image" value -- which once made a rebuild silently
   // change nothing.
   // The user/docker/git setup is still done by "features", applied on top of this image.
-  "image": "chihayaanon0908/k8s-ai-devcontainer:latest",
+  "image": "chihayaanon0908/k8s-ai-platform-dev:latest",
   // Runs on the host, before the container is created. Docker turns a bind mount whose source
   // does not exist into a *directory* at that path on the host, which would then shadow the file
   // the user later writes there; -a creates it empty without touching an existing one. The

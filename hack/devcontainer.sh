@@ -24,7 +24,7 @@ source "$repo_root/hack/lib/registry.sh"
 
 # Must match the "image" field in .devcontainer/devcontainer.json; check_json_image enforces that
 # rather than trusting it.
-image_repo=${DEVCONTAINER_IMAGE_REPOSITORY:-chihayaanon0908/k8s-ai-devcontainer}
+image_repo=${DEVCONTAINER_IMAGE_REPOSITORY:-chihayaanon0908/k8s-ai-platform-dev}
 remote_image_repo=${DEVCONTAINER_IMAGE_REMOTE_REPOSITORY:-$image_repo}
 devcontainer_json=.devcontainer/devcontainer.json
 dockerfile=.devcontainer/Dockerfile
@@ -137,7 +137,7 @@ Environment:
   DEVCONTAINER_IMAGE_REPOSITORY
                  image repository to build and publish, which must match the "image" field in
                  .devcontainer/devcontainer.json (default:
-                 chihayaanon0908/k8s-ai-devcontainer)
+                 chihayaanon0908/k8s-ai-platform-dev)
   DEVCONTAINER_IMAGE_REMOTE_REPOSITORY
                  repository that `sync` publishes to, when it differs from the local one
                  (default: the same repository)
