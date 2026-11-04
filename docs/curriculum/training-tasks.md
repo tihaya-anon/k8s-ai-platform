@@ -47,7 +47,7 @@ level 1 on is written as Learn then build.
 
 Required tools:
 
-- Go 1.25 on `PATH` before any distro Go.
+- Go 1.27 on `PATH` before any distro Go.
 - Docker or another container runtime usable by kind.
 - `kubectl`.
 - `kind`.

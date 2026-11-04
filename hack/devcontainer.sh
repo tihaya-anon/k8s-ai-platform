@@ -33,9 +33,6 @@ verbose=0
 force_latest=0
 pull_policy=${DEVCONTAINER_PULL:-missing}
 
-# The container inherits whatever module proxy the host already trusts, rather than hardcoding one.
-go_proxy=${GO_PROXY:-$(go env GOPROXY 2>/dev/null || printf direct)}
-
 # The whole point of this script: a build tagged with anything other than what devcontainer.json
 # names produces an image VS Code will never open, and Rebuild Container then quietly reuses the
 # old one. Comparing is cheap; debugging "I rebuilt and nothing changed" is not.
@@ -63,7 +60,7 @@ build_image() {
   latest_image="$image_repo:latest"
 
   local go_image go_digest
-  go_image=${DEVCONTAINER_GO_IMAGE:-golang:1.25-bookworm}
+  go_image=${DEVCONTAINER_GO_IMAGE:-$(dockerfile_arg_default "$dockerfile" GO_IMAGE)}
   pull_base_image "$go_image"
   go_digest=$(base_image_digest "$go_image")
 
@@ -75,11 +72,15 @@ build_image() {
   local build_flags=(--network "${DEVCONTAINER_BUILD_NETWORK:-host}")
   local build_args=(
     --build-arg GO_IMAGE="$go_digest"
-    --build-arg GOPROXY="$go_proxy"
     --build-arg GIT_SHA="$git_sha"
   )
-  # Mirrors keep their defaults in the Dockerfile and are passed only when the host sets them, so
-  # there is one source of truth and a slow network can still override it. Same rule as agent.sh.
+  # Mirrors keep their defaults in the Dockerfile and are passed only when the environment sets
+  # them, so there is one source of truth and a slow network can still override it. Same rule as
+  # agent.sh, including for the module proxy: the host's `go env` is never asked, because the image
+  # is the toolchain and the host's Go may be older than go.mod (see agent.sh).
+  if [[ -n ${GO_PROXY:-} ]]; then
+    build_args+=(--build-arg "GOPROXY=$GO_PROXY")
+  fi
   local mirror_var
   for mirror_var in APT_MIRROR DOCKER_MIRROR GITHUB_MIRROR; do
     if [[ -n ${!mirror_var:-} ]]; then
@@ -135,7 +136,7 @@ Environment:
                  repository that `sync` publishes to, when it differs from the local one
                  (default: the same repository)
   DEVCONTAINER_GO_IMAGE
-                 base image for both stages (default: golang:1.25-bookworm)
+                 Go base image (default: the GO_IMAGE ARG default in .devcontainer/Dockerfile)
   DEVCONTAINER_PULL
                  base image refresh policy: missing (default) resolves the base from a local image
                  and pulls only when it is absent; always pulls the moving tag every build
@@ -145,7 +146,8 @@ Environment:
                  mirrors.aliyun.com)
   GITHUB_MIRROR  prefix for GitHub release downloads in the image build (default: the
                  Dockerfile's, https://github.com)
-  GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
+  GO_PROXY       module proxy for the build (default: the Dockerfile's,
+                 https://proxy.golang.org,direct)
   http_proxy, https_proxy, all_proxy, no_proxy (and the uppercase spellings)
                  passed through to the build when set on the host
 EOF

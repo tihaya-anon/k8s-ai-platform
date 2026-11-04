@@ -35,9 +35,12 @@ workspace=/workspace/k8s-ai-platform
 # the chosen port into ~/.config/opencode/service.json.
 opencode_port_range=${AGENT_OPENCODE_PORT_RANGE:-49376-49400}
 
-# The container inherits whatever mirrors the host already trusts, rather than hardcoding any.
-go_proxy=${GO_PROXY:-$(go env GOPROXY 2>/dev/null || printf direct)}
-npm_registry=${NPM_REGISTRY:-$(npm config get registry 2>/dev/null || printf 'https://registry.npmjs.org')}
+# Module proxy and npm registry come from the environment, never from asking the host's go or npm.
+# The image is the toolchain; the host's may be older, missing, or -- with go.mod ahead of it and
+# GOTOOLCHAIN=auto -- busy silently downloading a newer Go before it answers `go env`, which hung
+# `hack/agent.sh image` before it had printed anything. Unset, the build keeps the Dockerfile's
+# defaults (see build_image) and the container gets Go's own default proxy.
+go_proxy=${GO_PROXY:-https://proxy.golang.org,direct}
 
 # Give throwaway containers a Git identity for commits. Prefer the host's configured identity so
 # commits remain attributable; fall back to a clearly synthetic project-local identity.
@@ -351,11 +354,11 @@ build_image() {
   commit_image="$image_repo:$git_sha"
 
   local node_image go_image node_digest go_digest
-  node_image=${AGENT_NODE_IMAGE:-node:24-bookworm}
-  go_image=${AGENT_GO_IMAGE:-golang:1.25-bookworm}
+  node_image=${AGENT_NODE_IMAGE:-$(dockerfile_arg_default agent.Dockerfile NODE_IMAGE)}
+  go_image=${AGENT_GO_IMAGE:-$(dockerfile_arg_default agent.Dockerfile GO_IMAGE)}
 
   # Resolve moving tags to immutable digests before the build. BuildKit otherwise checks Docker Hub
-  # for node:24-bookworm/golang:1.25-bookworm on every cold builder and may pull a different base
+  # for the node and golang tags on every cold builder and may pull a different base
   # even when an older agent image exists locally. The digest comes from the local image when one
   # is there, so the build stays pinned without the pull.
   pull_base_image "$node_image"
@@ -369,15 +372,16 @@ build_image() {
     --build-arg GO_IMAGE="$go_digest"
     --build-arg USER_UID="$(id -u)"
     --build-arg USER_GID="$(id -g)"
-    --build-arg NPM_REGISTRY="$npm_registry"
-    --build-arg GOPROXY="$go_proxy"
     --build-arg GIT_SHA="$git_sha"
   )
-  # Package and release mirrors keep their defaults in the Dockerfile; passing them only when the
-  # host sets them leaves one source of truth while letting a slow network override them the way it
-  # already overrides NPM_REGISTRY and GOPROXY.
+  # Registries and mirrors keep their defaults in the Dockerfile; passing them only when the
+  # environment sets them leaves one source of truth while letting a slow network override them.
+  # GO_PROXY is spelled differently from the build arg it fills, so it is mapped by hand.
+  if [[ -n ${GO_PROXY:-} ]]; then
+    build_args+=(--build-arg "GOPROXY=$GO_PROXY")
+  fi
   local mirror_var
-  for mirror_var in APT_MIRROR GITHUB_MIRROR NVIM_RELEASE_BASE; do
+  for mirror_var in NPM_REGISTRY APT_MIRROR GITHUB_MIRROR NVIM_RELEASE_BASE; do
     if [[ -n ${!mirror_var:-} ]]; then
       build_args+=(--build-arg "$mirror_var=${!mirror_var}")
     fi
@@ -458,12 +462,15 @@ agent_run() {
   local proxy_chain=$go_proxy
   local hostmod_flags=()
   if ((use_host_mods)); then
+    # The one deliberate read of the host's Go: where its module cache is. GOTOOLCHAIN=local
+    # because this runs inside the checkout, where go.mod may name a newer Go than the host has,
+    # and reading two settings must not turn into downloading a toolchain.
     local hostmods
-    hostmods=$(go env GOMODCACHE 2>/dev/null || true)
+    hostmods=$(GOTOOLCHAIN=local go env GOMODCACHE 2>/dev/null || true)
     if [[ -n $hostmods && -d $hostmods/cache/download ]]; then
       hostmod_flags=(
         -v "$hostmods/cache/download:/hostproxy:ro"
-        -e GOSUMDB="$(go env GOSUMDB 2>/dev/null || printf sum.golang.org)"
+        -e GOSUMDB="$(GOTOOLCHAIN=local go env GOSUMDB 2>/dev/null || printf sum.golang.org)"
       )
       proxy_chain="file:///hostproxy,$go_proxy"
     fi
@@ -576,8 +583,12 @@ Environment:
                  its own layout (default: the upstream GitHub release for NVIM_VERSION)
   AGENT_RUN_NETWORK
                  docker run network mode (default: host, so localhost proxies work)
-  GO_PROXY       module proxy (default: the host's `go env GOPROXY`)
-  NPM_REGISTRY   npm registry for the image build (default: the host's `npm config get registry`)
+  AGENT_NODE_IMAGE, AGENT_GO_IMAGE
+                 base images for the build (default: the ARG defaults in agent.Dockerfile)
+  GO_PROXY       module proxy for the build and the container (default: the Dockerfile's for
+                 the build, Go's own https://proxy.golang.org,direct in the container)
+  NPM_REGISTRY   npm registry for the image build (default: the Dockerfile's,
+                 https://registry.npmjs.org)
   AGENT_GIT_USER_NAME
   AGENT_GIT_USER_EMAIL
                  git commit identity used inside the container (default: host git config,

@@ -38,13 +38,14 @@ FROM ${NODE_IMAGE} AS node
 # extensions from customizations.vscode. Building here keeps /go untouched in the final image, at
 # the 1777 the golang image sets, the same shape agent.Dockerfile's go-tools stage produces.
 #
-# gopls v0.22+ needs Go 1.26, so v0.21.x is the newest this toolchain builds. Two separate
-# `go install` calls: a single command cannot name two modules at different versions.
+# gopls tracks the newest Go closely -- v0.22 needs Go 1.26, v0.24 needs 1.27 -- so GOPLS_VERSION
+# moves with GO_IMAGE, never ahead of it. Two separate `go install` calls: a single command cannot
+# name two modules at different versions.
 FROM ${GO_IMAGE} AS go-tools
 ARG http_proxy
 ARG https_proxy
 ARG no_proxy
-ARG GOPLS_VERSION=v0.21.1
+ARG GOPLS_VERSION=v0.24.0
 ARG DELVE_VERSION=v1.27.2
 ARG GOPROXY=https://proxy.golang.org,direct
 RUN --mount=type=cache,target=/root/.cache/go-build \

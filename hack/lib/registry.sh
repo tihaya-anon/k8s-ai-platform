@@ -96,6 +96,16 @@ base_image_digest() {
   docker image inspect --format '{{index .RepoDigests 0}}' "$1"
 }
 
+# The default a Dockerfile gives one of its ARGs. The base images are pinned in the Dockerfiles and
+# the scripts read them from there instead of repeating them: a second copy is how both scripts
+# kept building on golang:1.25 after go.mod and every Dockerfile had moved to 1.27.
+dockerfile_arg_default() {
+  local value
+  value=$(sed -nE "s/^ARG $2=(.+)$/\1/p" "$1" | head -1)
+  [[ -n $value ]] || die "no default for ARG $2 in $1"
+  printf '%s\n' "$value"
+}
+
 current_git_sha() {
   git rev-parse --short=12 HEAD 2>/dev/null || printf 'nogit'
 }

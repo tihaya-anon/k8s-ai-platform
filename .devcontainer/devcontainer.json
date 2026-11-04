@@ -49,14 +49,15 @@
         // The Go tools are pinned in .devcontainer/Dockerfile and built into the image, so the
         // editor must neither replace them nor nag about replacing them. autoUpdate stops the
         // silent `go install`; checkForUpdates stops the prompt, which is not merely noise here:
-        // gopls is held at v0.21.1 because that is the last release whose go.mod builds on this
-        // repository's Go 1.25 -- v0.22 needs 1.26 and v0.24 needs 1.27 -- so the offered upgrade
-        // cannot compile. Worse if it could: the extension installs into /go/bin, which precedes
-        // /usr/local/bin on the golang image's PATH, so the new binary would shadow the pinned one
-        // until the next Rebuild silently dropped it again.
+        // each gopls release tends to require the newest Go (v0.24 needs 1.27), so the offered
+        // upgrade is often one the image's toolchain cannot compile. Worse when it can: the
+        // extension installs into /go/bin, which precedes /usr/local/bin on the golang image's
+        // PATH, so the new binary would shadow the pinned one until the next Rebuild silently
+        // dropped it again.
         //
-        // Turn checkForUpdates back on when the toolchain moves past Go 1.26; raising
-        // GOPLS_VERSION belongs to that upgrade, not to a popup.
+        // That second reason does not go away with a toolchain upgrade, so the prompt stays off:
+        // raising GOPLS_VERSION belongs to the GO_IMAGE bump in .devcontainer/Dockerfile, not to a
+        // popup.
         "go.toolsManagement.autoUpdate": false,
         "go.toolsManagement.checkForUpdates": "off",
         "go.lintTool": "golangci-lint-v2",
@@ -180,7 +181,7 @@
     // os-provided, not the default "latest". "latest" means *build git from source*: apt-install
     // build-essential and the curl/expat/gettext headers, fetch the tarball from github.com, then
     // `make install` -- minutes, on the bridge network the feature build runs on, for a tool the
-    // golang:1.25-bookworm base already ships at 2.39. This pins it to that apt package, which
+    // golang:1.27-bookworm base already ships at 2.39. This pins it to that apt package, which
     // makes the layer a no-op. Raise it only if something here needs a git newer than bookworm's.
     "ghcr.io/devcontainers/features/git:1": { "version": "os-provided" }
   },

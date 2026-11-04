@@ -187,7 +187,7 @@ ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -
 GOLANGCI_LINT_VERSION ?= v2.4.0
 # Matches the golang.org/x/tools version in go.mod so hack/format.sh and golangci-lint
 # agree on import grouping.
-GOIMPORTS_VERSION ?= v0.26.0
+GOIMPORTS_VERSION ?= v0.49.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.

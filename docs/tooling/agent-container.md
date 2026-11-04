@@ -31,7 +31,7 @@ these contents instead of the generated `latest` downloads.
 ```json
 {
   "name": "k8s-ai-platform",
-  "image": "golang:1.25-bookworm",
+  "image": "golang:1.27-bookworm",
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
     "ghcr.io/devcontainers/features/git:1": {}
@@ -261,17 +261,19 @@ hack/agent.sh image
 
 This downloads Go modules, builds the agent container image, fixes ownership on the named Go cache
 volumes, fills the container Go cache, verifies that the source builds and tests inside the agent
-container, and builds the product Docker image. Container Go commands inherit the host
-`go env GOPROXY` value by default; override it with `GO_PROXY=...` if your network needs a different
-module proxy. Runtime containers also pass through the host proxy environment variables and use host
-networking by default, so a proxy bound to `127.0.0.1` on the WSL host still works for model calls;
-set `AGENT_RUN_NETWORK=bridge` only if the session does not need a localhost proxy.
+container, and builds the product Docker image. Container Go commands use Go's default module proxy,
+`https://proxy.golang.org,direct`; set `GO_PROXY=...` if your network needs a different one. The
+script never asks the host's `go` or `npm` for these values: the image is the toolchain, and a host
+Go older than `go.mod` would otherwise start downloading a newer toolchain just to answer `go env`.
+Runtime containers also pass through the host proxy environment variables and use host networking by
+default, so a proxy bound to `127.0.0.1` on the WSL host still works for model calls; set
+`AGENT_RUN_NETWORK=bridge` only if the session does not need a localhost proxy.
 
 To pre-pull the large base images before the first build:
 
 ```bash
 docker pull node:24-bookworm
-docker pull golang:1.25-bookworm
+docker pull golang:1.27-bookworm
 ```
 
 `hack/agent.sh image` resolves those tags to immutable RepoDigests and passes the digest references
@@ -289,10 +291,10 @@ hack/agent.sh image
 ```
 
 The build passes your UID/GID into the image so files created by the container belong to your WSL
-user. It also passes the host's `go env GOPROXY` and `npm config get registry` through, so the build
-uses whatever mirrors the host already trusts. `APT_MIRROR`, `GITHUB_MIRROR` and `NVIM_RELEASE_BASE`
-work the same way: set them in the environment and `hack/agent.sh` forwards them as build args,
-leaving the Dockerfile's defaults in place when they are unset.
+user. `GO_PROXY`, `NPM_REGISTRY`, `APT_MIRROR`, `GITHUB_MIRROR` and `NVIM_RELEASE_BASE` are read
+from the environment only: set them and `hack/agent.sh` forwards them as build args, leaving the
+Dockerfile's defaults in place when they are unset. The base images default to the `NODE_IMAGE` and
+`GO_IMAGE` ARG defaults in `agent.Dockerfile`, which the script reads rather than repeats.
 
 On a network where the default registries are the slow part, name the mirrors explicitly:
 
@@ -312,7 +314,7 @@ tarball badly; the NJU mirror carries it at LAN speed under a layout of its own.
 To override the base images deliberately:
 
 ```bash
-AGENT_NODE_IMAGE=node:24-bookworm AGENT_GO_IMAGE=golang:1.25-bookworm hack/agent.sh image
+AGENT_NODE_IMAGE=node:24-bookworm AGENT_GO_IMAGE=golang:1.27-bookworm hack/agent.sh image
 ```
 
 Expect around 3GB and a slow first build. `codex` and `claude-code` are thin npm wrappers around

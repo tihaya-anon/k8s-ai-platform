@@ -298,7 +298,7 @@ FROM base AS go-tools
 # Pinned to GOIMPORTS_VERSION in the Makefile, which matches the golang.org/x/tools in go.mod so
 # format.sh and golangci-lint group imports identically. The two pins must move together; a
 # container that formats differently from CI is worse than one with no formatter at all.
-ARG GOIMPORTS_VERSION=v0.26.0
+ARG GOIMPORTS_VERSION=v0.49.0
 
 # GOPROXY is an ARG for the same reason APT_MIRROR and NPM_REGISTRY are: this image is built on
 # networks where the default is the slow path, e.g. --build-arg GOPROXY=https://goproxy.cn,direct
