@@ -60,6 +60,17 @@ Terms that are not fields on any one object.
 - **Canary** — a release state in which a small share of serving traffic goes to a new version while
   the rest stays on the current one, so that a bad version is discovered by a few requests rather
   than all of them.
+- **Extended resource** — a named counter a kubelet advertises for hardware the core API has no
+  field for, such as `nvidia.com/gpu` or `amd.com/gpu`. The name is the vendor's, the count is whole
+  devices, and unlike CPU it cannot be overcommitted or fractionally shared: a pod asks for two or
+  three, never 2.5, and the request and the limit must be equal. See
+  [5.1](../curriculum/training-tasks.md#51-make-the-gpu-request-real-on-kind).
+- **Accelerator class** — this platform's name for a kind of hardware a user may ask for, such as
+  `a100-80g`. It exists so that no user-facing object ever contains a vendor's extended-resource
+  name. A class is a cluster-scoped object registered by an infrastructure engineer, and it is the
+  only thing that has to change when the fleet gains a new brand of accelerator; the decision to
+  make it data rather than a Go interface is in
+  [architecture.md](architecture.md#accelerators-are-a-registry-not-a-vocabulary).
 - **Quota, queue, admission** — Kueue's vocabulary, not this platform's. A `ClusterQueue` holds the
   quota, a `LocalQueue` is its namespaced front door, and _admission_ is the moment Kueue decides a
   workload may start. See [1.2](../curriculum/1.2-kueue-and-jobs.md).
@@ -110,13 +121,13 @@ artifact is only detectable because the claim and the observation can disagree.
 
 A user's training request. In progress — task [1.2](../curriculum/1.2-kueue-and-jobs.md) builds it.
 
-| Field               | What it is                                                           | Why the platform needs it                                                                                                                                                                  | Constraints                         |
-| ------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| the `Dataset`       | the registered dataset this run trains on, by `metadata.name`        | the first lineage edge, and an admission check: a job pointing at a missing or non-`Ready` dataset is refused at submission rather than discovered as a crash loop inside a GPU allocation | a reference, never an embedded copy |
-| the base model      | the trained weights this run starts from                             | the second lineage edge and its own licence; also the dominant term in GPU memory, so it decides whether the resource request below can ever fit                                           | required for fine-tuning            |
-| the image           | the container holding the training code, framework and GPU libraries | the code version, and the third lineage edge                                                                                                                                               | pin by digest, not tag              |
-| GPU and CPU request | what the Pod asks the scheduler for                                  | the only number Kueue can do arithmetic on against `nominalQuota`, so it has to land on the Pod template where Kueue reads it                                                              | must reach the Pod template         |
-| the queue           | the `LocalQueue` this run belongs to                                 | where the job meets the team boundary and the fairness policy — whose quota it spends and who preempts it                                                                                  | defaulted per namespace             |
+| Field          | What it is                                                           | Why the platform needs it                                                                                                                                                                  | Constraints                         |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| the `Dataset`  | the registered dataset this run trains on, by `metadata.name`        | the first lineage edge, and an admission check: a job pointing at a missing or non-`Ready` dataset is refused at submission rather than discovered as a crash loop inside a GPU allocation | a reference, never an embedded copy |
+| the base model | the trained weights this run starts from                             | the second lineage edge and its own licence; also the dominant term in GPU memory, so it decides whether the resource request below can ever fit                                           | required for fine-tuning            |
+| the image      | the container holding the training code, framework and GPU libraries | the code version, and the third lineage edge                                                                                                                                               | pin by digest, not tag              |
+| the resources  | CPU, memory, and optionally an accelerator class and a device count  | the only numbers Kueue can do arithmetic on against `nominalQuota`, so they have to land on the Pod template where Kueue reads them. The field list is [below](#specresources)             | see the table below                 |
+| the queue      | the `LocalQueue` this run belongs to                                 | where the job meets the team boundary and the fairness policy — whose quota it spends and who preempts it                                                                                  | defaulted per namespace             |
 
 **By name** means the `metadata.name` of a `Dataset` in the _same namespace_ — not a UID, not a
 `corev1.ObjectReference`, not the object itself. Same namespace because architecture.md aligns the
@@ -140,6 +151,64 @@ What must _not_ be in the spec: replica counts, framework-specific knobs, gang-s
 `suspend`. Those describe how a runtime executes the job, and the spec has to survive the swap from
 a `batch/v1` Job to a `JobSet` or a Kubeflow `TrainJob` untouched. The moment it names a framework,
 the swap breaks and the CRD was a YAML translator after all.
+
+### `spec.resources`
+
+The one field in the list above that is a struct rather than a scalar, because "how much hardware"
+is four answers, not one.
+
+```yaml
+spec:
+  resources:
+    cpu: "8"
+    memory: 32Gi
+    accelerator:
+      class: a100-80g
+      count: 2
+```
+
+| Field               | What it is                                           | Why the platform needs it                                                                                                                                                                  | Constraints                                         |
+| ------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `cpu`               | CPU cores the pod requests, as a Kubernetes quantity | one of the two resources every `ClusterQueue` is denominated in; a data-loading-bound run starved of CPU leaves its accelerators idle, which is the most expensive way to waste the fleet  | required, quantity, `> 0`                           |
+| `memory`            | host RAM the pod requests, as a Kubernetes quantity  | the other; host memory is where the dataset shards and the data loader live, and an OOM-killed pod loses the whole run back to its last checkpoint                                         | required, quantity, `> 0`                           |
+| `accelerator.class` | the name of an `AcceleratorClass` this run wants     | the platform word that resolves to a vendor resource name, a device memory size and a Kueue flavor — all of which are the cluster's business and none of which belong in a user's manifest | optional as a whole; if set, must name a real class |
+| `accelerator.count` | how many whole devices of that class                 | what Kueue counts against `nominalQuota`, and, multiplied by the class's `deviceMemory`, what decides whether the base model can fit at all                                                | integer ≥ 1, ≤ the class's `maxPerJob`              |
+
+**Quantities, not numbers.** `cpu` and `memory` are `resource.Quantity`, the same type the core API
+uses, so `8`, `"8"`, `8000m` and `32Gi` all mean what a Kubernetes user expects them to mean. The
+cost is that `+kubebuilder:validation:Minimum` does not apply to a quantity — `controller-gen`
+renders it as an int-or-string — so a lower bound is a CEL rule
+(`self.cpu == quantity(self.cpu) && quantity(self.cpu).compareTo(quantity('0')) > 0`), not a marker.
+That is the shape of rule
+[validation-and-immutability.md](../reference/validation-and-immutability.md) calls CEL's natural
+home: it concerns only the incoming object.
+
+**No accelerator at all is a legal request.** The whole of level 1 runs on kind, where no node
+advertises a device. Making `accelerator` optional is what lets the same CRD serve a laptop cluster
+and a GPU fleet without an overlay, and it is also honest: a small fine-tune on CPU is a real thing
+to want.
+
+**Whole devices only.** `count` is an integer because an extended resource is an integer counter —
+the kubelet cannot hand out half a card. Fractional sharing exists (MIG, time-slicing) but it is
+expressed by _a different class_ whose devices are smaller, not by a fractional count. That keeps
+the arithmetic Kueue does on quota the same arithmetic in every cluster.
+
+**Requests, not limits.** The user states one number per resource and the controller decides where
+it lands: for `cpu` and `memory` it becomes the pod's request, and for the accelerator it becomes
+both request and limit, because Kubernetes requires those to be equal for an extended resource and
+rejects the pod otherwise. Exposing a `requests`/`limits` pair would hand the user a knob whose only
+legal setting for the field that matters is "both the same".
+
+**What is not here, and why.** No `gpuType` or `nvidia.com/gpu` string: a vendor name in a
+user-facing field is the thing `AcceleratorClass` exists to prevent. No `ephemeral-storage`: nothing
+in the platform makes a decision from it yet, and a field that no decision depends on is a web form.
+No node selector, toleration or topology preference: those describe _where_, which is Kueue's
+`ResourceFlavor` and the scheduler's business, and a user who can write them can route around the
+quota boundary.
+
+Like the other four inputs, `resources` is immutable after creation. A run whose resource request
+changed halfway through is not the run that was admitted, and Kueue has already done arithmetic
+against the original.
 
 ---
 
@@ -185,3 +254,30 @@ Designed, not built — task 1.5. The controller renders it into a KServe `Infer
 The property that matters more than any field: application code addresses the `Release`, never a
 version. A rollback is then a change to this one object — no application deploy, no image rebuild,
 no coordination with the team that calls the endpoint.
+
+---
+
+## `AcceleratorClass`
+
+A kind of hardware the platform supports, registered by an infrastructure engineer. Cluster-scoped,
+and the only object in this dictionary no `TrainingJob` author writes. Designed, not built — the
+field shape lands with [5.1](../curriculum/training-tasks.md#51-make-the-gpu-request-real-on-kind),
+and the reasoning for it being an object at all is in
+[architecture.md](architecture.md#accelerators-are-a-registry-not-a-vocabulary).
+
+| Field          | What it is                                                      | Why the platform needs it                                                                                                                                               | Constraints                |
+| -------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `resourceName` | the extended resource the kubelet advertises for this hardware  | the string the controller writes into the pod template, and the resource a `ClusterQueue` must cover before a job asking for this class can ever be admitted            | required, a qualified name |
+| `deviceMemory` | one device's memory                                             | lets the platform refuse "this base model cannot fit in `count` × `deviceMemory`" at submission, instead of after an hour in the queue and an OOM inside the allocation | required, quantity         |
+| `flavor`       | the Kueue `ResourceFlavor` this class's quota is denominated in | the cross-check that the class and the quota agree; a class whose `resourceName` the flavor's `ClusterQueue` does not cover describes jobs that queue forever           | required, must exist       |
+| `maxPerJob`    | the largest `count` a single run may ask for                    | a guardrail that is a refusal at admission rather than a postmortem about the run that took the whole fleet                                                             | optional, integer ≥ 1      |
+| `vendor`       | who makes the hardware                                          | metrics and dashboard grouping, nothing else — it is deliberately inert, so that no controller can be tempted to branch on it                                           | optional, label only       |
+
+The fields that are **not** here matter as much: node labels, tolerations and topology live on
+Kueue's `ResourceFlavor`, which already has them and already injects them on admission. Restating
+them here would be two sources of truth for one fact, and would make this repository a translator
+for fields it does not own.
+
+`status` carries conditions and the observed allocatable count, so a class naming hardware that no
+node in this cluster advertises reads as `Available: False` with a reason, rather than as jobs that
+silently never start.

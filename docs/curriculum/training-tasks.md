@@ -790,13 +790,27 @@ kubectl describe node | grep -A5 Allocatable  # k9s: :nodes, select, then d
 Extended resources are just named counters the kubelet advertises. Once that lands, a fake device
 plugin stops being a trick and becomes the obvious move.
 
-**You build:** a fake device plugin or a dedicated `ResourceFlavor` so Kueue accounts for GPU-like
-quota on kind.
+**You build:** two things. First, a fake device plugin or a dedicated `ResourceFlavor` so Kueue
+accounts for GPU-like quota on kind. Second, the `AcceleratorClass` CRD and the resolution step in
+the `TrainingJob` controller that 1.2 deferred: a cluster-scoped registry object whose fields are in
+[domain.md](../product/domain.md#acceleratorclass), and whose reason for existing — hardware support
+is data an infrastructure engineer applies, not a Go interface a developer implements — is in
+[architecture.md](../product/architecture.md#accelerators-are-a-registry-not-a-vocabulary).
+
+Register your fake device as a class, point a `TrainingJob` at it by name, and check the resolution
+both ways: a class that exists renders its `resourceName` into the pod's limits, and a class that
+names hardware no node advertises reports itself unavailable instead of leaving a job queued with no
+explanation.
 
 **Quiz**
 
 1. Who advertises an extended resource, and who enforces it?
 2. What does your fake prove about the platform, and what does it deliberately not prove?
+3. A user writes `accelerator.class: a100-80g` and a vendor's resource name never appears in their
+   manifest. Name two things that would have had to change in every `TrainingJob` in the cluster if
+   it had.
+4. `AcceleratorClass` carries `resourceName` and `flavor` but not node labels or tolerations. Which
+   object owns those, and what breaks if this one restates them?
 
 ### 5.2 Swap the training runtime
 
