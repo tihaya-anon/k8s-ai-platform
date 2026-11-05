@@ -156,13 +156,21 @@ func (v *DatasetValidator) ValidateUpdate(
 	// A Dataset is lineage: what a model was trained on must still be true after
 	// the fact, so the registered artifact and the claims about it are frozen.
 	// Everything else about the object stays editable.
-	var frozen field.ErrorList
-	frozen = append(frozen, apivalidation.ValidateImmutableField(
-		dataset.Spec.Uri, oldDataset.Spec.Uri, field.NewPath("spec", "uri"))...)
-	frozen = append(frozen, apivalidation.ValidateImmutableField(
-		dataset.Spec.Rows, oldDataset.Spec.Rows, field.NewPath("spec", "rows"))...)
-	frozen = append(frozen, apivalidation.ValidateImmutableField(
-		dataset.Spec.Checksum, oldDataset.Spec.Checksum, field.NewPath("spec", "checksum"))...)
+	// A table rather than three appends, so the capacity below cannot drift from
+	// the number of fields checked.
+	immutable := []struct {
+		value, old any
+		path       *field.Path
+	}{
+		{dataset.Spec.Uri, oldDataset.Spec.Uri, field.NewPath("spec", "uri")},
+		{dataset.Spec.Rows, oldDataset.Spec.Rows, field.NewPath("spec", "rows")},
+		{dataset.Spec.Checksum, oldDataset.Spec.Checksum, field.NewPath("spec", "checksum")},
+	}
+
+	frozen := make(field.ErrorList, 0, len(immutable))
+	for _, f := range immutable {
+		frozen = append(frozen, apivalidation.ValidateImmutableField(f.value, f.old, f.path)...)
+	}
 
 	if len(frozen) == 0 {
 		return nil, nil

@@ -164,7 +164,7 @@ var _ = Describe("Dataset Webhook", func() {
 				var statusErr *apierrors.StatusError
 				Expect(errors.As(err, &statusErr)).To(BeTrue())
 
-				var gotFields []string
+				gotFields := make([]string, 0, len(statusErr.ErrStatus.Details.Causes))
 				for _, cause := range statusErr.ErrStatus.Details.Causes {
 					Expect(cause.Type).To(Equal(metav1.CauseTypeFieldValueInvalid))
 					gotFields = append(gotFields, cause.Field)
