@@ -45,8 +45,8 @@ type TrainingJobReconciler struct {
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	var trnjob mlv1alpha1.TrainingJob
-	if err := r.Get(ctx, req.NamespacedName, &trnjob); err != nil {
+	var tj mlv1alpha1.TrainingJob
+	if err := r.Get(ctx, req.NamespacedName, &tj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 

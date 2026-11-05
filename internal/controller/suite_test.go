@@ -138,11 +138,10 @@ func ValidTrainingJobSpec() mlv1alpha1.TrainingJobSpec {
 		Image:     new(Placeholder("image")),
 		Resources: mlv1alpha1.Resources{
 			CPU: resource.MustParse("1"),
-			GPU: resource.MustParse("1"),
-			Accelerator: mlv1alpha1.Accelerator{
+			Accelerator: new(mlv1alpha1.Accelerator{
 				Class: mlv1alpha1.AcceleratorClassPlaceholder,
 				Count: 1,
-			},
+			}),
 		},
 		Queue: new(Placeholder("queue")),
 	}

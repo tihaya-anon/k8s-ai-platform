@@ -35,6 +35,7 @@ type Accelerator struct {
 
 	Class AcceleratorClass `json:"class"`
 
+	// +kubebuilder:validation:Minimum=1
 	// +required
 
 	Count int64 `json:"count"`
@@ -43,17 +44,19 @@ type Accelerator struct {
 // Resources defines CPU, memory, and optionally an accelerator class and a device count
 type Resources struct {
 
+	// +kubebuilder:validation:XValidation:rule="self == quantity(self) && quantity(self).compareTo(quantity('0')) > 0",message="cpu must larger than 0"
 	// +required
 
 	CPU resource.Quantity `json:"cpu"`
 
+	// +kubebuilder:validation:XValidation:rule="self == quantity(self) && quantity(self).compareTo(quantity('0')) > 0",message="memory must larger than 0"
 	// +required
 
-	GPU resource.Quantity `json:"gpu"`
+	Memory resource.Quantity `json:"memory"`
 
 	// +optional
 
-	Accelerator Accelerator `json:"accelerator"`
+	Accelerator *Accelerator `json:"accelerator"`
 }
 
 // TrainingJobSpec defines the desired state of TrainingJob
