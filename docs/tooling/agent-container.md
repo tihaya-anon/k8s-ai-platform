@@ -465,6 +465,57 @@ hack/agent.sh fmt
 hack/agent.sh lint
 ```
 
+## Editor lint parity
+
+`make lint` is the gate, and an editor that disagrees with it is worse than one that says nothing,
+because a clean Problems panel reads as "clean" either way. These settings keep them in step, and
+all of them are in `.vscode/settings.json` rather than in `devcontainer.json`:
+
+| Setting                                   | Value                    | Why                                                                                                   |
+| ----------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `go.lintTool`                             | `golangci-lint-v2`       | the extension defaults to no linter at all; unset, it reports only what gopls finds                   |
+| `go.alternateTools`                       | `hack/golangci-lint.sh`  | the Makefile's pinned, plugin-built binary, so the editor reads `.golangci.yml` with the same version |
+| `go.lintOnSave`                           | `package`                | one package is about a second warm; the whole module is about twenty, too slow for every save         |
+| `goAnnotations.markers.controllerGenPath` | `hack/controller-gen.sh` | marker hover and completion otherwise describe a different controller-gen than `make manifests` runs  |
+| `go.buildOnSave`, `go.vetOnSave`          | `off`                    | gopls already reports both as you type; a save-time repeat is the same diagnostic a second later      |
+
+The file is tracked, and `.gitignore` un-ignores exactly it. It is tracked for a reason worth
+remembering: **`devcontainer.json` settings reach only a window attached to the devcontainer.** The
+same checkout opened over WSL, over SSH, or on the host gets none of them, so the editor runs no
+linter and looks clean while `make lint` reports a dozen findings. Workspace settings reach every
+window and outrank the machine-scope settings a devcontainer contributes, which makes them the right
+home for anything that must agree with a `make` target.
+
+Both tool paths go through a wrapper in `hack/`, because `go.alternateTools` takes a literal path
+and expands only `${workspaceFolder}` in it. `LOCALBIN` is the repo's `bin/` on a host and
+`/home/agent/.cache/k8s-ai-platform/bin` in the devcontainer — see the volume in `mounts` for why
+the two cannot share one directory — so a hardcoded path is correct in one environment and silently
+wrong in the other. `hack/lib/localbin.sh` resolves `LOCALBIN` the way the Makefile does and builds
+the tool if it is missing; `hack/golangci-lint.sh` and `hack/controller-gen.sh` are one line each.
+
+### What is live, and what is not
+
+Three layers report into the editor, and they arrive at different moments:
+
+| Layer                        | When              | What it catches                                                               |
+| ---------------------------- | ----------------- | ----------------------------------------------------------------------------- |
+| gopls analyzers              | as you type       | vet, plus the `modernize` suite — `embedlit`, `newexpr`, …                    |
+| golangci-lint, saved package | on save, about 1s | everything in `.golangci.yml`: `goconst`, `prealloc`, `lll`, `revive`, `dupl` |
+| `make lint`                  | when you run it   | the same, over every package                                                  |
+
+The gap is the third row. With `package` scope the editor only reports in packages you have saved a
+file in, so a finding in `internal/webhook` stays invisible while you work in `internal/controller`.
+Nothing closes that cheaply: a warm module-wide run is about twenty seconds at several hundred
+percent CPU, which is not a per-save cost.
+
+**There is no golangci-lint language server for VS Code, and little would change if there were.**
+`golangci-lint-langserver` exists for editors with a generic LSP client — Neovim, Emacs, Vim — and
+it is a wrapper that shells out to `golangci-lint run` on save, exactly what the Go extension
+already does here. The reason neither can be incremental is golangci-lint itself: its linters run
+over a type-checked package, not over a buffer, so the unit of work is a package and the trigger has
+to be a save. gopls is the only layer that can be live, which is why the `modernize` findings appear
+as you type while the `goconst` ones wait for the save.
+
 ## Git identity for commits made inside the container
 
 A container commit must still be attributable to a person, and the image cannot bake in an identity.

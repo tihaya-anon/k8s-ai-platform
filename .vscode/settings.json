@@ -1,0 +1,40 @@
+{
+  // The Makefile's pinned tools, reached through wrappers because their directory differs between
+  // a host checkout and the devcontainer. hack/lib/localbin.sh explains why the indirection cannot
+  // be avoided here; the wrappers build a missing tool rather than failing silently.
+  //
+  // golangci-lint-v2 is the linter the Go extension runs on save. controller-gen is where the Go
+  // Annotations extension reads its Kubebuilder marker definitions, so a wrong path there means
+  // marker hover and completion quietly describe a different controller-gen than `make manifests`
+  // runs.
+  "go.alternateTools": {
+    "golangci-lint-v2": "${workspaceFolder}/hack/golangci-lint.sh"
+  },
+  // Go's own build and vet diagnostics arrive from gopls as you type, so the extension's
+  // save-time passes would only duplicate them a second later. Lint is the exception: it runs
+  // linters gopls does not have.
+  "go.buildOnSave": "off",
+  // Lint the saved file's package on save. This is the only scope fast enough to run every time:
+  // warm, one package is about a second, and the whole module is about twenty at several hundred
+  // percent CPU.
+  //
+  // The cost is worth remembering: the editor only ever reports in packages you have saved a file
+  // in, so a finding in internal/webhook stays invisible while you work in internal/controller.
+  // `make lint` over ./... remains the gate.
+  "go.lintOnSave": "package",
+  // Unset -- the extension's default -- means no linter runs at all and the Problems panel shows
+  // only what gopls found, which is how a tree that `make lint` rejects can look clean in the
+  // editor. gopls stays a separate, additional source of diagnostics; this does not replace it.
+  //
+  // Every setting here is in this tracked file rather than in .devcontainer/devcontainer.json,
+  // because that file's settings reach exactly one environment: a window attached to the
+  // devcontainer. The same checkout opened over WSL, over SSH or on the host got none of them.
+  // Workspace settings reach every window and outrank the machine-scope settings a devcontainer
+  // contributes, so they are the one owner for anything that must agree with a `make` target.
+  // Keys here are sorted by Prettier, so each comment names its own key and never a neighbour.
+  "go.lintTool": "golangci-lint-v2",
+  "go.vetOnSave": "off",
+  // Same reasoning as go.alternateTools above; this extension keeps its tool path in its own
+  // namespace rather than in Go's.
+  "goAnnotations.markers.controllerGenPath": "${workspaceFolder}/hack/controller-gen.sh"
+}

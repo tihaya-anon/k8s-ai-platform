@@ -60,16 +60,16 @@
         // popup.
         "go.toolsManagement.autoUpdate": false,
         "go.toolsManagement.checkForUpdates": "off",
-        "go.lintTool": "golangci-lint-v2",
-        "go.lintOnSave": "package",
-        // The Makefile's pinned golangci-lint, so the editor and `make lint` read .golangci.yml
-        // with the same version.
-        "go.alternateTools": {
-          "golangci-lint-v2": "/home/agent/.cache/k8s-ai-platform/bin/golangci-lint"
-        },
-        // Go Annotations reads its Kubebuilder marker definitions from controller-gen. It looks in
-        // bin/ by default, but here LOCALBIN is elsewhere; this is the Makefile's pinned one.
-        "goAnnotations.markers.controllerGenPath": "/home/agent/.cache/k8s-ai-platform/bin/controller-gen",
+        // The Go lint settings and the two LOCALBIN tool paths (golangci-lint, controller-gen)
+        // used to live here and now live in .vscode/settings.json. Settings in this file reach
+        // only a window attached to this container, and the same checkout opened over WSL or on
+        // the host got none of them -- no linter ran at all, and an editor that is silent because
+        // it is unconfigured looks exactly like an editor that is silent because the code is
+        // clean. Workspace settings reach every window and outrank these, so anything that must
+        // match a `make` target belongs there, not here.
+        //
+        // What stays here is what is genuinely about this container: paths into the image, like
+        // shellcheck.executablePath below, and the tools pinned in .devcontainer/Dockerfile.
         // shellcheck cannot read zsh. It has no zsh mode at all, so the extension lints these as
         // bash and reports zsh's own syntax as errors -- `(N)` and `(N-/)` glob qualifiers in
         // .zprofile and .zshrc parse as unescaped subshells, which then swallow the rest of the

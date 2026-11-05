@@ -34,8 +34,10 @@ go.work
 # Kubernetes Generated files - skip generated files, except for vendored files
 !vendor/**/zz_generated.*
 
-# editor and IDE paraphernalia
-.vscode
+# editor and IDE paraphernalia. .vscode is ignored except for the settings that make the editor
+# agree with `make lint`; everything else VS Code writes there is personal state.
+.vscode/*
+!.vscode/settings.json
 *.swp
 *.swo
 *~
