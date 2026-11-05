@@ -8,13 +8,11 @@ metadata:
 spec:
   group: ml.aiplatform.io
   names:
-    categories:
-    - all
     kind: TrainingJob
     listKind: TrainingJobList
     plural: trainingjobs
     shortNames:
-    - trnjob
+    - tj
     singular: trainingjob
   scope: Namespaced
   versions:

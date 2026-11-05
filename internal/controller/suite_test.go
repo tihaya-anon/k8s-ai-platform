@@ -40,6 +40,10 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
+// DefaultNamespace is the namespace envtest fixtures are created in; envtest has no
+// namespace controller, so nothing else exists unless a test creates it.
+const DefaultNamespace = "default"
+
 var (
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -116,7 +120,7 @@ func getFirstFoundEnvTestBinaryDir() string {
 	return ""
 }
 
-func ValidDsetSpec() mlv1alpha1.DatasetSpec {
+func ValidDatasetSpec() mlv1alpha1.DatasetSpec {
 	return mlv1alpha1.DatasetSpec{
 		Uri:      new(Placeholder("uri")),
 		Owner:    new(Placeholder("owner")),
@@ -126,7 +130,7 @@ func ValidDsetSpec() mlv1alpha1.DatasetSpec {
 	}
 }
 
-func ValidTrnjobSpec() mlv1alpha1.TrainingJobSpec {
+func ValidTrainingJobSpec() mlv1alpha1.TrainingJobSpec {
 	return mlv1alpha1.TrainingJobSpec{
 		Owner:     new(Placeholder("owner")),
 		Dataset:   new(Placeholder("dataset")),
@@ -144,8 +148,8 @@ func ValidTrnjobSpec() mlv1alpha1.TrainingJobSpec {
 	}
 }
 
+// Placeholder names a test value after the field it stands in for, so a string that
+// leaks into an assertion says where it came from.
 func Placeholder(name string) string {
 	return name + ".placeholder"
 }
-
-const DefaultNamespace = "default"

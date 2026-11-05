@@ -13,7 +13,7 @@ import (
 
 var _ = Describe("Dataset API", func() {
 	It("should accept valid spec", func() {
-		spec := ValidDsetSpec()
+		spec := ValidDatasetSpec()
 		validDataset := &mlv1alpha1.Dataset{
 			Name:      "valid-dataset",
 			Namespace: DefaultNamespace,
@@ -24,7 +24,7 @@ var _ = Describe("Dataset API", func() {
 		Expect(k8sClient.Delete(ctx, validDataset)).To(Succeed())
 	})
 	It("should set default golden entry", func() {
-		spec := ValidDsetSpec()
+		spec := ValidDatasetSpec()
 		spec.Golden = nil
 		resourceName := "valid-dataset"
 		typeNamespacedName := types.NamespacedName{
@@ -42,7 +42,7 @@ var _ = Describe("Dataset API", func() {
 		Expect(*validDataset.Spec.Golden).To(BeFalse())
 	})
 	DescribeTable("should not accept invalid spec", func(mutate func(spec *mlv1alpha1.DatasetSpec)) {
-		spec := ValidDsetSpec()
+		spec := ValidDatasetSpec()
 		mutate(&spec)
 		err := k8sClient.Create(ctx, &mlv1alpha1.Dataset{
 			GenerateName: "invalid-",

@@ -50,7 +50,7 @@ var _ = Describe("TrainingJob Controller", func() {
 				resource := &mlv1alpha1.TrainingJob{
 					Name:      resourceName,
 					Namespace: resourceNamespace,
-					Spec:      ValidTrnjobSpec(),
+					Spec:      ValidTrainingJobSpec(),
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}

@@ -123,7 +123,7 @@ type DatasetStatus struct {
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=datasets,singular=dataset,shortName=dset,categories=all,scope=Namespaced
+// +kubebuilder:resource:path=datasets,singular=dataset,shortName=dset,scope=Namespaced
 // +kubebuilder:printcolumn:name=Owner,type=string,JSONPath=`.spec.owner`
 // +kubebuilder:printcolumn:name=ExpectedRows,type=integer,JSONPath=`.spec.rows`
 // +kubebuilder:printcolumn:name=Golden,type=boolean,JSONPath=`.spec.golden`

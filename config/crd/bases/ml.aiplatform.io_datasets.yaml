@@ -8,8 +8,6 @@ metadata:
 spec:
   group: ml.aiplatform.io
   names:
-    categories:
-    - all
     kind: Dataset
     listKind: DatasetList
     plural: datasets

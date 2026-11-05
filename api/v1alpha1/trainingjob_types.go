@@ -141,7 +141,7 @@ type TrainingJobStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=trainingjobs,singular=trainingjob,shortName=trnjob,categories=all,scope=Namespaced
+// +kubebuilder:resource:path=trainingjobs,singular=trainingjob,shortName=tj,scope=Namespaced
 
 // TrainingJob is the Schema for the trainingjobs API
 type TrainingJob struct {

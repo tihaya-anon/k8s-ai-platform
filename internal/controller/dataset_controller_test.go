@@ -84,7 +84,7 @@ var _ = Describe("Dataset Controller", func() {
 				resource := &mlv1alpha1.Dataset{
 					Name:      resourceName,
 					Namespace: DefaultNamespace,
-					Spec:      ValidDsetSpec(),
+					Spec:      ValidDatasetSpec(),
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -269,7 +269,7 @@ var _ = Describe("Dataset Controller", func() {
 
 		It("should stay Ready when the artifact moves in a field nobody claimed", func() {
 			By("registering a Dataset that makes no claim about rows or checksum")
-			spec := ValidDsetSpec()
+			spec := ValidDatasetSpec()
 			spec.Rows = nil
 			spec.Checksum = nil
 			unclaimed := &mlv1alpha1.Dataset{
