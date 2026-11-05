@@ -21,14 +21,13 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/tihaya-anon/k8s-ai-platform/internal/artifact"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/tihaya-anon/k8s-ai-platform/internal/artifact"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 )
@@ -45,13 +44,15 @@ var _ = Describe("Dataset condition vocabulary", func() {
 
 var _ = Describe("Dataset Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		sampleUri := Placeholder("uri")
+		resourceName := "test-resource"
+		checksumPlaceholder := Placeholder("checksum")
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default",
+			Namespace: DefaultNamespace,
 		}
 		dataset := &mlv1alpha1.Dataset{}
 
@@ -67,7 +68,7 @@ var _ = Describe("Dataset Controller", func() {
 				Scheme:   k8sClient.Scheme(),
 				Recorder: recorder,
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
-					"sample.uri": found,
+					sampleUri: found,
 				}},
 			}
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -81,11 +82,9 @@ var _ = Describe("Dataset Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, dataset)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &mlv1alpha1.Dataset{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: ValidSpec(),
+					Name:      resourceName,
+					Namespace: DefaultNamespace,
+					Spec:      ValidDsetSpec(),
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -107,7 +106,7 @@ var _ = Describe("Dataset Controller", func() {
 				Scheme:   k8sClient.Scheme(),
 				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
-					"sample.uri": {Rows: 1, Checksum: "placeholder"},
+					sampleUri: {Rows: 1, Checksum: checksumPlaceholder},
 				}},
 			}
 
@@ -153,7 +152,7 @@ var _ = Describe("Dataset Controller", func() {
 				Scheme:   k8sClient.Scheme(),
 				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
-					"sample.uri": {Rows: 0, Checksum: "placeholder"},
+					sampleUri: {Rows: 0, Checksum: checksumPlaceholder},
 				}},
 			}
 
@@ -177,20 +176,20 @@ var _ = Describe("Dataset Controller", func() {
 
 			By("recording no row count, which Minimum=1 would have rejected")
 			Expect(empty.Status.ObservedRows).To(BeNil())
-			Expect(empty.Status.ObservedChecksum).To(HaveValue(Equal("placeholder")))
+			Expect(empty.Status.ObservedChecksum).To(HaveValue(Equal(checksumPlaceholder)))
 		})
 
 		It("should clear a row count that an emptied artifact has invalidated", func() {
 			recorder := events.NewFakeRecorder(10)
 
 			By("observing a usable artifact first")
-			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: checksumPlaceholder})
 			ready := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, ready)).To(Succeed())
 			Expect(ready.Status.ObservedRows).To(HaveValue(Equal(1)))
 
 			By("resolving the same uri after the artifact was emptied")
-			reconcileWith(recorder, artifact.Metadata{Rows: 0, Checksum: "placeholder"})
+			reconcileWith(recorder, artifact.Metadata{Rows: 0, Checksum: checksumPlaceholder})
 			emptied := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, emptied)).To(Succeed())
 			Expect(emptied.Status.ObservedRows).To(BeNil(), "a stale count would claim an observation this pass contradicts")
@@ -229,20 +228,20 @@ var _ = Describe("Dataset Controller", func() {
 				ContainSubstring("Dataset Failed"),
 			)))
 		},
-			Entry("rows drifted", artifact.Metadata{Rows: 2, Checksum: "placeholder"},
+			Entry("rows drifted", artifact.Metadata{Rows: 2, Checksum: checksumPlaceholder},
 				"spec.rows", "artifact resolved to 2 rows, spec claims 1"),
 			Entry("checksum drifted", artifact.Metadata{Rows: 1, Checksum: "drifted"},
-				"spec.checksum", "artifact resolved to checksum drifted, spec claims placeholder"),
+				"spec.checksum", "artifact resolved to checksum drifted, spec claims "+checksumPlaceholder),
 			Entry("both drifted", artifact.Metadata{Rows: 2, Checksum: "drifted"},
 				"spec.rows", "artifact resolved to 2 rows, spec claims 1",
-				"spec.checksum", "artifact resolved to checksum drifted, spec claims placeholder"),
+				"spec.checksum", "artifact resolved to checksum drifted, spec claims "+checksumPlaceholder),
 		)
 
 		It("should fail a Ready Dataset whose artifact was rewritten under it", func() {
 			recorder := events.NewFakeRecorder(10)
 
 			By("resolving the artifact the registrant actually registered")
-			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: "placeholder"})
+			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: checksumPlaceholder})
 			ready := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, ready)).To(Succeed())
 			Expect(ready.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
@@ -270,15 +269,13 @@ var _ = Describe("Dataset Controller", func() {
 
 		It("should stay Ready when the artifact moves in a field nobody claimed", func() {
 			By("registering a Dataset that makes no claim about rows or checksum")
-			spec := ValidSpec()
+			spec := ValidDsetSpec()
 			spec.Rows = nil
 			spec.Checksum = nil
 			unclaimed := &mlv1alpha1.Dataset{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "unclaimed-",
-					Namespace:    "default",
-				},
-				Spec: spec,
+				GenerateName: "unclaimed-",
+				Namespace:    DefaultNamespace,
+				Spec:         spec,
 			}
 			Expect(k8sClient.Create(ctx, unclaimed)).To(Succeed())
 			// The outer AfterEach only removes the shared fixture, so cleanup for
@@ -293,7 +290,7 @@ var _ = Describe("Dataset Controller", func() {
 				Scheme:   k8sClient.Scheme(),
 				Recorder: events.NewFakeRecorder(10),
 				Resolver: &artifact.FakeResolver{Entries: map[string]artifact.Metadata{
-					"sample.uri": {Rows: 50, Checksum: "whatever-the-store-holds"},
+					sampleUri: {Rows: 50, Checksum: "whatever-the-store-holds"},
 				}},
 			}
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

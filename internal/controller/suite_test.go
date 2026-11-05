@@ -24,8 +24,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/utils/ptr"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -116,12 +116,36 @@ func getFirstFoundEnvTestBinaryDir() string {
 	return ""
 }
 
-func ValidSpec() mlv1alpha1.DatasetSpec {
+func ValidDsetSpec() mlv1alpha1.DatasetSpec {
 	return mlv1alpha1.DatasetSpec{
-		Uri:      ptr.To("sample.uri"),
-		Owner:    ptr.To("sample.owner"),
-		Rows:     ptr.To(1),
-		Checksum: ptr.To("placeholder"),
-		Golden:   ptr.To(false),
+		Uri:      new(Placeholder("uri")),
+		Owner:    new(Placeholder("owner")),
+		Rows:     new(1),
+		Checksum: new(Placeholder("checksum")),
+		Golden:   new(false),
 	}
 }
+
+func ValidTrnjobSpec() mlv1alpha1.TrainingJobSpec {
+	return mlv1alpha1.TrainingJobSpec{
+		Owner:     new(Placeholder("owner")),
+		Dataset:   new(Placeholder("dataset")),
+		BaseModel: new(Placeholder("baseModel")),
+		Image:     new(Placeholder("image")),
+		Resources: mlv1alpha1.Resources{
+			CPU: resource.MustParse("1"),
+			GPU: resource.MustParse("1"),
+			Accelerator: mlv1alpha1.Accelerator{
+				Class: mlv1alpha1.AcceleratorClassPlaceholder,
+				Count: 1,
+			},
+		},
+		Queue: new(Placeholder("queue")),
+	}
+}
+
+func Placeholder(name string) string {
+	return name + ".placeholder"
+}
+
+const DefaultNamespace = "default"

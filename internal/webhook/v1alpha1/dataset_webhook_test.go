@@ -24,7 +24,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -66,29 +65,29 @@ var _ = Describe("Dataset Webhook", func() {
 		}
 		registered := func(name, uri string, checksum *string) *mlv1alpha1.Dataset {
 			return &mlv1alpha1.Dataset{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Name: name, Namespace: "default",
 				Spec: mlv1alpha1.DatasetSpec{
-					Uri:      ptr.To(uri),
-					Owner:    ptr.To("owner"),
-					Golden:   ptr.To(false),
+					Uri:      new(uri),
+					Owner:    new("owner"),
+					Golden:   new(false),
 					Checksum: checksum,
 				},
 			}
 		}
 
 		BeforeEach(func() {
-			obj = registered("new", "s3://bucket/train.parquet", ptr.To("sha256:a"))
+			obj = registered("new", "s3://bucket/train.parquet", new("sha256:a"))
 		})
 
 		It("Should admit a URI nobody has registered", func() {
-			validator = newValidator(registered("other", "s3://bucket/eval.parquet", ptr.To("sha256:b")))
+			validator = newValidator(registered("other", "s3://bucket/eval.parquet", new("sha256:b")))
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(BeEmpty())
 		})
 
 		It("Should warn, not reject, when the same artifact is registered twice", func() {
-			validator = newValidator(registered("first", "s3://bucket/train.parquet", ptr.To("sha256:a")))
+			validator = newValidator(registered("first", "s3://bucket/train.parquet", new("sha256:a")))
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred(), "a duplicate URI is advisory, never an error")
 			Expect(warnings).To(ConsistOf(ContainSubstring("already registered by Dataset first")))
@@ -96,21 +95,21 @@ var _ = Describe("Dataset Webhook", func() {
 		})
 
 		It("Should say which claim is in doubt when the checksums disagree", func() {
-			validator = newValidator(registered("first", "s3://bucket/train.parquet", ptr.To("sha256:different")))
+			validator = newValidator(registered("first", "s3://bucket/train.parquet", new("sha256:different")))
 			warnings, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(warnings).To(ConsistOf(ContainSubstring("different spec.checksum")))
 		})
 
 		It("Should not warn about a Dataset in another namespace", func() {
-			elsewhere := registered("first", "s3://bucket/train.parquet", ptr.To("sha256:a"))
+			elsewhere := registered("first", "s3://bucket/train.parquet", new("sha256:a"))
 			elsewhere.Namespace = "other"
 			validator = newValidator(elsewhere)
 			Expect(validator.ValidateCreate(ctx, obj)).To(BeEmpty())
 		})
 
 		It("Should not warn about the object being created", func() {
-			validator = newValidator(registered("new", "s3://bucket/train.parquet", ptr.To("sha256:a")))
+			validator = newValidator(registered("new", "s3://bucket/train.parquet", new("sha256:a")))
 			Expect(validator.ValidateCreate(ctx, obj)).To(BeEmpty())
 		})
 	})
@@ -144,11 +143,11 @@ var _ = Describe("Dataset Webhook", func() {
 		//
 		It("Should validate updates correctly", func() {
 			By("simulating a valid update scenario")
-			oldObj.Spec.Owner = ptr.To("old_owner")
-			obj.Spec.Owner = ptr.To("new_owner")
+			oldObj.Spec.Owner = new("old_owner")
+			obj.Spec.Owner = new("new_owner")
 			Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-			oldObj.Spec.Golden = ptr.To(false)
-			obj.Spec.Golden = ptr.To(true)
+			oldObj.Spec.Golden = new(false)
+			obj.Spec.Golden = new(true)
 			Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
 		})
 
@@ -176,32 +175,32 @@ var _ = Describe("Dataset Webhook", func() {
 				Expect(err).To(MatchError(ContainSubstring("field is immutable")))
 			},
 			Entry("uri changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Uri = ptr.To("old_uri")
-				newSpec.Uri = ptr.To("new_uri")
+				oldSpec.Uri = new("old_uri")
+				newSpec.Uri = new("new_uri")
 			}, "spec.uri"),
 			Entry("rows changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Rows = ptr.To(100)
-				newSpec.Rows = ptr.To(200)
+				oldSpec.Rows = new(100)
+				newSpec.Rows = new(200)
 			}, "spec.rows"),
 			Entry("checksum changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Checksum = ptr.To("sha256:old")
-				newSpec.Checksum = ptr.To("sha256:new")
+				oldSpec.Checksum = new("sha256:old")
+				newSpec.Checksum = new("sha256:new")
 			}, "spec.checksum"),
 			// An optional field that was absent at registration is still a claim about
 			// the artifact once supplied, so nil -> set is a change like any other.
 			Entry("rows supplied after registration", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				newSpec.Rows = ptr.To(100)
+				newSpec.Rows = new(100)
 			}, "spec.rows"),
 			Entry("checksum dropped after registration", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Checksum = ptr.To("sha256:old")
+				oldSpec.Checksum = new("sha256:old")
 			}, "spec.checksum"),
 			Entry("all three changed at once", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Uri = ptr.To("old_uri")
-				newSpec.Uri = ptr.To("new_uri")
-				oldSpec.Rows = ptr.To(100)
-				newSpec.Rows = ptr.To(200)
-				oldSpec.Checksum = ptr.To("sha256:old")
-				newSpec.Checksum = ptr.To("sha256:new")
+				oldSpec.Uri = new("old_uri")
+				newSpec.Uri = new("new_uri")
+				oldSpec.Rows = new(100)
+				newSpec.Rows = new(200)
+				oldSpec.Checksum = new("sha256:old")
+				newSpec.Checksum = new("sha256:new")
 			}, "spec.uri", "spec.rows", "spec.checksum"),
 		)
 	})

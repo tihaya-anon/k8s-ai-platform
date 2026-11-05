@@ -17,12 +17,48 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+type AcceleratorClass string
+
+const (
+	AcceleratorClassPlaceholder AcceleratorClass = "AcceleratorClassPlaceholder"
+)
+
+type Accelerator struct {
+
+	// +kubebuilder:validation:Enum=AcceleratorClassPlaceholder
+	// +required
+
+	Class AcceleratorClass `json:"class"`
+
+	// +required
+
+	Count int64 `json:"count"`
+}
+
+// Resources defines CPU, memory, and optionally an accelerator class and a device count
+type Resources struct {
+
+	// +required
+
+	CPU resource.Quantity `json:"cpu"`
+
+	// +required
+
+	GPU resource.Quantity `json:"gpu"`
+
+	// +optional
+
+	Accelerator Accelerator `json:"accelerator"`
+}
+
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
+
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
@@ -48,6 +84,11 @@ type TrainingJobSpec struct {
 
 	// Image the container holding the training code, framework and GPU libraries
 	Image *string `json:"image"`
+
+	// +required
+
+	// Resources CPU, memory, and optionally an accelerator class and a device count
+	Resources Resources `json:"resources"`
 
 	// +required
 
@@ -100,6 +141,7 @@ type TrainingJobStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:path=trainingjobs,singular=trainingjob,shortName=trnjob,categories=all,scope=Namespaced
 
 // TrainingJob is the Schema for the trainingjobs API
 type TrainingJob struct {
@@ -109,8 +151,10 @@ type TrainingJob struct {
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitzero"`
 
-	// spec defines the desired state of TrainingJob
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 	// +required
+
+	// spec defines the desired state of TrainingJob
 	Spec TrainingJobSpec `json:"spec"`
 
 	// status defines the observed state of TrainingJob

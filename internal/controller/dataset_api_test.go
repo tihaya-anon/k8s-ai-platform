@@ -5,41 +5,36 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
+
+	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 )
 
 var _ = Describe("Dataset API", func() {
 	It("should accept valid spec", func() {
-		spec := ValidSpec()
+		spec := ValidDsetSpec()
 		validDataset := &mlv1alpha1.Dataset{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "valid-dataset",
-				Namespace: "default",
-			},
-			Spec: spec,
+			Name:      "valid-dataset",
+			Namespace: DefaultNamespace,
+			Spec:      spec,
 		}
 		Expect(k8sClient.Create(ctx, validDataset)).Should(Succeed())
 		By("Cleanup the specific resource instance Dataset")
 		Expect(k8sClient.Delete(ctx, validDataset)).To(Succeed())
 	})
 	It("should set default golden entry", func() {
-		spec := ValidSpec()
+		spec := ValidDsetSpec()
 		spec.Golden = nil
 		resourceName := "valid-dataset"
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default",
+			Namespace: DefaultNamespace,
 		}
 		validDataset := &mlv1alpha1.Dataset{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      resourceName,
-				Namespace: "default",
-			},
-			Spec: spec,
+			Name:      resourceName,
+			Namespace: DefaultNamespace,
+			Spec:      spec,
 		}
 		Expect(k8sClient.Create(ctx, validDataset)).Should(Succeed())
 		By("missing golden entry should be set as default value false")
@@ -47,36 +42,34 @@ var _ = Describe("Dataset API", func() {
 		Expect(*validDataset.Spec.Golden).To(BeFalse())
 	})
 	DescribeTable("should not accept invalid spec", func(mutate func(spec *mlv1alpha1.DatasetSpec)) {
-		spec := ValidSpec()
+		spec := ValidDsetSpec()
 		mutate(&spec)
 		err := k8sClient.Create(ctx, &mlv1alpha1.Dataset{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "invalid-",
-				Namespace:    "default",
-			},
-			Spec: spec,
+			GenerateName: "invalid-",
+			Namespace:    DefaultNamespace,
+			Spec:         spec,
 		})
 		Expect(apierrors.IsInvalid(err)).Should(BeTrue(), "want Invalid from the API server, got %v", err)
 	},
 		Entry("missing uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = nil }),
-		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = ptr.To("") }),
-		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = ptr.To(strings.Repeat("x", 129)) }),
+		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = new("") }),
+		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = new(strings.Repeat("x", 129)) }),
 
 		Entry("missing owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = nil }),
-		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = ptr.To("") }),
+		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = new("") }),
 		Entry("owner over MaxLength", func(s *mlv1alpha1.DatasetSpec) {
-			s.Owner = ptr.To(strings.Repeat("x", 129))
+			s.Owner = new(strings.Repeat("x", 129))
 		}),
 
 		Entry("zero rows", func(s *mlv1alpha1.DatasetSpec) {
-			s.Rows = ptr.To(0)
+			s.Rows = new(0)
 		}),
 
 		Entry("empty checksum", func(s *mlv1alpha1.DatasetSpec) {
-			s.Checksum = ptr.To("")
+			s.Checksum = new("")
 		}),
 		Entry("checksum over MaxLength", func(s *mlv1alpha1.DatasetSpec) {
-			s.Checksum = ptr.To(strings.Repeat("x", 257))
+			s.Checksum = new(strings.Repeat("x", 257))
 		}),
 	)
 })
