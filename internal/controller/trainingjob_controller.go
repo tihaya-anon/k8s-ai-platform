@@ -18,6 +18,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
+
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -48,6 +52,26 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	var tj mlv1alpha1.TrainingJob
 	if err := r.Get(ctx, req.NamespacedName, &tj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+	switch tj.Spec.Underlying {
+	case mlv1alpha1.KubeflowV1Alpha1TrainJob:
+		return ctrl.Result{}, fmt.Errorf("coming soon")
+	case mlv1alpha1.BatchV1Job:
+		_ = batchv1.Job{
+			Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Image: tj.Spec.Image,
+							},
+						},
+					},
+				},
+			},
+		}
+	default:
+		return ctrl.Result{}, fmt.Errorf("unsupported underlying type: %v", tj.Spec.Underlying)
 	}
 
 	return ctrl.Result{}, nil

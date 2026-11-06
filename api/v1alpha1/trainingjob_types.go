@@ -59,8 +59,22 @@ type Resources struct {
 	Accelerator *Accelerator `json:"accelerator,omitempty"`
 }
 
+type UnderlyingType string
+
+const (
+	BatchV1Job               UnderlyingType = "BatchV1Job"
+	KubeflowV1Alpha1TrainJob UnderlyingType = "KubeflowV1Alpha1TrainJob"
+)
+
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
+
+	// +kubebuilder:validation:Enum=BatchV1Job;KubeflowV1Alpha1TrainJob
+	// +default=BatchV1Job
+	// +required
+
+	// Underlying specifies the type TrainingJob runs on
+	Underlying UnderlyingType `json:"underlying"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
