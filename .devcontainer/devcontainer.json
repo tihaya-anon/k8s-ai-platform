@@ -1,6 +1,8 @@
 {
   "containerEnv": {
-    "LOCALBIN": "/home/agent/.cache/k8s-ai-platform/bin",
+    // No LOCALBIN override here: the tools volume is mounted over the workspace's own bin/, so the
+    // Makefile's default is already right. See that entry in "mounts".
+    //
     // Pull the proxy from the host shell env instead of hardcoding a port, so the repo
     // stays machine-independent; on a machine with no proxy these resolve to empty and the
     // container just goes direct. --network=host makes the host loopback reachable inside
@@ -60,7 +62,7 @@
         // popup.
         "go.toolsManagement.autoUpdate": false,
         "go.toolsManagement.checkForUpdates": "off",
-        // The Go lint settings and the two LOCALBIN tool paths (golangci-lint, controller-gen)
+        // The Go lint settings and the two bin/ tool paths (golangci-lint, controller-gen)
         // used to live here and now live in .vscode/settings.json. Settings in this file reach
         // only a window attached to this container, and the same checkout opened over WSL or on
         // the host got none of them -- no linter ran at all, and an editor that is silent because
@@ -229,9 +231,22 @@
     // and "initializeCommand" for why the host is guaranteed to have the file.
     "source=${localEnv:HOME}/.proxy_env,target=/home/agent/.proxy_env,type=bind,readonly",
     // The Makefile links tools in LOCALBIN by absolute path, and the checkout's path differs here
-    // from the host's, so a shared bin/ leaves dangling links on one side. Same fix as
-    // hack/agent.sh: its own LOCALBIN on a volume. `docker volume rm` re-downloads the tools.
-    "source=k8s-ai-devcontainer-tools,target=/home/agent/.cache/k8s-ai-platform,type=volume",
+    // from the host's, so sharing the host's bin/ through the workspace bind mount leaves dangling
+    // links on one side. The container therefore gets its own bin/ -- but at the *same* path,
+    // because a volume nested inside a bind mount shadows that directory only in here. Each side
+    // then has its own contents, and each side's absolute links resolve against its own checkout
+    // path.
+    //
+    // Keeping the path is what lets .vscode/settings.json point the Go extension and Go
+    // Annotations at ${workspaceFolder}/bin/<tool> -- one literal that is correct in a host window
+    // and in a window attached here, which is the only form those two settings accept. The earlier
+    // layout put LOCALBIN under ~/.cache, which no single literal could name, so the settings went
+    // through wrapper scripts in hack/; the Go extension then ran `go version -m` on a shell script
+    // instead of a binary, could not read a Go version out of it, and offered on every window start
+    // to recompile a tool that was already current.
+    //
+    // `docker volume rm k8s-ai-devcontainer-tools` re-downloads the tools.
+    "source=k8s-ai-devcontainer-tools,target=${containerWorkspaceFolder}/bin,type=volume",
     // The Go module cache. GOPATH is /go in the golang image, so this is $GOMODCACHE's parent.
     // Without the volume it sits in the container's writable layer and a Rebuild throws it away,
     // which means re-downloading the Kubernetes dependency tree -- minutes of network for seconds

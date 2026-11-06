@@ -1,14 +1,22 @@
 {
-  // The Makefile's pinned tools, reached through wrappers because their directory differs between
-  // a host checkout and the devcontainer. hack/lib/localbin.sh explains why the indirection cannot
-  // be avoided here; the wrappers build a missing tool rather than failing silently.
+  // The Makefile's pinned, plugin-built golangci-lint -- the linter the Go extension runs on save,
+  // so that the editor and `make lint` agree on version, plugins and .golangci.yml.
   //
-  // golangci-lint-v2 is the linter the Go extension runs on save. controller-gen is where the Go
-  // Annotations extension reads its Kubebuilder marker definitions, so a wrong path there means
-  // marker hover and completion quietly describe a different controller-gen than `make manifests`
-  // runs.
+  // Both this and goAnnotations.markers.controllerGenPath below take a literal path in which VS
+  // Code expands only ${workspaceFolder}, so bin/ has to mean the same thing in a host window and
+  // in a devcontainer window. It does: the devcontainer mounts its tools volume over this very
+  // directory rather than relocating LOCALBIN, which is what lets one literal be correct in both.
+  // See that entry in .devcontainer/devcontainer.json's "mounts".
+  //
+  // It must be the binary, not a wrapper script. The Go extension runs `go version -m` on whatever
+  // this names to decide whether the tool is stale; on a shell script that fails, and vscode-go
+  // reads "no version" as "recompile it", so every window start offered to rebuild a tool that was
+  // already current. go.toolsManagement.checkForUpdates does not gate that check.
+  //
+  // The cost of naming a binary is that nothing builds it on demand -- a fresh clone needs one
+  // `make golangci-lint` before the editor lints, which .devcontainer/post-install.sh runs here.
   "go.alternateTools": {
-    "golangci-lint-v2": "${workspaceFolder}/hack/golangci-lint.sh"
+    "golangci-lint-v2": "${workspaceFolder}/bin/golangci-lint"
   },
   // Go's own build and vet diagnostics arrive from gopls as you type, so the extension's
   // save-time passes would only duplicate them a second later. Lint is the exception: it runs
@@ -34,7 +42,9 @@
   // Keys here are sorted by Prettier, so each comment names its own key and never a neighbour.
   "go.lintTool": "golangci-lint-v2",
   "go.vetOnSave": "off",
-  // Same reasoning as go.alternateTools above; this extension keeps its tool path in its own
-  // namespace rather than in Go's.
-  "goAnnotations.markers.controllerGenPath": "${workspaceFolder}/hack/controller-gen.sh"
+  // Where the Go Annotations extension reads its Kubebuilder marker definitions, so a wrong path
+  // means marker hover and completion quietly describe a different controller-gen than `make
+  // manifests` runs. Same path reasoning as go.alternateTools above; this extension keeps its tool
+  // path in its own namespace rather than in Go's.
+  "goAnnotations.markers.controllerGenPath": "${workspaceFolder}/bin/controller-gen"
 }

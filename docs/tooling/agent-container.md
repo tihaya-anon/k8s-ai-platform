@@ -471,13 +471,13 @@ hack/agent.sh lint
 because a clean Problems panel reads as "clean" either way. These settings keep them in step, and
 all of them are in `.vscode/settings.json` rather than in `devcontainer.json`:
 
-| Setting                                   | Value                    | Why                                                                                                   |
-| ----------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `go.lintTool`                             | `golangci-lint-v2`       | the extension defaults to no linter at all; unset, it reports only what gopls finds                   |
-| `go.alternateTools`                       | `hack/golangci-lint.sh`  | the Makefile's pinned, plugin-built binary, so the editor reads `.golangci.yml` with the same version |
-| `go.lintOnSave`                           | `package`                | one package is about a second warm; the whole module is about twenty, too slow for every save         |
-| `goAnnotations.markers.controllerGenPath` | `hack/controller-gen.sh` | marker hover and completion otherwise describe a different controller-gen than `make manifests` runs  |
-| `go.buildOnSave`, `go.vetOnSave`          | `off`                    | gopls already reports both as you type; a save-time repeat is the same diagnostic a second later      |
+| Setting                                   | Value                | Why                                                                                                   |
+| ----------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `go.lintTool`                             | `golangci-lint-v2`   | the extension defaults to no linter at all; unset, it reports only what gopls finds                   |
+| `go.alternateTools`                       | `bin/golangci-lint`  | the Makefile's pinned, plugin-built binary, so the editor reads `.golangci.yml` with the same version |
+| `go.lintOnSave`                           | `package`            | one package is about a second warm; the whole module is about twenty, too slow for every save         |
+| `goAnnotations.markers.controllerGenPath` | `bin/controller-gen` | marker hover and completion otherwise describe a different controller-gen than `make manifests` runs  |
+| `go.buildOnSave`, `go.vetOnSave`          | `off`                | gopls already reports both as you type; a save-time repeat is the same diagnostic a second later      |
 
 The file is tracked, and `.gitignore` un-ignores exactly it. It is tracked for a reason worth
 remembering: **`devcontainer.json` settings reach only a window attached to the devcontainer.** The
@@ -486,12 +486,26 @@ linter and looks clean while `make lint` reports a dozen findings. Workspace set
 window and outrank the machine-scope settings a devcontainer contributes, which makes them the right
 home for anything that must agree with a `make` target.
 
-Both tool paths go through a wrapper in `hack/`, because `go.alternateTools` takes a literal path
-and expands only `${workspaceFolder}` in it. `LOCALBIN` is the repo's `bin/` on a host and
-`/home/agent/.cache/k8s-ai-platform/bin` in the devcontainer — see the volume in `mounts` for why
-the two cannot share one directory — so a hardcoded path is correct in one environment and silently
-wrong in the other. `hack/lib/localbin.sh` resolves `LOCALBIN` the way the Makefile does and builds
-the tool if it is missing; `hack/golangci-lint.sh` and `hack/controller-gen.sh` are one line each.
+Both tool paths are literal, because that is all `go.alternateTools` and the Go Annotations
+equivalent accept: VS Code expands `${workspaceFolder}` in them and nothing else, so neither can
+read `LOCALBIN`. That makes `${workspaceFolder}/bin` the only directory both settings can name, and
+the devcontainer is arranged to make it true there as well — it mounts its tools volume _over_
+`bin/` instead of relocating `LOCALBIN` elsewhere, so each side has its own contents at the same
+path and each side's absolute symlinks resolve against its own checkout. The agent container is
+different: it is never opened in an editor, so it keeps its own `LOCALBIN` under `~/.cache` as
+described above.
+
+The settings must name the binaries and not wrapper scripts, which is how this was first written.
+vscode-go decides whether a tool is stale by running `go version -m` on whatever the setting names;
+on a shell script that fails, and `listOutdatedTools` treats an unreadable version as "recompile it"
+rather than "skip it". The result was a warning on every window start —
+`Tools (golangci-lint-v2) need recompiling to work with go version go1.27.3` — about a binary that
+was already built with exactly that Go. `go.toolsManagement.checkForUpdates` does not gate that
+check; it covers gopls only.
+
+The wrappers also built a missing tool on first use, and naming the binaries gives that up: a fresh
+clone needs one `make golangci-lint controller-gen` before the editor lints or resolves markers.
+`.devcontainer/post-install.sh` runs it, so only a host checkout has to.
 
 ### What is live, and what is not
 

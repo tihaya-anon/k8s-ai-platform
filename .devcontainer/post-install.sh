@@ -4,7 +4,7 @@ set -euo pipefail
 # The tools this script used to download on every rebuild -- kind, kubebuilder, kubectl, starship,
 # the zsh plugins, gopls and dlv -- are now baked into the image by .devcontainer/Dockerfile.
 # What is left is only what has to run against the live container: fixing volume ownership,
-# linking the baked zsh plugins into $HOME, and the LOCALBIN tools that live on the named volume
+# linking the baked zsh plugins into $HOME, and the bin/ tools that live on the named volume
 # (so they persist across rebuilds and `make` skips them once present).
 
 # Every external command this script runs, checked before any of them does work. A missing binary
@@ -32,10 +32,15 @@ fi
 # /go/pkg is the Go module cache volume (GOPATH is /go in the golang image). It is listed here
 # rather than left to Go, because Go creates what it needs *under* the mount point but cannot
 # create the root-owned mount point's contents in the first place.
+#
+# The tools volume is mounted over the workspace's bin/, so that directory is a root-owned mount
+# point too even though the bind mount around it belongs to the user. -R, because a volume that
+# already carries tools from an earlier container has root-owned contents under it as well.
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 for dir in "$HOME/.cache" "$HOME/.config" "$HOME/.kube" /go/pkg; do
   if [ -d "$dir" ]; then sudo chown "$(id -u):$(id -g)" "$dir"; fi
 done
-sudo chown -R "$(id -u):$(id -g)" "$HOME/.cache/k8s-ai-platform"
+sudo chown -R "$(id -u):$(id -g)" "$repo_root/bin"
 
 # The plugins are baked under /opt/zsh-plugins because the agent user does not exist at image
 # build time; link them to the path hack/agent-home/.zshrc reads. `${zsh_plugins:?}` guards the
@@ -62,9 +67,10 @@ sudo chsh -s /bin/zsh "$(id -un)"
 # pure JavaScript, so one tree is valid everywhere; a dependency with a native binding would not be.
 npm ci --no-audit --no-fund
 
-# Into $LOCALBIN (a volume, see devcontainer.json) at the Makefile's pins; the editor's linter,
-# hack/format.sh and Go Annotations' marker definitions all read them from there. Go Annotations
-# only watches the workspace's bin/, so controller-gen has to be there before the editor starts.
+# Into the workspace's bin/ (a volume, see devcontainer.json) at the Makefile's pins; the editor's
+# linter, hack/format.sh and Go Annotations' marker definitions all read them from there, and both
+# editor settings name that directory literally, so the tools have to exist before the editor
+# starts rather than be built on first use.
 make goimports golangci-lint controller-gen
 
 go version
