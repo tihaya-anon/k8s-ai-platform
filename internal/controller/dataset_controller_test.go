@@ -118,7 +118,7 @@ var _ = Describe("Dataset Controller", func() {
 			resolved := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resolved)).To(Succeed())
 			Expect(resolved.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
-			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(1)))
+			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(int64(1))))
 			Expect(resolved.Status.LastResolvedTime.IsZero()).To(BeFalse())
 			Expect(apimeta.IsStatusConditionTrue(resolved.Status.Conditions, conditionResolvedDataset)).To(BeTrue())
 		})
@@ -186,7 +186,7 @@ var _ = Describe("Dataset Controller", func() {
 			reconcileWith(recorder, artifact.Metadata{Rows: 1, Checksum: checksumPlaceholder})
 			ready := &mlv1alpha1.Dataset{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, ready)).To(Succeed())
-			Expect(ready.Status.ObservedRows).To(HaveValue(Equal(1)))
+			Expect(ready.Status.ObservedRows).To(HaveValue(Equal(int64(1))))
 
 			By("resolving the same uri after the artifact was emptied")
 			reconcileWith(recorder, artifact.Metadata{Rows: 0, Checksum: checksumPlaceholder})
@@ -302,7 +302,7 @@ var _ = Describe("Dataset Controller", func() {
 			Expect(k8sClient.Get(ctx, unclaimedName, resolved)).To(Succeed())
 			By("an absent claim has nothing to disagree with")
 			Expect(resolved.Status.Phase).To(Equal(mlv1alpha1.DatasetPhaseReady))
-			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(50)))
+			Expect(resolved.Status.ObservedRows).To(HaveValue(Equal(int64(50))))
 			Expect(resolved.Status.ObservedChecksum).To(HaveValue(Equal("whatever-the-store-holds")))
 		})
 	})

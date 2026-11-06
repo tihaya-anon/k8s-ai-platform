@@ -51,18 +51,16 @@ var _ = Describe("Dataset API", func() {
 		})
 		Expect(apierrors.IsInvalid(err)).Should(BeTrue(), "want Invalid from the API server, got %v", err)
 	},
-		Entry("missing uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = nil }),
-		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = new("") }),
-		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = new(strings.Repeat("x", 129)) }),
+		Entry("empty uri", func(s *mlv1alpha1.DatasetSpec) { s.Uri = "" }),
+		Entry("uri over MaxLength", func(s *mlv1alpha1.DatasetSpec) { s.Uri = strings.Repeat("x", 129) }),
 
-		Entry("missing owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = nil }),
-		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = new("") }),
+		Entry("empty owner", func(s *mlv1alpha1.DatasetSpec) { s.Owner = "" }),
 		Entry("owner over MaxLength", func(s *mlv1alpha1.DatasetSpec) {
-			s.Owner = new(strings.Repeat("x", 129))
+			s.Owner = strings.Repeat("x", 129)
 		}),
 
 		Entry("zero rows", func(s *mlv1alpha1.DatasetSpec) {
-			s.Rows = new(0)
+			s.Rows = new(int64(0))
 		}),
 
 		Entry("empty checksum", func(s *mlv1alpha1.DatasetSpec) {

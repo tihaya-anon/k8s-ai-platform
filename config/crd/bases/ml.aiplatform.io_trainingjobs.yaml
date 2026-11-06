@@ -49,6 +49,8 @@ spec:
               dataset:
                 description: Dataset the registered dataset this run trains on, by
                   name
+                maxLength: 253
+                minLength: 1
                 type: string
               image:
                 description: Image the container holding the training code, framework
@@ -65,6 +67,8 @@ spec:
               queue:
                 description: Queue points to the LocalQueue this run belongs to, by
                   name
+                maxLength: 253
+                minLength: 1
                 type: string
               resources:
                 description: Resources CPU, memory, and optionally an accelerator
@@ -92,7 +96,7 @@ spec:
                     x-kubernetes-int-or-string: true
                     x-kubernetes-validations:
                     - message: cpu must larger than 0
-                      rule: self == quantity(self) && quantity(self).compareTo(quantity('0'))
+                      rule: isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('0'))
                         > 0
                   memory:
                     anyOf:
@@ -102,7 +106,7 @@ spec:
                     x-kubernetes-int-or-string: true
                     x-kubernetes-validations:
                     - message: memory must larger than 0
-                      rule: self == quantity(self) && quantity(self).compareTo(quantity('0'))
+                      rule: isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('0'))
                         > 0
                 required:
                 - cpu

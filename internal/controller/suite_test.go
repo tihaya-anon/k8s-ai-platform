@@ -122,9 +122,9 @@ func getFirstFoundEnvTestBinaryDir() string {
 
 func ValidDatasetSpec() mlv1alpha1.DatasetSpec {
 	return mlv1alpha1.DatasetSpec{
-		Uri:      new(Placeholder("uri")),
-		Owner:    new(Placeholder("owner")),
-		Rows:     new(1),
+		Uri:      Placeholder("uri"),
+		Owner:    Placeholder("owner"),
+		Rows:     new(int64(1)),
 		Checksum: new(Placeholder("checksum")),
 		Golden:   new(false),
 	}
@@ -132,18 +132,19 @@ func ValidDatasetSpec() mlv1alpha1.DatasetSpec {
 
 func ValidTrainingJobSpec() mlv1alpha1.TrainingJobSpec {
 	return mlv1alpha1.TrainingJobSpec{
-		Owner:     new(Placeholder("owner")),
-		Dataset:   new(Placeholder("dataset")),
-		BaseModel: new(Placeholder("baseModel")),
-		Image:     new(Placeholder("image")),
+		Owner:     Placeholder("owner"),
+		Dataset:   Placeholder("dataset"),
+		BaseModel: Placeholder("baseModel"),
+		Image:     Placeholder("image"),
 		Resources: mlv1alpha1.Resources{
-			CPU: resource.MustParse("1"),
+			CPU:    resource.MustParse("2"),
+			Memory: resource.MustParse("32Gi"),
 			Accelerator: new(mlv1alpha1.Accelerator{
 				Class: mlv1alpha1.AcceleratorClassPlaceholder,
 				Count: 1,
 			}),
 		},
-		Queue: new(Placeholder("queue")),
+		Queue: Placeholder("queue"),
 	}
 }
 

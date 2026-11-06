@@ -67,8 +67,8 @@ var _ = Describe("Dataset Webhook", func() {
 			return &mlv1alpha1.Dataset{
 				Name: name, Namespace: "default",
 				Spec: mlv1alpha1.DatasetSpec{
-					Uri:      new(uri),
-					Owner:    new("owner"),
+					Uri:      uri,
+					Owner:    "owner",
 					Golden:   new(false),
 					Checksum: checksum,
 				},
@@ -143,8 +143,8 @@ var _ = Describe("Dataset Webhook", func() {
 		//
 		It("Should validate updates correctly", func() {
 			By("simulating a valid update scenario")
-			oldObj.Spec.Owner = new("old_owner")
-			obj.Spec.Owner = new("new_owner")
+			oldObj.Spec.Owner = "old_owner"
+			obj.Spec.Owner = "new_owner"
 			Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
 			oldObj.Spec.Golden = new(false)
 			obj.Spec.Golden = new(true)
@@ -175,12 +175,12 @@ var _ = Describe("Dataset Webhook", func() {
 				Expect(err).To(MatchError(ContainSubstring("field is immutable")))
 			},
 			Entry("uri changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Uri = new("old_uri")
-				newSpec.Uri = new("new_uri")
+				oldSpec.Uri = "old_uri"
+				newSpec.Uri = "new_uri"
 			}, "spec.uri"),
 			Entry("rows changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Rows = new(100)
-				newSpec.Rows = new(200)
+				oldSpec.Rows = new(int64(100))
+				newSpec.Rows = new(int64(200))
 			}, "spec.rows"),
 			Entry("checksum changed", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
 				oldSpec.Checksum = new("sha256:old")
@@ -189,16 +189,16 @@ var _ = Describe("Dataset Webhook", func() {
 			// An optional field that was absent at registration is still a claim about
 			// the artifact once supplied, so nil -> set is a change like any other.
 			Entry("rows supplied after registration", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				newSpec.Rows = new(100)
+				newSpec.Rows = new(int64(100))
 			}, "spec.rows"),
 			Entry("checksum dropped after registration", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
 				oldSpec.Checksum = new("sha256:old")
 			}, "spec.checksum"),
 			Entry("all three changed at once", func(oldSpec, newSpec *mlv1alpha1.DatasetSpec) {
-				oldSpec.Uri = new("old_uri")
-				newSpec.Uri = new("new_uri")
-				oldSpec.Rows = new(100)
-				newSpec.Rows = new(200)
+				oldSpec.Uri = "old_uri"
+				newSpec.Uri = "new_uri"
+				oldSpec.Rows = new(int64(100))
+				newSpec.Rows = new(int64(200))
 				oldSpec.Checksum = new("sha256:old")
 				newSpec.Checksum = new("sha256:new")
 			}, "spec.uri", "spec.rows", "spec.checksum"),

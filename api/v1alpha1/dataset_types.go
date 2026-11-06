@@ -33,20 +33,20 @@ type DatasetSpec struct {
 	// +required
 
 	// Uri non-empty dataset artifact location
-	Uri *string `json:"uri"`
+	Uri string `json:"uri"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
 
 	// Owner non-empty human or team owner used for accountability and incident routing
-	Owner *string `json:"owner"`
+	Owner string `json:"owner"`
 
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 
 	// Rows claimed positive row count supplied by the registrant
-	Rows *int `json:"rows,omitempty"`
+	Rows *int64 `json:"rows,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
@@ -56,9 +56,10 @@ type DatasetSpec struct {
 	Checksum *string `json:"checksum,omitempty"`
 
 	// +default=false
+	// +optional
 
 	// Golden whether the dataset is approved for evaluation gates; default false
-	Golden *bool `json:"golden"`
+	Golden *bool `json:"golden,omitempty"`
 }
 
 type DatasetPhase string
@@ -101,7 +102,7 @@ type DatasetStatus struct {
 	// ObservedRows metadata resolved by the controller. Absent means the last
 	// pass observed no usable row count: a zero-row artifact is unusable, so the
 	// controller reports ArtifactEmpty instead of recording the observation.
-	ObservedRows *int `json:"observedRows,omitempty"`
+	ObservedRows *int64 `json:"observedRows,omitempty"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256

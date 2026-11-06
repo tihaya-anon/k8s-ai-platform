@@ -16,13 +16,77 @@ The last row is a different job, not a weaker webhook: a controller cannot say n
 runs, the object is stored. It can only observe and report — which is exactly what drift detection
 is.
 
+## Required, optional, and the nil instinct from Go backends
+
+A Go service that takes JSON learns one habit early: make every field a pointer, because `nil` and
+`""` are different answers and only a pointer can tell them apart. Kubernetes inverts that habit,
+and the reason is that the API server already knows which fields were sent.
+
+The convention is in the
+[API conventions document](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#optional-vs-required),
+and it is two rules:
+
+- **Required fields are value types with no `omitempty`.** The field always serializes, the schema
+  lists it under `required`, and the API server rejects a request that omits it before any Go code
+  runs.
+- **Optional fields are pointers with `omitempty`.** The pointer is what lets the field be absent
+  from the wire at all, and `nil` then means exactly "the client did not set this".
+
+```go
+Owner    string  `json:"owner"`              // +required
+Checksum *string `json:"checksum,omitempty"` // +optional
+```
+
+The marker and the Go type have to agree, but they are enforced by different things, which is the
+part that surprises people. `controller-gen` decides requiredness from `+required`/`+optional` and
+the absence of `omitempty` — **never from whether the field is a pointer**. So `Owner *string` with
+`+required` does land in the schema's `required` list; the pointer buys nothing there.
+
+What the pointer does buy on a required field is the ability for a **typed Go client** to express
+omission: `nil` marshals to `"owner": null`, and the API server treats an explicit null as absent,
+answering `spec.owner: Required value`. That is occasionally convenient in an envtest table, and it
+is the wrong reason to deviate, because it costs every caller a dereference and every reconciler a
+nil check for a field the API server guarantees is set.
+
+### What replaces the nil check
+
+Three things, in order of preference:
+
+1. **The schema.** A required `string` can still arrive as `""`, which satisfies `required`. Pair
+   every required string with `+kubebuilder:validation:MinLength=1`; that is the rule that makes the
+   empty case impossible, not the pointer.
+2. **A default.** A field that has a sensible value when unset takes `+default=`, and the API server
+   fills it during admission. An optional pointer carrying `+default=false`, as `Golden` does, is
+   the one shape where a pointer on a non-required field is still right: the pointer is how "absent"
+   reaches the defaulting step, and after admission the stored object always has a value.
+3. **Nothing.** For a required field with `MinLength=1`, a reconciler that checks
+   `if spec.Owner == ""` is checking something the API server has already refused to store. Delete
+   the check.
+
+### Testing the consequence
+
+Dropping the pointers costs one kind of test: you can no longer express "this field is missing"
+through the typed client, because a value type always serializes. `s.Owner = ""` and a nil pointer
+were two entries in a table and are now one. The schema's `required` list is still there and still
+enforced — it just takes an `unstructured.Unstructured` with the key removed to exercise it, since
+that is the only way to send a request the Go type cannot represent.
+
+Three further conventions from the same document, worth knowing before the next type:
+
+- **Sized integers only.** `int32` or `int64`, never `int` — `int` has no fixed width, so the
+  generated schema cannot state a range that holds on every platform.
+- **`status` fields are optional.** `status` is written incrementally by a controller, so a required
+  field inside it means no partial status can ever be stored.
+- **No `omitempty` on a required field.** It contradicts the marker, and for a `bool` or a number it
+  silently drops a legitimate `false`/`0` from the request.
+
 ## Immutability without a webhook
 
 Since validation rules reached beta in 1.25 and went GA, an immutable field is a marker:
 
 ```go
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="uri is immutable"
-Uri *string `json:"uri"`
+Uri string `json:"uri"`
 ```
 
 `controller-gen` turns it into `x-kubernetes-validations` in the CRD, and the **API server**
@@ -176,6 +240,7 @@ Neither commit is the finished feature; the build half of
 
 ## Sources
 
+- [API conventions — optional versus required](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#optional-vs-required)
 - [Enforce CRD Immutability with CEL Transition Rules](https://kubernetes.io/blog/2022/09/29/enforce-immutability-using-cel/)
 - [CustomResourceDefinition Validation Rules Graduate to Beta](https://kubernetes.io/blog/2022/09/23/crd-validation-rules-beta/)
 - [CRD Validation markers — Kubebuilder Book](https://book.kubebuilder.io/reference/markers/crd-validation.html)

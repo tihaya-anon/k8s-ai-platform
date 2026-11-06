@@ -18,7 +18,7 @@ import (
 // the controller. It mirrors the claims a user may put in DatasetSpec, so the
 // reconciler can compare the two.
 type Metadata struct {
-	Rows     int
+	Rows     int64
 	Checksum string
 }
 
@@ -54,7 +54,7 @@ func (FileResolver) Resolve(ctx context.Context, uri string) (Metadata, error) {
 	defer func() { _ = file.Close() }()
 
 	hash := sha256.New()
-	rows := 0
+	var rows int64
 	scanner := bufio.NewScanner(io.TeeReader(file, hash))
 	for scanner.Scan() {
 		// Cancellation matters here: a large artifact must not keep a worker busy

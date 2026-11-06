@@ -89,7 +89,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		ObservedGeneration: dset.Generation,
 	}
 
-	found, resolveErr := r.Resolver.Resolve(ctx, *dset.Spec.Uri)
+	found, resolveErr := r.Resolver.Resolve(ctx, dset.Spec.Uri)
 
 	// An artifact with no rows is unusable, not merely unremarkable: nothing can
 	// be trained or evaluated on it, so it is a failure of the artifact and never
@@ -100,13 +100,13 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	switch {
 	case resolveErr != nil:
-		log.Info("artifact resolution failed", "uri", *dset.Spec.Uri, "error", resolveErr)
+		log.Info("artifact resolution failed", "uri", dset.Spec.Uri, "error", resolveErr)
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
 		condition.Reason = reasonArtifactUnreachable
 		condition.Message = fmt.Sprintf("artifact store: %v", resolveErr)
 	case !usable:
-		log.Info("artifact is empty", "uri", *dset.Spec.Uri)
+		log.Info("artifact is empty", "uri", dset.Spec.Uri)
 		// The store answered, so the checksum and the timestamp are facts worth
 		// keeping. The row count is cleared rather than left behind: a stale count
 		// from an earlier pass would claim an observation this pass contradicts.
@@ -116,7 +116,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseFailed
 		condition.Status = metav1.ConditionFalse
 		condition.Reason = reasonArtifactEmpty
-		condition.Message = fmt.Sprintf("artifact at %s has no rows and cannot be used for training or evaluation", *dset.Spec.Uri)
+		condition.Message = fmt.Sprintf("artifact at %s has no rows and cannot be used for training or evaluation", dset.Spec.Uri)
 	default:
 		dset.Status.ObservedRows = &found.Rows
 		dset.Status.ObservedChecksum = &found.Checksum
@@ -124,7 +124,7 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		dset.Status.Phase = mlv1alpha1.DatasetPhaseReady
 		condition.Status = metav1.ConditionTrue
 		condition.Reason = reasonArtifactResolved
-		condition.Message = fmt.Sprintf("resolved %d rows at %s", found.Rows, *dset.Spec.Uri)
+		condition.Message = fmt.Sprintf("resolved %d rows at %s", found.Rows, dset.Spec.Uri)
 	}
 
 	// Drift is only computable against a fresh observation, so it cannot be

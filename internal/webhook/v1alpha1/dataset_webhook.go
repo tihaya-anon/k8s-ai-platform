@@ -104,7 +104,7 @@ func (v *DatasetValidator) ValidateCreate(ctx context.Context, dataset *mlv1alph
 // should see, which is what admission.Warnings is for: a disagreeing checksum
 // means one of the two claims is wrong, and the create is still admitted.
 func (v *DatasetValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1alpha1.Dataset) admission.Warnings {
-	if v.Client == nil || dataset.Spec.Uri == nil {
+	if v.Client == nil || dataset.Spec.Uri == "" {
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func (v *DatasetValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1
 	conflicting := make([]string, 0, len(siblings.Items))
 	for i := range siblings.Items {
 		sibling := &siblings.Items[i]
-		if sibling.Name == dataset.Name || !ptr.Equal(sibling.Spec.Uri, dataset.Spec.Uri) {
+		if sibling.Name == dataset.Name || sibling.Spec.Uri != dataset.Spec.Uri {
 			continue
 		}
 		if ptr.Equal(sibling.Spec.Checksum, dataset.Spec.Checksum) {
@@ -136,13 +136,13 @@ func (v *DatasetValidator) warnOnDuplicateURI(ctx context.Context, dataset *mlv1
 		warnings = append(warnings, fmt.Sprintf(
 			"spec.uri %q is already registered by Dataset %s in this namespace with the same spec.checksum; "+
 				"lineage recorded against either one will not distinguish them",
-			*dataset.Spec.Uri, strings.Join(agreeing, ", ")))
+			dataset.Spec.Uri, strings.Join(agreeing, ", ")))
 	}
 	if len(conflicting) > 0 {
 		warnings = append(warnings, fmt.Sprintf(
 			"spec.uri %q is already registered by Dataset %s in this namespace with a different spec.checksum; "+
 				"one of the two registrations is wrong about the same artifact",
-			*dataset.Spec.Uri, strings.Join(conflicting, ", ")))
+			dataset.Spec.Uri, strings.Join(conflicting, ", ")))
 	}
 	return warnings
 }

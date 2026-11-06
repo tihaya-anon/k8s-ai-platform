@@ -44,19 +44,19 @@ type Accelerator struct {
 // Resources defines CPU, memory, and optionally an accelerator class and a device count
 type Resources struct {
 
-	// +kubebuilder:validation:XValidation:rule="self == quantity(self) && quantity(self).compareTo(quantity('0')) > 0",message="cpu must larger than 0"
+	// +kubebuilder:validation:XValidation:rule="isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('0')) > 0",message="cpu must larger than 0"
 	// +required
 
 	CPU resource.Quantity `json:"cpu"`
 
-	// +kubebuilder:validation:XValidation:rule="self == quantity(self) && quantity(self).compareTo(quantity('0')) > 0",message="memory must larger than 0"
+	// +kubebuilder:validation:XValidation:rule="isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('0')) > 0",message="memory must larger than 0"
 	// +required
 
 	Memory resource.Quantity `json:"memory"`
 
 	// +optional
 
-	Accelerator *Accelerator `json:"accelerator"`
+	Accelerator *Accelerator `json:"accelerator,omitempty"`
 }
 
 // TrainingJobSpec defines the desired state of TrainingJob
@@ -67,36 +67,40 @@ type TrainingJobSpec struct {
 	// +required
 
 	// Owner non-empty human or team owner used for accountability and incident routing
-	Owner *string `json:"owner"`
+	Owner string `json:"owner"`
 
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	// +required
 
 	// Dataset the registered dataset this run trains on, by name
-	Dataset *string `json:"dataset"`
+	Dataset string `json:"dataset"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +required
 
 	// BaseModel the trained weights this run starts from
-	BaseModel *string `json:"baseModel"`
+	BaseModel string `json:"baseModel"`
 
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=256
 	// +required
 
 	// Image the container holding the training code, framework and GPU libraries
-	Image *string `json:"image"`
+	Image string `json:"image"`
 
 	// +required
 
 	// Resources CPU, memory, and optionally an accelerator class and a device count
 	Resources Resources `json:"resources"`
 
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	// +required
 
 	// Queue points to the LocalQueue this run belongs to, by name
-	Queue *string `json:"queue"`
+	Queue string `json:"queue"`
 }
 
 type TrainingJobPhase string
