@@ -90,11 +90,16 @@ type DatasetStatus struct {
 	// The status of each condition is one of True, False, or Unknown.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// A value type rather than a pointer: "" is not a member of the enum, so
+	// omitempty already separates unset from every legal value. Optional because
+	// the API server discards any status a write carries, so a required field
+	// here would be a rule every future status writer has to obey.
+	//
 	// +kubebuilder:validation:Enum=Pending;Ready;Failed
-	// +required
+	// +optional
 
 	// Phase short display summary, one of Pending, Ready, or Failed
-	Phase DatasetPhase `json:"phase"`
+	Phase DatasetPhase `json:"phase,omitempty"`
 
 	// +kubebuilder:validation:Minimum=1
 	// +optional
@@ -114,7 +119,7 @@ type DatasetStatus struct {
 	// +optional
 
 	// LastResolvedTime timestamp of the last successful metadata resolution
-	LastResolvedTime metav1.Time `json:"lastResolvedTime,omitempty"`
+	LastResolvedTime metav1.Time `json:"lastResolvedTime,omitzero"`
 }
 
 // All of this type's markers sit in one block, and above the doc comment rather than inside it.

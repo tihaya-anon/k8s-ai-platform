@@ -209,8 +209,6 @@ spec:
                 - Success
                 - Failed
                 type: string
-            required:
-            - phase
             type: object
         required:
         - spec

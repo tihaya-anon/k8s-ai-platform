@@ -134,16 +134,21 @@ type TrainingJobStatus struct {
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// A value type rather than a pointer: "" is not a member of the enum, so
+	// omitempty already separates unset from every legal value. Optional because
+	// the API server discards any status a write carries, so a required field
+	// here would be a rule every future status writer has to obey.
+	//
 	// +kubebuilder:validation:Enum=Pending;Running;Success;Failed
-	// +required
+	// +optional
 
 	// Phase short display summary, one of Pending, Running, Success or Failed
-	Phase TrainingJobPhase `json:"phase"`
+	Phase TrainingJobPhase `json:"phase,omitempty"`
 
 	// +optional
 
 	// LastResolvedTime timestamp of the last successful metadata resolution
-	LastResolvedTime metav1.Time `json:"lastResolvedTime,omitempty"`
+	LastResolvedTime metav1.Time `json:"lastResolvedTime,omitzero"`
 }
 
 // +kubebuilder:object:root=true

@@ -185,8 +185,6 @@ spec:
                 - Ready
                 - Failed
                 type: string
-            required:
-            - phase
             type: object
         required:
         - spec

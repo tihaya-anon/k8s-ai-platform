@@ -37,6 +37,18 @@ Owner    string  `json:"owner"`              // +required
 Checksum *string `json:"checksum,omitempty"` // +optional
 ```
 
+Both rules have one exception, and it is the same exception: the pointer exists **to distinguish
+unset from the zero value**, so the shape follows from whether the zero value is legal.
+
+- An optional field whose zero value is not a legal value needs no pointer. A string enum is the
+  common case: `""` is not a member, so `omitempty` already means "absent", and the field stays a
+  value type. `PodStatus.Phase` in core Kubernetes is a plain `PodPhase` for this reason.
+- A required field whose zero value **is** legal — a `bool`, a count where `0` means something — has
+  to be a pointer with `omitempty`, because otherwise a deliberate `false` is indistinguishable from
+  an unset field and `omitempty` would drop it. Keep the explicit `+required` marker:
+  `controller-gen` takes the marker over the tag, so such a field still lands in the schema's
+  `required` list.
+
 The marker and the Go type have to agree, but they are enforced by different things, which is the
 part that surprises people. `controller-gen` decides requiredness from `+required`/`+optional` and
 the absence of `omitempty` — **never from whether the field is a pointer**. So `Owner *string` with
@@ -75,10 +87,15 @@ Three further conventions from the same document, worth knowing before the next 
 
 - **Sized integers only.** `int32` or `int64`, never `int` — `int` has no fixed width, so the
   generated schema cannot state a range that holds on every platform.
-- **`status` fields are optional.** `status` is written incrementally by a controller, so a required
-  field inside it means no partial status can ever be stored.
-- **No `omitempty` on a required field.** It contradicts the marker, and for a `bool` or a number it
-  silently drops a legitimate `false`/`0` from the request.
+- **`status` fields are optional.** With the status subresource enabled the API server discards
+  whatever `status` a create or update carries, so the first status that exists is the one a
+  reconciler writes. A required field inside `status` is therefore a rule every future status writer
+  has to obey: the moment one of them sets a condition and nothing else, the omitted field
+  serializes as its zero value and the write is rejected — by the `Enum` marker before `required`
+  even gets a say.
+- **`omitempty` does nothing on a struct.** `metav1.Time` is a struct, so
+  `json:"lastResolvedTime,omitempty"` still emits `null`. Use `omitzero`, which is what the
+  generated `ObjectMeta` and `Status` fields already carry.
 
 ## Immutability without a webhook
 
