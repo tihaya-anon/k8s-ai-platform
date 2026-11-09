@@ -33,8 +33,9 @@ Then the **quiz**, which now comes after the review rather than after a build, b
 what the review surfaced. Wrong answers are the useful part; record them.
 
 Each beat is a tagged commit on the `main` branch, so the Spec is readable before the code exists
-and the Build is readable as a diff. [stages.md](stages.md) has the git commands for standing at a
-stage, reading a beat as a diff, and putting your own Verify work on a branch off it.
+and the Build is readable as a diff. The commands are in the beats themselves, below. Paste and run;
+working out which ref to look at is not the exercise. [stages.md](stages.md) is the reference for
+going off that path: how the tags are laid out, where to put your own work, how to get back.
 
 **A task's Spec and Build land when the task is reached, not in advance.** The tags below `1.2` do
 not exist yet, and that is deliberate rather than unfinished: each task's vocabulary is built on the
@@ -92,6 +93,11 @@ Required tools:
 which of these tools is involved at each step and which are not involved at all. Most of them are
 not.
 
+```bash
+kubectl api-resources | head -20
+kubectl get --raw /readyz?verbose | head
+```
+
 **Quiz**
 
 1. Which tools are runtime cluster tools, and which tools are code-generation/scaffolding tools?
@@ -125,6 +131,11 @@ it".
 **Review:** exercise C — for each file in the root, say which tool owns it and what would break if
 two tools both wrote it. `.prettierignore` and `kustomization.yaml` are the pair where the answer is
 sharpest.
+
+```bash
+git ls-files | grep -v /          # the root, as git sees it
+cat .prettierignore
+```
 
 **Quiz**
 
@@ -177,6 +188,11 @@ line-review every generated YAML field yet.
 **Review:** exercise C — trace `make run` from the shell to a reconcile: what the Makefile invokes,
 what the manager builds, where the client's cache comes from, and which of those steps needs a
 cluster.
+
+```bash
+grep -n "^run:" -A 4 Makefile
+grep -n "NewManager\|GetClient\|Start(" cmd/main.go
+```
 
 **Quiz**
 
@@ -237,6 +253,17 @@ generator reads it, what it becomes in `config/crd/bases/`, which component enfo
 the user sees. Then exercise E — `docs/product/domain.md` argues `spec.uri` as a bare string; review
 that argument in arrears and say what it leaves underspecified.
 
+```bash
+grep -n "kubebuilder:validation" api/v1alpha1/dataset_types.go
+grep -n "maxLength\|minLength" config/crd/bases/ml.aiplatform.io_datasets.yaml
+kubectl apply -f - <<'YAML'    # watch the API server refuse it
+apiVersion: ml.aiplatform.io/v1alpha1
+kind: Dataset
+metadata: { name: too-short, namespace: default }
+spec: { uri: "", owner: me }
+YAML
+```
+
 **Quiz**
 
 1. `make manifests` and `make generate` run the same binary for different jobs. Which output belongs
@@ -270,6 +297,10 @@ Makefile target.
 behind it. Name three behaviours a test can therefore never observe, and for each, what would have
 to run instead.
 
+```bash
+grep -n "envtest.Environment" -A 8 internal/controller/suite_test.go
+```
+
 **Quiz**
 
 1. What is envtest running that a plain unit test is not running?
@@ -299,6 +330,11 @@ CRDs they install.
 **Review:** exercise D — the setup script succeeds but a webhook's certificate has not been issued
 yet. What does the next `kubectl apply` do, what does the user see, and which readiness check would
 have caught it?
+
+```bash
+kubectl get validatingwebhookconfiguration -o yaml | grep -A3 caBundle | head
+kubectl get certificate,secret -A | grep -i webhook
+```
 
 **Quiz**
 
@@ -367,6 +403,12 @@ command you cannot run directly.
 hook. The repository now has all three; say which concern belongs to which, and why `shellcheck` is
 a hook rather than a formatter.
 
+```bash
+ls hack/ hack/git-hooks/
+grep -n "shellcheck\|markdownlint\|gofmt" hack/git-hooks/pre-commit
+grep -n "prettier" hack/format.sh
+```
+
 **Quiz**
 
 1. What is the single source of truth for formatting?
@@ -395,9 +437,13 @@ the code with the reasons attached, and then leaves a feature unimplemented.
 it found in conditions, emits events on transitions, and is covered by envtest. Type each step into
 the file; the point of each one is the sentence after it.
 
-**Spec:** `Dataset.status` is already specified in [domain.md](../product/domain.md#status). Review
-it in arrears: does it say what happens when the artifact store is unreachable but a previous
-observation exists, and is `Resolved=False` a failure or a fact?
+**Spec:** `Dataset.status` is already specified. Review it in arrears: does it say what happens when
+the artifact store is unreachable but a previous observation exists, and is `Resolved=False` a
+failure or a fact?
+
+```bash
+sed -n '/^### `status`/,/^---/p' docs/product/domain.md
+```
 
 **Build:**
 [part two](1.1-dataset-reconciler.md#part-two--drift-detection-and-the-immutability-webhook) — drift
@@ -406,12 +452,22 @@ what it found against the user's claim, which is the entire reason this CRD exis
 owner under the earlier two-beat format, where this half was the assignment._ It stays as written;
 the beats below were added in arrears.
 
+```bash
+git log --oneline -- internal/controller/dataset_controller.go internal/webhook/
+```
+
 **Verify:** yours — the envtest case that proves a rewritten artifact is noticed on a later
 reconcile, and the case that proves `ValidateUpdate` rejects a frozen-field edit. Both are
-negatives, which is the hard kind to write well.
+negatives, which is the hard kind to write well. Check they fail for the right reason: break the
+rule, watch the case go red, then put it back.
 
-**Look at:** `internal/controller/dataset_controller.go`,
-`internal/webhook/v1alpha1/dataset_webhook.go`, conditions, events, and status updates.
+```bash
+go test ./internal/controller/ ./internal/webhook/... -count=1
+git switch -c scratch/break-drift main
+# make detectDrift always report no drift, then:
+go test ./internal/controller/ -count=1
+git restore . && git switch - && git branch -D scratch/break-drift
+```
 
 **Design notes** — two decisions the walkthrough does not make for you:
 
@@ -431,8 +487,20 @@ negatives, which is the hard kind to write well.
 `ValidateUpdate`. Both are built and both pass the gate: `task/1.1/variant-webhook` and
 `task/1.1/variant-cel`, with the six refusal cases moved from the validator onto the API server so
 the two can be compared on refusals rather than on structure. The axis is narrower than "webhook
-versus CEL" in general, and [stages.md](stages.md) has the diff command. Then exercise D — the
-`Dataset` an admitted `TrainingJob` referenced is deleted mid-run.
+versus CEL" in general: two of the differences are not visible until you read the generated CRD.
+
+```bash
+git diff task/1.1/variant-webhook task/1.1/variant-cel -- api/ internal/
+git diff task/1.1/variant-webhook task/1.1/variant-cel -- config/crd/   # what controller-gen did
+git show task/1.1/variant-cel                                          # the trade, argued
+```
+
+Then exercise D — the `Dataset` an admitted `TrainingJob` referenced is deleted mid-run.
+
+```bash
+kubectl get dataset,trainingjob -o wide
+kubectl delete dataset <the one a running TrainingJob names>   # then read both statuses
+```
 
 **Quiz**
 
@@ -467,10 +535,13 @@ Job, read from the live objects in your cluster: `ResourceFlavor`, `ClusterQueue
 the queues and submit a plain Job by hand first. No controller code in this half.
 
 **Spec:** `TrainingJob.status` — the condition types, the reasons, and the mapping from Kueue's
-`QuotaReserved` reasons into platform vocabulary — is proposed in
-[domain.md](../product/domain.md#trainingjob-status). Review it before reading the implementation.
-The question it has to answer: which of `WaitingForQuota`, `ExceedsMaxQuota` and `Misconfigured`
-stay distinct, and why.
+`QuotaReserved` reasons into platform vocabulary. Review it before reading any implementation. The
+question it has to answer: which of `WaitingForQuota`, `ExceedsMaxQuota` and `Misconfigured` stay
+distinct, and why.
+
+```bash
+git show task/1.2/spec -- docs/product/domain.md    # the proposal, as a diff
+```
 
 **Build:** the `TrainingJob` API and reconciler. It renders a suspended `batch/v1` Job labelled into
 a `LocalQueue`, owner-references it, and translates Kueue `Workload` conditions into platform
@@ -480,17 +551,42 @@ reason strings to translate — is in
 [1.2-Kueue-and-jobs.md](1.2-kueue-and-jobs.md#what-kueue-hands-your-controller); looking it up is
 not the exercise, deciding what the platform says about it is.
 
+```bash
+git show task/1.2/build --stat                                   # what moved
+git diff task/1.2/spec task/1.2/build -- internal/ api/          # the code, as a diff
+git show task/1.2/build                                          # the design, argued
+```
+
 **Verify:** yours — the translation tests. Kueue's controller does not run in envtest, so you write
 the `Workload` by hand and assert what the `TrainingJob` says: one case per reason you decided to
-keep distinct in the Spec beat. Claude writes the rendering tests (one Job, suspended,
-owner-referenced, labelled).
+keep distinct in the Spec beat. The list is at the foot of `trainingjob_status_test.go`. Claude
+wrote the rendering tests, the finder contract, and one worked translation case.
 
-**Look at:** `internal/controller/trainingjob_controller.go`, child Job owner references, and the
-live Kueue `Workload` during a run.
+```bash
+git switch -c mine/1.2-tests task/1.2/build
+sed -n '/^\/\/ The rest of the translation/,$p' internal/controller/trainingjob_status_test.go
+make fmt vet test
+```
 
 **Review:** exercise A — three ways to find the `Workload` for a Job: the owner field index, a list
-on `kueue.x-k8s.io/job-uid`, and `jobframework.FindMatchingWorkloads`. All three are implemented.
+on `kueue.x-k8s.io/job-uid`, and `jobframework.FindMatchingWorkloads`. All three are implemented and
+all three agree on the answer, so the verdict turns on their properties.
+
+```bash
+grep -n "^// OwnerIndexFinder" -A 7 internal/controller/workload_finder.go
+grep -n "^// JobUIDLabelFinder" -A 8 internal/controller/workload_finder.go
+grep -n "^// FrameworkFinder" -A 8 internal/controller/workload_finder.go
+go test ./internal/controller/ -run TestFinders -v     # all three agree
+go test ./internal/controller/ -run TestFramework -v   # where they do not
+go mod why -m k8s.io/kubernetes                        # what the heaviest one drags in
+```
+
 Then exercise D — the Kueue mutating webhook is unreachable when your controller creates the Job.
+
+```bash
+kubectl get mutatingwebhookconfiguration -o yaml | grep -A4 failurePolicy
+kubectl -n kueue-system scale deploy/kueue-controller-manager --replicas=0   # then submit one
+```
 
 **Quiz**
 

@@ -4,6 +4,11 @@ The review-format curriculum keeps each beat of a task as its own commit on the 
 tagged so you can stand at any one of them. The point is that **Spec** is reviewable before the code
 exists, and **Build** is reviewable as a diff rather than as a finished tree.
 
+**You should not need this file to run a task.** Every beat in
+[training-tasks.md](training-tasks.md) carries the commands it needs, inline, ready to paste. This
+is the reference for when you want to go off that path: to see how the tags are laid out, to put
+your own work somewhere, or to get back.
+
 `backlog` is the tip of the history from before the review format. It is kept as a marker, not as a
 line of work. Every commit on it is also on `main`, so there is nothing on `backlog` to go back for.
 
