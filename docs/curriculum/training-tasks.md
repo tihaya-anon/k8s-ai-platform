@@ -412,7 +412,11 @@ the queues and submit a plain Job by hand first. No controller code in this half
 
 **You build:** the `TrainingJob` API and reconciler. It renders a suspended `batch/v1` Job labelled
 into a `LocalQueue`, owner-references it, and translates Kueue `Workload` conditions into platform
-vocabulary so a user learns why their job is waiting without learning what Kueue is.
+vocabulary so a user learns why their job is waiting without learning what Kueue is. The Kueue Go
+surface you need — the label keys, how to find the `Workload` for a Job, and the condition and
+reason strings to translate — is in
+[1.2-Kueue-and-jobs.md](1.2-kueue-and-jobs.md#what-kueue-hands-your-controller); looking it up is
+not the exercise, deciding what the platform says about it is.
 
 **Review focus:** `internal/controller/trainingjob_controller.go`, child Job owner references, and
 the live Kueue `Workload` during a run.
