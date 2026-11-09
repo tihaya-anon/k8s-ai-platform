@@ -24,12 +24,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
+	"sigs.k8s.io/kueue/pkg/controller/jobframework"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 )
@@ -61,6 +64,14 @@ const (
 
 	trainerContainerName = "trainer"
 )
+
+func BatchV1JobGVK() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   "batch",
+		Version: "v1",
+		Kind:    "Job",
+	}
+}
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
@@ -131,6 +142,9 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			"Created suspended Job %s for LocalQueue %s", job.Name, tj.Spec.Queue)
 	}
 
+	var wls kueuev1beta2.WorkloadList
+	err = r.List(ctx, &wls, client.InNamespace(tj.Namespace), jobframework.OwnerReferenceIndexFieldMatcher(BatchV1JobGVK(), tj.Name))
+
 	return ctrl.Result{}, nil
 }
 
@@ -177,8 +191,11 @@ func batchV1JobSpec(tj *mlv1alpha1.TrainingJob) batchv1.JobSpec {
 	}
 }
 
+// +kubebuilder:rbac:groups=kueue.x-k8s.io,resources=workloads,verbs=get;list;watch
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *TrainingJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	jobframework.SetupWorkloadOwnerIndex(context.TODO(), mgr.GetFieldIndexer(), BatchV1JobGVK())
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mlv1alpha1.TrainingJob{}).
 		// Owns, not Watches: the ownerReference set above is the index controller-runtime maps a
