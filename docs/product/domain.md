@@ -210,6 +210,74 @@ Like the other four inputs, `resources` is immutable after creation. A run whose
 changed halfway through is not the run that was admitted, and Kueue has already done arithmetic
 against the original.
 
+### `TrainingJob` status
+
+_Proposed, pending review — task 1.2's Spec beat._
+
+The requirement this section exists to meet: a user reads their own `TrainingJob` and learns why
+their run is waiting **without learning what Kueue is**. Kueue's own vocabulary leaks its
+implementation — `QuotaReserved`, `ClusterQueue`, `ResourceFlavor` are words about the queueing
+system, not about the user's job — and it is also not stable across a runtime swap, which is the
+whole reason this CRD exists.
+
+Three condition types, and no more:
+
+| Condition  | True means                                              | Who owns a `False` |
+| ---------- | ------------------------------------------------------- | ------------------ |
+| `Rendered` | the platform produced the runtime object for this run   | the platform       |
+| `Accepted` | the cluster has agreed to run it and the pods may start | varies — see below |
+| `Finished` | the run reached a terminal state, successfully or not   | the training code  |
+
+`Rendered=False` is always a platform bug or an API-server refusal: the user's spec was already
+validated at admission, so nothing they wrote can land here. `Finished=False` is not a failure, it
+is "still going".
+
+`Accepted` is the translation, and the whole design question is how much of Kueue's reason set
+survives it. Three platform reasons, because three is the number of _different next actions_ a user
+can take:
+
+| Platform reason         | From Kueue's reason                                                                           | What the user does      |
+| ----------------------- | --------------------------------------------------------------------------------------------- | ----------------------- |
+| `WaitingForCapacity`    | `WaitingForQuota`, `WaitingForPreemptedWorkloads`, `PendingEvaluation`, `WaitingForPodsReady` | nothing — it waits      |
+| `ExceedsTeamLimit`      | `ExceedsMaxQuota`                                                                             | shrink the request      |
+| `PlatformMisconfigured` | `Misconfigured`, `NoMatchingFlavor`, `UnrecordableResourceUsage`, `DRAResourcesUnresolved`    | nothing — file a ticket |
+
+The merges are deliberate. `WaitingForQuota` and `WaitingForPreemptedWorkloads` are the same
+sentence to a user — "the team's capacity is full, you are in line" — and the difference between
+them is a fact about Kueue's scheduler, not about their job. The splits are equally deliberate:
+`ExceedsMaxQuota` is the one case where waiting is futile, so collapsing it into
+`WaitingForCapacity` would leave a user watching a job that can never start, and
+`PlatformMisconfigured` must be separate because the action is "tell an operator" and the fault is
+not theirs. A platform that blames a user for its own missing `ResourceFlavor` has lied.
+
+Two rules the table does not state.
+
+**An unrecognised reason is passed through, never dropped.** Kueue adds reasons across releases, and
+a `switch` with no default is how a new one becomes a job that is silently `Pending` forever. An
+unmapped reason maps to `PlatformMisconfigured` with Kueue's own reason and message quoted in the
+condition message, because an unmapped reason _is_ a platform defect — the platform has met a state
+it does not understand, and that is an operator's problem rather than the user's.
+
+**Eviction flips `Accepted` back to `False`.** A run that was admitted and then preempted is waiting
+again, so the condition is level-triggered like everything else: it reports what is true now, not
+the high-water mark. The reason carries `Preempted`, which is the one Kueue reason that reaches the
+user unmerged, because it is the only one that explains a run that was running and now is not.
+
+| Field              | What it is                                        | Why the platform needs it                                                  |
+| ------------------ | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| `conditions`       | the three types above                             | the source of truth for diagnosis, and what the 1.4 gate consumes          |
+| `phase`            | `Pending`, `Running`, `Success` or `Failed`       | a one-word `kubectl get` summary; never the source of truth                |
+| `jobRef`           | the name of the child Job                         | the one pointer from platform vocabulary down to the runtime object        |
+| `lastResolvedTime` | when the controller last read the admission state | tells a reader whether `Pending` is current or stale from before an outage |
+
+`phase` is derived from the conditions on every pass and never written independently: `Pending`
+until `Accepted`, `Running` once accepted and not finished, then `Success` or `Failed`. It exists
+for `kubectl get` and for humans, and the rule that keeps it honest is that deleting it would lose
+no information.
+
+`jobRef` is a name, not an `ObjectReference`: the kind is fixed until task 5.2 swaps the runtime,
+and when it does, a name is the field that survives — which is the same argument as `spec.dataset`.
+
 ---
 
 ## `ModelVersion`
