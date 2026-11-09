@@ -896,6 +896,48 @@ is what your controller has to translate.
 
 **Quiz review:**
 
+**Part two review — in progress (written by Claude, 2026-11-09):** notes on the `TrainingJob` ->
+`Job` work as it stands in `internal/controller/trainingjob_controller.go` at the checkpoint commit.
+Mechanisms and symptoms only; the fixes are the build half and stay open.
+
+_On the question that prompted this:_ "which Kueue function creates the `Workload` from the Job?"
+There is none to call, because creating it is not yours to do. Kueue's batch/v1 integration
+(`pkg/controller/jobs/job`, on the `jobframework` reconciler) watches Jobs carrying
+`kueue.x-k8s.io/queue-name`, builds the `Workload`, sets the Job as its owner, and flips
+`spec.suspend`. Part one proved it with `kubectl` alone and no controller of ours running. The
+function half-remembered from the tutorial is `jobframework`'s `GenericJob` interface — `PodSets`,
+`Suspend`, `RunWithPodSetsInfo` — which is how a _new_ job type is registered as a thing Kueue
+manages directly. That is a real alternative design for `TrainingJob`, and it is not this task: here
+the chain is `TrainingJob` -> `Job` -> (Kueue) -> `Workload`, and writing a `Workload` by hand would
+put two admission requests behind one Job and break "never mutate another operator's resources".
+
+_Observations, in rough order of how early they bite:_
+
+- The `batchv1.Job{Name: ..., Namespace: ..., Labels: ...}` literal does not compile. Those fields
+  live on the embedded `metav1.ObjectMeta`, not on `Job` — the embedding is why `job.Name` reads
+  fine but `Job{Name:}` does not.
+- `new(true)` does not compile either: `new` takes a type, not a value. `k8s.io/utils/ptr.To` is the
+  helper the rest of the ecosystem uses for optional scalars.
+- `tj.Name + "Job"` is a legal DNS-1123 name only while `tj.Name` has no capitals to clash with —
+  but the deeper issue is that the derived name is not deterministic across a rename and carries no
+  separator. Kueue names its own child the same way and is worth copying.
+- No `ownerReference` on the Job. The repo convention requires one on every child, and part one's
+  step 5 is what it buys: delete the `TrainingJob`, the Job goes, and the `Workload` goes with it
+  because Kueue made the Job _its_ owner. Without the link the Job outlives its parent.
+- `job.Spec.Selector` is set by hand. The Job controller generates a selector with a
+  `batch.kubernetes.io/controller-uid` key and only honours a handwritten one under
+  `spec.manualSelector: true`; the `TrainingJob`/`Owner` labels wanted here belong on the pod
+  template's `metadata.labels`, not in the selector.
+- The mutate function assigns `job.Spec` wholesale on every reconcile. Most of `JobSpec` is
+  immutable once created, so the second pass fails the update — and `suspend` is precisely the field
+  Kueue writes, so rewriting the spec would re-suspend an admitted Job and undo the admission being
+  waited for. A mutate function for an existing child can only touch fields the controller owns.
+- No Event on the transition, and the one error log says "Deployment reconcile failed" — a leftover
+  string naming the wrong kind. Errors are meant to name the layer at fault.
+- Nothing yet reads back what Kueue decided. The refusal string recorded in the Learn half —
+  `QuotaReserved: False` naming the exhausted resource — is what the `TrainingJob` status has to
+  translate, and `kueuev1beta2` is imported but unused until that lands.
+
 ### 1.3 ModelVersion and the funnel — YYYY-MM-DD
 
 **Learn — what I saw:**
