@@ -18,11 +18,10 @@ package controller
 
 import (
 	"context"
-	"fmt"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,34 +46,62 @@ type TrainingJobReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.1/pkg/reconcile
 func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	var tj mlv1alpha1.TrainingJob
 	if err := r.Get(ctx, req.NamespacedName, &tj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	switch tj.Spec.Underlying {
-	case mlv1alpha1.KubeflowV1Alpha1TrainJob:
-		return ctrl.Result{}, fmt.Errorf("coming soon")
-	case mlv1alpha1.BatchV1Job:
-		_ = batchv1.Job{
-			Spec: batchv1.JobSpec{
-				Template: corev1.PodTemplateSpec{
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Image: tj.Spec.Image,
-							},
-						},
+
+	job := &batchv1.Job{
+		Name:      tj.Name + "Job",
+		Namespace: tj.Namespace,
+		Labels: map[string]string{
+			"kueue.x-k8s.io/queue-name": tj.Spec.Queue,
+		},
+	}
+
+	_, err := ctrl.CreateOrUpdate(ctx, r.Client, job, func() error {
+		if job.CreationTimestamp.IsZero() {
+			job.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"TrainingJob": tj.Name,
+					"Owner":       tj.Spec.Owner,
+				},
+			}
+		}
+		job.Spec = r.batchV1JobSpec(&tj)
+		return nil
+	})
+	if err != nil {
+		log.Error(err, "Deployment reconcile failed")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *TrainingJobReconciler) batchV1JobSpec(tj *mlv1alpha1.TrainingJob) batchv1.JobSpec {
+	ps := corev1.PodSpec{
+		Containers: []corev1.Container{
+			{
+				Image: tj.Spec.Image,
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    tj.Spec.Resources.CPU,
+						corev1.ResourceMemory: tj.Spec.Resources.Memory,
 					},
 				},
 			},
-		}
-	default:
-		return ctrl.Result{}, fmt.Errorf("unsupported underlying type: %v", tj.Spec.Underlying)
+		},
+		RestartPolicy: corev1.RestartPolicyNever,
 	}
-
-	return ctrl.Result{}, nil
+	js := batchv1.JobSpec{
+		Suspend: new(true),
+		Template: corev1.PodTemplateSpec{
+			Spec: ps,
+		},
+	}
+	return js
 }
 
 // SetupWithManager sets up the controller with the Manager.

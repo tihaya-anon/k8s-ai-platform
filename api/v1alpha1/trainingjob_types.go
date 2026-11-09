@@ -29,7 +29,6 @@ const (
 )
 
 type Accelerator struct {
-
 	// +kubebuilder:validation:Enum=AcceleratorClassPlaceholder
 	// +required
 
@@ -43,7 +42,6 @@ type Accelerator struct {
 
 // Resources defines CPU, memory, and optionally an accelerator class and a device count
 type Resources struct {
-
 	// +kubebuilder:validation:XValidation:rule="isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('0')) > 0",message="cpu must larger than 0"
 	// +required
 
@@ -59,23 +57,8 @@ type Resources struct {
 	Accelerator *Accelerator `json:"accelerator,omitempty"`
 }
 
-type UnderlyingType string
-
-const (
-	BatchV1Job               UnderlyingType = "BatchV1Job"
-	KubeflowV1Alpha1TrainJob UnderlyingType = "KubeflowV1Alpha1TrainJob"
-)
-
 // TrainingJobSpec defines the desired state of TrainingJob
 type TrainingJobSpec struct {
-
-	// +kubebuilder:validation:Enum=BatchV1Job;KubeflowV1Alpha1TrainJob
-	// +default=BatchV1Job
-	// +required
-
-	// Underlying specifies the type TrainingJob runs on
-	Underlying UnderlyingType `json:"underlying"`
-
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
