@@ -924,12 +924,14 @@ break "never mutate another operator's resources".
 
 _Observations, in rough order of how early they bite:_
 
-- The `batchv1.Job{Name: ..., Namespace: ..., Labels: ...}` literal does not compile. Those fields
-  live on the embedded `metav1.ObjectMeta`, not on `Job` — the embedding is why `job.Name` reads
-  fine but `Job{Name:}` does not.
-- `new(true)` is fine, and this review first said otherwise. `new` taking a value rather than a type
-  is new in Go 1.27, which is this repo's toolchain, and `suite_test.go` already used it. It stays
-  as written, and `k8s.io/utils/ptr` is not needed for it.
+- Neither of the two "does not compile" claims this review opened with was true, and both were wrong
+  the same way: Go 1.27 is newer than the habits they came from. `new(true)` — `new` over a value
+  rather than a type — is 1.27, and `suite_test.go` was already using it.
+  `batchv1.Job{Name: ..., Namespace: ...}` — promoted fields of an embedded struct named directly in
+  a composite literal — is also 1.27; before it those keys had to go through
+  `ObjectMeta: metav1.ObjectMeta{...}`. Both forms stay as originally written. The lesson is about
+  the review rather than the code: on a toolchain this far ahead, "that is not valid Go" is the
+  claim to check first, not the one to assert.
 - `tj.Name + "Job"` is a legal DNS-1123 name only while `tj.Name` has no capitals to clash with —
   but the deeper issue is that the derived name is not deterministic across a rename and carries no
   separator. Kueue names its own child the same way and is worth copying.

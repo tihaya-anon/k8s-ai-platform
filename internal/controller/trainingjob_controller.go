@@ -83,10 +83,8 @@ func (r *TrainingJobReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	job := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      tj.Name,
-			Namespace: tj.Namespace,
-		},
+		Name:      tj.Name,
+		Namespace: tj.Namespace,
 	}
 
 	op, err := ctrl.CreateOrUpdate(ctx, r.Client, job, func() error {
