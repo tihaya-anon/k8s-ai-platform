@@ -8,43 +8,46 @@ One entry per task. Keep them short; the value is in the evidence and the surpri
 
 ## Entry shape
 
-Tasks run in five beats, and the entry records the two that are graded plus the evidence:
+A task runs in five beats. Two of them are graded. The entry records those two, plus the evidence.
 
-- **Learn — what I saw** — the beat that changes no files. What the live objects actually showed,
-  the command whose output surprised you, the error text worth recognising later. Fill this in
-  before anything is built; it is the part you cannot reconstruct afterwards.
-- **Spec review** — what you accepted, amended or rejected in Claude's proposal in `docs/product/`,
-  and what it left underspecified. Graded.
-- **What was built** — one or two lines, plus the commit. Claude's half; the entry records it so the
-  log still reads as a history of the platform.
-- **Tests I wrote** — the cases the task assigned to you, and what each one would catch. "Added a
-  test" is not evidence; name what fails if the implementation regresses.
+- **Learn — what I saw** — the beat that changes no files. What the live objects showed. The command
+  whose output surprised you. The error text worth recognising later. Fill this in first. It is the
+  part you cannot reconstruct afterwards.
+- **Spec review** — what you accepted, amended or rejected in the proposal under `docs/product/`.
+  Say what it left underspecified. Graded.
+- **What was built** — one or two lines, plus the commit or the tag. Usually Claude's half. The
+  entry keeps it so the log still reads as a history of the platform.
+- **Tests I wrote** — the cases the task left to you. Say what each one catches. "Added a test" is
+  not evidence. Name what fails if the code regresses.
 - **Review answers** then **Review grading** — the exercises from
-  [review-exercises.md](../curriculum/review-exercises.md). Your verdict and your reasoning first,
-  Claude's grading after. For a seeded defect review, record the score as _n_ of _m_ and keep the
-  ones you missed. Graded.
-- **What surprised me** — one line, and the most valuable line in the entry.
+  [review-exercises.md](../curriculum/review-exercises.md). Your verdict and your reasoning first.
+  Claude's grading after. For a seeded defect review, record the score as _n_ of _m_. Keep the ones
+  you missed.
+- **What surprised me** — one line. The most valuable line in the entry.
 - **Quiz answers** then **Quiz review** — your answers first, Claude's grading after. Keep wrong
-  answers; they are the record of what to re-ask later.
+  answers. They are the record of what to re-ask.
 
-Level 0 entries predate all of this and have no Learn section. Entries from 1.1 and 1.2 were written
-under the earlier two-beat format — **Goal / What I changed / How I proved it** — and keep those
-fields; their Review beats were added in arrears. Entries written by Claude rather than by the
-maintainer say so at the top, so the answers in them are not mistaken for recall.
+Entries written by Claude say so at the top. That keeps the answers in them from looking like
+recall.
 
 ## Entries
 
 ### Archive before blank rebuild — 2026-10-07
 
-**Goal:** preserve the generated scaffold before resetting the curriculum to start from blank.
+**Spec review:**
 
-**What I changed:** committed the previous state as `131697f` with message
+**What was built:** preserve the generated scaffold before resetting the curriculum to start from
+blank. committed the previous state as `131697f` with message
 `Archive generated kubebuilder scaffold before blank rebuild`, then removed the generated
 Kubebuilder project, generated manifests, controller/test scaffolds, cluster scripts, local workflow
 scripts, editor files, and CI files.
 
-**How I proved it:** `git status --short` was clean after the archive commit; the follow-up deletion
+**Tests I wrote:** `git status --short` was clean after the archive commit; the follow-up deletion
 leaves this repository as documentation plus project policy.
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:** the generated project is not just `api/` and CRDs. `Makefile`, `PROJECT`,
 `go.mod`, `cmd/main.go`, `config/`, RBAC, samples, tests, cluster scripts, and workflow helpers all
@@ -54,11 +57,15 @@ carry assumptions. Starting from blank makes those assumptions visible.
 
 ### 0.0 Install the local toolchain — 2026-10-07
 
-**Goal:** install tools
+**Spec review:**
 
-**What I changed:** install go, docker, kubectl, kind, kubebuilder
+**What was built:** install tools install go, docker, kubectl, kind, kubebuilder
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 ```shell
 go version
@@ -134,11 +141,15 @@ reference point.
 
 ### 0.1 Repository hygiene before Go code — 2026-10-07
 
-**Goal:** maintain the repo
+**Spec review:**
 
-**What I changed:** almost nothing, just commit the repo and push to remote
+**What was built:** maintain the repo almost nothing, just commit the repo and push to remote
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -166,11 +177,15 @@ reference point.
 
 ### 0.2 Initialize the Kubebuilder project — 2026-10-07
 
-**Goal:** build the scaffold using kubebuilder cli
+**Spec review:**
 
-**What I changed:** just move the generated files here
+**What was built:** build the scaffold using kubebuilder cli just move the generated files here
 
-**How I proved it:** `go test ./...` passes and `make help` shows the help messages
+**Tests I wrote:** `go test ./...` passes and `make help` shows the help messages
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -218,11 +233,15 @@ changes one of those areas.
 
 ### 0.3 Create the `Dataset` API and learn the generators — 2026-10-07
 
-**Goal:** add a new CRD
+**Spec review:**
 
-**What I changed:** annotations on generated api Go files
+**What was built:** add a new CRD annotations on generated api Go files
 
-**How I proved it:** run generate commands and get the artifacts
+**Tests I wrote:** run generate commands and get the artifacts
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:** the generator is really useful, it only leaves the biz logic for me
 
@@ -272,11 +291,15 @@ left until a later task installs the CRD into a live cluster.
 
 ### 0.4 Add API-server tests with envtest — 2026-10-09
 
-**Goal:** test api server behaviour on our CRD
+**Spec review:**
 
-**What I changed:** add a new test file `dataset_api_test.go`
+**What was built:** test api server behaviour on our CRD add a new test file `dataset_api_test.go`
 
-**How I proved it:** `make test` passes
+**Tests I wrote:** `make test` passes
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -306,11 +329,16 @@ also leaves its resource behind, so cleanup would make the suite more isolated.
 
 ### 0.5 Write the cluster setup scripts — 2026-10-10
 
-**Goal:** set up the cluster from zero and shutdown it idempotently
+**Spec review:**
 
-**What I changed:** two scripts, `hack/set-up-cluster.sh` and `hack/shutdown-cluster.sh`
+**What was built:** set up the cluster from zero and shutdown it idempotently two scripts,
+`hack/set-up-cluster.sh` and `hack/shutdown-cluster.sh`
 
-**How I proved it:** ran them
+**Tests I wrote:** ran them
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:** shouldn't rely on script itself to ensure idempotency since these resources
 are manged by k8s and helm, should use helm cli instead
@@ -364,11 +392,15 @@ as `kind get clusters | grep -q`. A pipeline can fail because the _reader_ finis
 
 ### 0.5a Learn certificates before you read a webhook — 2026-10-13
 
-**Goal:** inspect the certificate configs in kind cluster
+**Spec review:**
 
-**What I changed:**
+**What was built:** inspect the certificate configs in kind cluster
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -491,10 +523,20 @@ source of truth. Use `kubectl patch` for a deliberate one-off edit like this.
 > The quiz answers are Claude's, so they do not record what the learner knew before reading the
 > files — re-answer them from memory if you want that signal.
 
-**Goal:** add workflow helpers only where a real mistake had already been repeated, and keep one
-owner per formatting concern.
+**Spec review:**
 
-**What I changed:** three helpers, each from a different commit and for a different reason.
+**What was built:** add workflow helpers only where a real mistake had already been repeated, and
+keep one owner per formatting concern. three helpers, each from a different commit and for a
+different reason.
+
+**Tests I wrote:** every commit since `91ce02f` has gone through the hook, which prints its
+markdownlint summary (`Summary: 0 issues in 0 files`) as it runs. `bash hack/format.sh` with no
+arguments formats every git-tracked file and exits 0 on a clean tree. `make fmt vet test` is the Go
+gate.
+
+**Review answers:**
+
+**Review grading:**
 
 - `hack/format.sh` (`91ce02f`) — one entry point that dispatches by extension: markdownlint `--fix`
   for Markdown structure, then Prettier for wrapping and whitespace, then goimports for Go. The tree
@@ -510,11 +552,6 @@ owner per formatting concern.
 
 `611ea8b` later switched the Go half from `gofmt` to goimports, because `gofmt` leaves imports
 untouched: a file looked formatted while still failing `make lint`.
-
-**How I proved it:** every commit since `91ce02f` has gone through the hook, which prints its
-markdownlint summary (`Summary: 0 issues in 0 files`) as it runs. `bash hack/format.sh` with no
-arguments formats every git-tracked file and exits 0 on a clean tree. `make fmt vet test` is the Go
-gate.
 
 **What surprised me:** the formatter cannot be the gate. Formatting is silent and automatic, but
 markdownlint failures — a skipped heading level, a fence with no language — need a human, so they
@@ -556,11 +593,22 @@ does not mention `hack/format.sh` or how to enable the hooks.
 part one. Which step's reason you had not expected, and which of the three Kubebuilder-book patterns
 you would have written yourself.
 
-**Goal:** monitor and handle the intentional and unintentional changes on Dataset
+**Spec review:** _(in arrears — `Dataset.status` is already specified in
+`docs/product/domain.md#status`. Does it say what happens when the store is unreachable but an
+earlier observation exists? Is `Resolved=False` a failure or a fact?)_
 
-**What I changed:** Reconcile logic and UpdateValidation's criteria
+**What was built:** drift detection and the immutability webhook. Reconcile logic and
+`ValidateUpdate`'s criteria. Built by the maintainer, under the format that came before this one.
 
-**How I proved it:** run `make test`
+**Tests I wrote:** `make test`. Two negatives are the ones worth re-checking: a rewritten artifact
+noticed on a later reconcile, and a frozen-field edit rejected. Check they fail for the right
+reason.
+
+**Review answers:** _(exercise A — `ValidateUpdate` versus CEL transition rules. Both are built:
+`task/1.1/variant-webhook` and `task/1.1/variant-cel`, same six refusal cases on each side. Exercise
+D — the `Dataset` an admitted `TrainingJob` referenced is deleted mid-run.)_
+
+**Review grading:**
 
 **What surprised me:** must bear in mind that never trust the status seen last time
 
@@ -626,9 +674,9 @@ open. Scores below; the corrections are the useful part, so they stay recorded.
 Revisit 2, 3 and 6 before 1.2 — 2 is a misunderstanding rather than a gap, and 3 and 6 each left a
 required part unanswered. 1 and 5 are recorded as misses rather than re-asked.
 
-**Part two review — in progress (written by Claude, 2026-10-22):** notes on the drift work as it
-stands in `internal/controller/dataset_controller.go`, kept here so the device change does not lose
-them. Mechanisms and symptoms only; the fixes are still the build half.
+**Build notes (written by Claude, 2026-10-22):** notes on the drift work as it stands in
+`internal/controller/dataset_controller.go`, kept here so the device change does not lose them.
+Mechanisms and symptoms only; the fixes are still the build half.
 
 _On the question that prompted this:_ a `ConditionFalse` is data, not a failure. The API server
 validates the conditions list structurally — the `listMapKey=type` uniqueness, the
@@ -770,7 +818,7 @@ Left open on purpose: the tests for drift and for the webhook rejection, and the
 step is the exercise, so it stays unwritten. Review item 5, whether an artifact with zero rows is a
 legal observation or an unusable artifact, is a decision rather than a fix.
 
-**Patch/refine and the duplicate-URI warning — owner's own work, then Claude's, 2026-10-26:**
+**The duplicate-URI warning — owner's own work, then Claude's, 2026-10-26:**
 
 Owner-written: the immutability message now appends "Do not modify the immutable fields, create a
 new Dataset instead" to the standard `field is immutable` detail rather than replacing it, so the
@@ -893,11 +941,22 @@ about the suite, and reads exactly like a mutation the suite failed to catch.
 the order they appeared, and the exact refusal message when the `ClusterQueue` ran out — that string
 is what your controller has to translate.
 
-**Goal:**
+**Spec review:** the proposal is at `task/1.2/spec` in `docs/product/domain.md#trainingjob-status`.
+Read it before the build. It merges nine Kueue reasons into three platform reasons. Each merge and
+each split is argued there. A rejected merge changes the implementation, so this comes first.
 
-**What I changed:**
+**What was built:** `task/1.2/build`. Status conditions `Rendered`, `Accepted` and `Finished`, a
+phase derived from them, a `jobRef`, one status write per pass, an Event on a phase change, a
+`Watches` on the Workload, and three `WorkloadFinder` implementations behind one seam.
 
-**How I proved it:**
+**Tests I wrote:** _(yours)_ one translation case per reason the Spec beat kept distinct. The list
+is at the foot of `internal/controller/trainingjob_status_test.go`. Claude wrote the rendering cases
+in envtest, the finder contract against a fake client, and one worked translation case.
+
+**Review answers:** _(exercise A — which `WorkloadFinder`, and why. Exercise D — the Kueue mutating
+webhook is unreachable when the controller creates the Job.)_
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -905,9 +964,8 @@ is what your controller has to translate.
 
 **Quiz review:**
 
-**Part two review — in progress (written by Claude, 2026-11-09):** notes on the `TrainingJob` ->
-`Job` work as it stands in `internal/controller/trainingjob_controller.go` at the checkpoint commit.
-Mechanisms and symptoms only; the fixes are the build half and stay open.
+**Build notes (written by Claude, 2026-11-09):** what the build turned up, and the mistakes in the
+maintainer's first pass that it corrected. Kept here because the misses are the point.
 
 _On the question that prompted this — "which function creates the `Workload`?":_ there is a
 function, and it runs in Kueue's process rather than ours. In `sigs.k8s.io/kueue@v0.20.4` the chain
@@ -966,21 +1024,32 @@ _Observations, in rough order of how early they bite:_
   extended resource name such as `nvidia.com/gpu` is task 5.1, so the field stays unlowered and a
   TrainingJob asking for an accelerator is admitted on cpu and memory alone.
 
-_Applied 2026-11-09 at the owner's instruction_, against the usual rule that part two stays the
-owner's to write: everything above except the accelerator is now fixed in
-`internal/controller/trainingjob_controller.go`, and `make fmt vet test` is green. What is still
-open is the status translation of the `Workload` conditions and the immutability webhook that makes
-"a spec edit needs a new Job" true.
+_All fixed at `task/1.2/build`, except the accelerator._ `make fmt vet test lint` is green there.
+
+Two things the build turned up that no amount of reading would have:
+
+- `jobframework` panics on a Job with a nil `Parallelism`. `podsCount` dereferences it on the
+  comment "parallelism is always set as it is otherwise defaulted by k8s to 1". True of a Job read
+  back from the API server. False of one held in memory. Production is safe. Unit tests with a fake
+  client are not.
+- `FindMatchingWorkloads` returns nil for a drifted Job. It answers "is there an equivalent
+  Workload", not "which Workload belongs to this Job". A list by owner or by job-uid still finds it.
+
+Both are now characterisation tests. They fail if upstream changes its mind.
 
 ### 1.3 ModelVersion and the funnel — YYYY-MM-DD
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -992,11 +1061,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1008,11 +1081,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1024,11 +1101,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1040,11 +1121,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1056,11 +1141,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1072,11 +1161,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1088,11 +1181,15 @@ open is the status translation of the `Workload` conditions and the immutability
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1122,11 +1219,15 @@ truth actually was.
 **Learn — what I saw:** re-reading the incident note above and the error strings recorded in 0.5a
 and 0.5b. Which symptoms were unambiguous, and which needed a second command to tell apart.
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1138,11 +1239,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1154,11 +1259,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1170,11 +1279,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1186,11 +1299,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1202,11 +1319,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1218,11 +1339,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1234,11 +1359,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
@@ -1250,11 +1379,15 @@ and 0.5b. Which symptoms were unambiguous, and which needed a second command to 
 
 **Learn — what I saw:**
 
-**Goal:**
+**Spec review:**
 
-**What I changed:**
+**What was built:**
 
-**How I proved it:**
+**Tests I wrote:**
+
+**Review answers:**
+
+**Review grading:**
 
 **What surprised me:**
 
