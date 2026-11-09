@@ -1,11 +1,11 @@
 # Walking a task through its stages
 
-The review-format curriculum keeps each beat of a task as its own commit on the
-`curriculum/review-format` branch, tagged so you can stand at any one of them. The point is that
-**Spec** is reviewable before the code exists, and **Build** is reviewable as a diff rather than as
-a finished tree.
+The review-format curriculum keeps each beat of a task as its own commit on the `main` branch,
+tagged so you can stand at any one of them. The point is that **Spec** is reviewable before the code
+exists, and **Build** is reviewable as a diff rather than as a finished tree.
 
-`main` stays what it was: the maintainer's own history, including work in progress.
+`backlog` is the tip of the history from before the review format. It is kept as a marker, not as a
+line of work. Every commit on it is also on `main`, so there is nothing on `backlog` to go back for.
 
 ## The tags
 
@@ -23,7 +23,7 @@ Every tag is `task/<number>/<beat>`:
 ## Standing at a stage
 
 ```bash
-git switch curriculum/review-format        # the whole branch, latest state
+git switch main        # the whole branch, latest state
 git switch --detach task/1.2/spec          # read the proposal before any code exists
 git switch --detach task/1.2/build         # the implementation
 git switch -                               # back where you were
@@ -64,7 +64,7 @@ Keeping it on `mine/...` means the stage tags stay stable as references, and you
 against them later. When you want it in the trunk:
 
 ```bash
-git switch curriculum/review-format
+git switch main
 git merge --no-ff mine/1.2-tests
 ```
 
@@ -129,8 +129,7 @@ git switch - && git branch -D scratch/break-it
 ## If you get lost
 
 ```bash
-git switch curriculum/review-format   # back to the branch tip
-git switch main                       # back to your own history
+git switch main                       # back to the branch tip
 git status                            # what you have in flight
 git stash list                        # what you put down earlier
 ```

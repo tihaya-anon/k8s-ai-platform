@@ -32,10 +32,9 @@ A task has five beats. They are kept apart on purpose, and only two of them are 
 Then the **quiz**, which now comes after the review rather than after a build, because it grades
 what the review surfaced. Wrong answers are the useful part; record them.
 
-Each beat is a tagged commit on the `curriculum/review-format` branch, so the Spec is readable
-before the code exists and the Build is readable as a diff. [stages.md](stages.md) has the git
-commands for standing at a stage, reading a beat as a diff, and putting your own Verify work on a
-branch off it.
+Each beat is a tagged commit on the `main` branch, so the Spec is readable before the code exists
+and the Build is readable as a diff. [stages.md](stages.md) has the git commands for standing at a
+stage, reading a beat as a diff, and putting your own Verify work on a branch off it.
 
 **A task's Spec and Build land when the task is reached, not in advance.** The tags below `1.2` do
 not exist yet, and that is deliberate rather than unfinished: each task's vocabulary is built on the

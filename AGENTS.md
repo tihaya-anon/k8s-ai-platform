@@ -62,14 +62,14 @@ lineage, and promotion gate. See [docs/product/architecture.md](docs/product/arc
 
 A task has five beats — **Learn**, **Spec**, **Build**, **Verify**, **Review** — defined in the "How
 a task runs now" section of `docs/curriculum/training-tasks.md`, with the Review exercise types in
-`docs/curriculum/review-exercises.md`. Each beat is a tagged commit on the
-`curriculum/review-format` branch, named `task/<number>/<beat>`; `main` stays the maintainer's own
-history. Claude writes the spec proposal and the implementation; the owner reviews the spec, writes
-the tests the task assigns, and answers the Review exercises. Only Spec and Review are graded. Keep
-the beats apart when writing or reviewing a task: an incomplete implementation is Claude's problem
-to finish, never a reason to withhold the Review beat or to send the owner back to Learn.
-`docs/log/progress.md` mirrors the shape, and its "Entry shape" section is the template to follow
-when adding an entry.
+`docs/curriculum/review-exercises.md`. Each beat is a tagged commit on the `main` branch, named
+`task/<number>/<beat>`. The `backlog` branch is the tip of the history from before the review
+format; everything on it is also on `main`. Claude writes the spec proposal and the implementation;
+the owner reviews the spec, writes the tests the task assigns, and answers the Review exercises.
+Only Spec and Review are graded. Keep the beats apart when writing or reviewing a task: an
+incomplete implementation is Claude's problem to finish, never a reason to withhold the Review beat
+or to send the owner back to Learn. `docs/log/progress.md` mirrors the shape, and its "Entry shape"
+section is the template to follow when adding an entry.
 
 ## How to help here
 

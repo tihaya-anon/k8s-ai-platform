@@ -26,7 +26,7 @@ Every generated file, script and reconciler is something its maintainer can acco
 - [docs/curriculum/training-tasks.md](docs/curriculum/training-tasks.md) — the task list. Each task
   runs in five beats: Learn, Spec, Build, Verify, Review. Read "How a task runs now" first.
 - [docs/curriculum/stages.md](docs/curriculum/stages.md) — each beat is a tagged commit on the
-  `curriculum/review-format` branch. This has the git commands for standing at one.
+  `main` branch. This has the git commands for standing at one.
 - [docs/log/progress.md](docs/log/progress.md) — one entry per task. What was built, the review
   answers, the quiz.
 
