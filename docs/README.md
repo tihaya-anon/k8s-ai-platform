@@ -22,8 +22,8 @@ rates.
    end to end; it exists so that nothing else has to explain "golden dataset" twice.
 4. [curriculum/training-tasks.md](curriculum/training-tasks.md) — the task list, built from a blank
    repository. Start with "How a task runs now".
-5. [log/progress.md](log/progress.md) — one entry per task: what changed, how it was proved, the
-   quiz, and the review.
+5. [log/progress.md](log/progress.md) — one entry per task: the spec review, what was built, the
+   tests the maintainer wrote, the review answers, and the quiz.
 
 If a task assumes a Kubernetes mechanism you have not met yet, look in `reference/` first.
 

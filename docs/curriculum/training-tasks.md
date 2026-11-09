@@ -827,7 +827,7 @@ alerts fire, which should, and which are now lying?
 
 ### 3.3 Run an incident
 
-**Learn:** nothing to read. This task is the Learn half of every task cashed in at once.
+**Learn:** nothing to read. This task is every earlier Learn beat cashed in at once.
 
 **Build:** intentionally break one layer — quota, KServe image pull, webhook certificate, or a bad
 model gate — and diagnose it from Kubernetes objects before reading controller logs. Work in this
@@ -1067,7 +1067,9 @@ component that differs from kind and every one that does not.
 
 ## Reviewing the work
 
-For every review, use this checklist:
+This checklist is what the Build beat is held to. Claude applies it before calling a build done, and
+the maintainer applies it when reading the diff. A Review exercise sits on top of it: the checklist
+asks whether the code is sound, the exercise asks whether the design was the right one.
 
 - Is this adopting existing Kubernetes ecosystem behavior where possible?
 - Is the API carrying policy, lineage, or a stable abstraction rather than translating YAML?
@@ -1077,3 +1079,7 @@ For every review, use this checklist:
 - Does each error name the failed layer?
 - Are generated files regenerated and committed with the source change that caused them?
 - Can the owner explain which CLI or controller produced every generated artifact?
+- Does the Spec beat's written decision match what the code does? A build that quietly differs from
+  the accepted proposal has made a product decision without a review.
+- Do the tests fail for the right reason? A passing test is not evidence until it has been watched
+  to fail.

@@ -41,29 +41,35 @@ lineage, and promotion gate. See [docs/product/architecture.md](docs/product/arc
 `docs/` is split by purpose, and [docs/README.md](docs/README.md) is its index:
 
 - `docs/product/` — `requirements.md` is the product source of truth, `architecture.md` is the
-  design.
+  design, `domain.md` is the dictionary of every term and field. A product decision goes in
+  `domain.md` as a written proposal, never into a task as an unanswered exercise.
 - `docs/curriculum/` — `training-tasks.md` is the blank-start curriculum; read its "How a task runs
-  now" section before starting any task. Alongside it, one file per task that needs more room than
-  the list allows, named for its task number: `0.5-tls-and-admission.md`,
-  `1.1-dataset-reconciler.md`, `1.2-kueue-and-jobs.md`. A task with such a file keeps only a summary
-  and a link in `training-tasks.md`.
-- `docs/log/progress.md` — the maintainer log, one entry per task.
+  now" section before starting any task. `review-exercises.md` defines the six Review exercise types
+  once, so a task entry names one in a line. `stages.md` has the git commands for moving between a
+  task's stages. Alongside those, one file per task that needs more room than the list allows, named
+  for its task number: `0.5-tls-and-admission.md`, `1.1-dataset-reconciler.md`,
+  `1.2-kueue-and-jobs.md`. A task with such a file keeps only a summary and a link in
+  `training-tasks.md`.
+- `docs/log/progress.md` — the maintainer log, one entry per task. Its "Entry shape" section is the
+  template.
 - `docs/reference/` — Kubernetes background that is not specific to this platform:
   `cluster-components.md`, `api-machinery.md`, `objects-and-controllers.md`,
   `validation-and-immutability.md`. Point the owner here instead of re-explaining
   `get`/`list`/`watch`, informers, owner references, or the admission path from scratch; extend
   these files when an explanation is worth keeping.
-- `docs/tooling/` — `agent-container.md` and anything else about the development environment rather
-  than the platform.
+- `docs/tooling/` — `agent-container.md`, `cluster-providers.md`, `dashboards.md`, and anything else
+  about the development environment rather than the platform.
 
 A task has five beats — **Learn**, **Spec**, **Build**, **Verify**, **Review** — defined in the "How
 a task runs now" section of `docs/curriculum/training-tasks.md`, with the Review exercise types in
-`docs/curriculum/review-exercises.md`. Claude writes the spec proposal and the implementation; the
-owner reviews the spec, writes the tests the task assigns, and answers the Review exercises. Only
-Spec and Review are graded. Keep the beats apart when writing or reviewing a task: an incomplete
-implementation is Claude's problem to finish, never a reason to withhold the Review beat or to send
-the owner back to Learn. `docs/log/progress.md` mirrors the shape, and its "Entry shape" section is
-the template to follow when adding an entry.
+`docs/curriculum/review-exercises.md`. Each beat is a tagged commit on the
+`curriculum/review-format` branch, named `task/<number>/<beat>`; `main` stays the maintainer's own
+history. Claude writes the spec proposal and the implementation; the owner reviews the spec, writes
+the tests the task assigns, and answers the Review exercises. Only Spec and Review are graded. Keep
+the beats apart when writing or reviewing a task: an incomplete implementation is Claude's problem
+to finish, never a reason to withhold the Review beat or to send the owner back to Learn.
+`docs/log/progress.md` mirrors the shape, and its "Entry shape" section is the template to follow
+when adding an entry.
 
 ## How to help here
 
@@ -154,15 +160,18 @@ README.md
 AGENTS.md             canonical agent guidance
 CLAUDE.md             generated, gitignored copy
 docs/README.md        index: what each document is for
-docs/product/         requirements.md, architecture.md
-docs/curriculum/      training-tasks.md and one file per deep-taught task
+docs/product/         requirements.md, architecture.md, domain.md
+docs/curriculum/      training-tasks.md, review-exercises.md, stages.md, one file per deep task
 docs/log/             progress.md
 docs/reference/       Kubernetes background: components, API machinery, objects, validation
-docs/tooling/         agent-container.md, dashboards.md
+docs/tooling/         agent-container.md, cluster-providers.md, dashboards.md
 .markdownlint.json
 .prettierrc
 .shellcheckrc         source-path for the `# shellcheck source=` directives
 .prettierignore
+.golangci.yml         linter config; .custom-gcl.yml pins the plugin build
+.vscode/settings.json tracked on purpose: the one owner of editor settings
+.github/workflows/    lint, test, test-e2e
 package.json          formatter toolchain pins; nothing here ships
 package-lock.json
 .gitignore

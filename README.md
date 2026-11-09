@@ -9,8 +9,10 @@ The platform composes the ecosystem and owns the policy: Kueue does queueing and
 serving and traffic, and this repository contributes the custom resources, controllers, lineage, and
 the promotion gate that decides whether a model version may serve traffic.
 
-It is also a curriculum. The repository starts blank on purpose and is rebuilt task by task, so
-every generated file, script, and reconciler is something its maintainer can account for.
+It is also a curriculum. The repository starts blank on purpose and is rebuilt task by task. Each
+task is implemented against a reviewed spec, and the graded work is the review: pick between two
+designs, find the seeded defect, narrate a lifecycle, say what breaks when a dependency is down.
+Every generated file, script and reconciler is something its maintainer can account for.
 
 ## Documentation
 
@@ -19,9 +21,14 @@ every generated file, script, and reconciler is something its maintainer can acc
 - [docs/product/requirements.md](docs/product/requirements.md) — what the platform is for.
 - [docs/product/architecture.md](docs/product/architecture.md) — the design and the five custom
   resources.
-- [docs/curriculum/training-tasks.md](docs/curriculum/training-tasks.md) — the task list, each task
-  in two halves: learn the mechanism, then build the feature.
-- [docs/log/progress.md](docs/log/progress.md) — what has been built so far.
+- [docs/product/domain.md](docs/product/domain.md) — every domain term and every field, and the
+  decision behind it. Look a word up here.
+- [docs/curriculum/training-tasks.md](docs/curriculum/training-tasks.md) — the task list. Each task
+  runs in five beats: Learn, Spec, Build, Verify, Review. Read "How a task runs now" first.
+- [docs/curriculum/stages.md](docs/curriculum/stages.md) — each beat is a tagged commit on the
+  `curriculum/review-format` branch. This has the git commands for standing at one.
+- [docs/log/progress.md](docs/log/progress.md) — one entry per task. What was built, the review
+  answers, the quiz.
 
 ## Getting Started
 
@@ -55,10 +62,13 @@ Working on the host anyway means installing these yourself, at the versions
   a local one on kind or the host's k3s
 - `shellcheck`, for the pre-commit hook's shell gate
 
-`.vscode/` is deliberately absent and git-ignored. Editor settings live in
-`.devcontainer/devcontainer.json` under `customizations.vscode`, because a workspace
-`.vscode/settings.json` silently _overrides_ those -- which is how an editor can end up pointed at a
-linter path that does not exist inside the container, and lint nothing at all without saying so.
+`.vscode/settings.json` is tracked, and it is the one owner of editor settings. Everything else
+under `.vscode/` is ignored. The reason is reach: settings in `.devcontainer/devcontainer.json`
+apply to one window, the one attached to the devcontainer. The same checkout opened over WSL, over
+SSH or on the host gets none of them. Workspace settings reach every window, and they outrank the
+machine-scope settings a devcontainer contributes. So anything that must agree with a `make` target
+lives in the tracked file. The failure this avoids: an editor pointed at a linter path that does not
+exist, linting nothing, saying nothing.
 
 Two further pieces of tooling have their own documents:
 [docs/tooling/agent-container.md](docs/tooling/agent-container.md) for the AI agent sandbox, which

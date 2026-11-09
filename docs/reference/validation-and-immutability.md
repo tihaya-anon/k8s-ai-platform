@@ -252,8 +252,8 @@ unconditional `NewInvalid` that rejects every update, a `GroupKind{}` with nothi
 drift error returned from `Reconcile` before the status write. The duplicated per-field block also
 drifted between its two copies, in both files, in the way duplicated blocks do.
 
-Neither commit is the finished feature; the build half of
-[1.1-dataset-reconciler.md](../curriculum/1.1-dataset-reconciler.md) is still open.
+Neither commit was the finished feature. Both were superseded by the drift and immutability work in
+[1.1-dataset-reconciler.md](../curriculum/1.1-dataset-reconciler.md).
 
 ## Sources
 

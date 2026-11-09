@@ -676,7 +676,7 @@ required part unanswered. 1 and 5 are recorded as misses rather than re-asked.
 
 **Build notes (written by Claude, 2026-10-22):** notes on the drift work as it stands in
 `internal/controller/dataset_controller.go`, kept here so the device change does not lose them.
-Mechanisms and symptoms only; the fixes are still the build half.
+Mechanisms and symptoms only. The fixes came later, in the Build beat.
 
 _On the question that prompted this:_ a `ConditionFalse` is data, not a failure. The API server
 validates the conditions list structurally — the `listMapKey=type` uniqueness, the
@@ -1015,7 +1015,7 @@ _Observations, in rough order of how early they bite:_
   waited for. A mutate function for an existing child can only touch fields the controller owns.
 - No Event on the transition, and the one error log says "Deployment reconcile failed" — a leftover
   string naming the wrong kind. Errors are meant to name the layer at fault.
-- Nothing yet reads back what Kueue decided. The refusal string recorded in the Learn half —
+- Nothing yet reads back what Kueue decided. The refusal string recorded in the Learn beat —
   `QuotaReserved: False` naming the exhausted resource — is what the `TrainingJob` status has to
   translate, and `kueuev1beta2` is imported but unused until that lands.
 - Lowering `Resources.Accelerator` onto the container fails admission outright: a container resource
