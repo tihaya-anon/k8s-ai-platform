@@ -37,6 +37,17 @@ before the code exists and the Build is readable as a diff. [stages.md](stages.m
 commands for standing at a stage, reading a beat as a diff, and putting your own Verify work on a
 branch off it.
 
+**A task's Spec and Build land when the task is reached, not in advance.** The tags below `1.2` do
+not exist yet, and that is deliberate rather than unfinished: each task's vocabulary is built on the
+one the previous Spec review accepted, so writing `1.3`'s proposal before `1.2`'s is settled would
+be guessing at a decision that has not been made. What the entries below carry is the beat structure
+— which exercise, which tests are yours, which product section the Spec will land in — and that is
+enough to see where a task is going.
+
+Level 0 and 1.1 are the exception in the other direction. They were built under the two-beat format
+and the code stands; their Spec beats are reviews in arrears of decisions already written down, and
+their Build beats are a record rather than an assignment.
+
 What Claude will not do: hand over a review verdict, name the seeded defects, write the tests the
 task assigned to you, or accept its own spec proposal. Asking "is this one of the bugs?" gets you a
 question back. Asking "why does the informer cache make this stale?" gets you an answer — the
@@ -222,9 +233,10 @@ make generate
 **Look at:** `api/v1alpha1/dataset_types.go`, `api/v1alpha1/zz_generated.deepcopy.go`,
 `config/crd/bases/`, `config/rbac/`, and `config/samples/`.
 
-**Review:** exercise A — `Dataset.spec.uri` as a bare string, as a typed `URI` with a CEL rule, or
-as a struct naming scheme and path. Three shapes, all valid; argue for one and name what would make
-you switch.
+**Review:** exercise C — follow one validation marker from the Go comment to the rejection: which
+generator reads it, what it becomes in `config/crd/bases/`, which component enforces it, and what
+the user sees. Then exercise E — `docs/product/domain.md` argues `spec.uri` as a bare string; review
+that argument in arrears and say what it leaves underspecified.
 
 **Quiz**
 
@@ -388,11 +400,12 @@ the file; the point of each one is the sentence after it.
 it in arrears: does it say what happens when the artifact store is unreachable but a previous
 observation exists, and is `Resolved=False` a failure or a fact?
 
-**Build:** [part two](1.1-dataset-reconciler.md#part-two--the-part-that-is-yours) — drift detection
-and the immutability webhook. The walkthrough resolves the artifact but never compares what it found
-against the user's claim, which is the entire reason this CRD exists. _Built by the owner under the
-earlier two-beat format, where this half was the assignment._ It stays as written; the beats below
-were added in arrears.
+**Build:**
+[part two](1.1-dataset-reconciler.md#part-two--drift-detection-and-the-immutability-webhook) — drift
+detection and the immutability webhook. The walkthrough resolves the artifact but never compares
+what it found against the user's claim, which is the entire reason this CRD exists. _Built by the
+owner under the earlier two-beat format, where this half was the assignment._ It stays as written;
+the beats below were added in arrears.
 
 **Verify:** yours — the envtest case that proves a rewritten artifact is noticed on a later
 reconcile, and the case that proves `ValidateUpdate` rejects a frozen-field edit. Both are
@@ -416,8 +429,11 @@ negatives, which is the hard kind to write well.
   different checksums is a signal worth keeping, not an error.
 
 **Review:** exercise A — immutability as a CEL transition rule on the type, versus the same rule in
-`ValidateUpdate`. Both are written; say which belongs where and what the webhook can see that CEL
-cannot. Then exercise D — the `Dataset` an admitted `TrainingJob` referenced is deleted mid-run.
+`ValidateUpdate`. Both are built and both pass the gate: `task/1.1/variant-webhook` and
+`task/1.1/variant-cel`, with the six refusal cases moved from the validator onto the API server so
+the two can be compared on refusals rather than on structure. The axis is narrower than "webhook
+versus CEL" in general, and [stages.md](stages.md) has the diff command. Then exercise D — the
+`Dataset` an admitted `TrainingJob` referenced is deleted mid-run.
 
 **Quiz**
 

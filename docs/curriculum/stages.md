@@ -11,10 +11,12 @@ a finished tree.
 
 Every tag is `task/<number>/<beat>`:
 
-| Tag              | The tree at that point                                               |
-| ---------------- | -------------------------------------------------------------------- |
-| `task/1.2/spec`  | the status vocabulary written into `docs/product/domain.md`, no code |
-| `task/1.2/build` | the implementation, Claude's tests, and the three lookup variants    |
+| Tag                        | The tree at that point                                               |
+| -------------------------- | -------------------------------------------------------------------- |
+| `task/1.1/variant-webhook` | `Dataset` immutability enforced in `ValidateUpdate`                  |
+| `task/1.1/variant-cel`     | the same rule as CEL transition rules, webhook block removed         |
+| `task/1.2/spec`            | the status vocabulary written into `docs/product/domain.md`, no code |
+| `task/1.2/build`           | the implementation, Claude's tests, and the three lookup variants    |
 
 `git tag --list 'task/*'` is the current list; it grows as tasks are built.
 
@@ -66,7 +68,26 @@ git switch curriculum/review-format
 git merge --no-ff mine/1.2-tests
 ```
 
-## Checking a variant comparison
+## Comparing two variants that are whole branches
+
+Task 1.1's two are mutually exclusive -- you would ship one, not both -- so they are branches rather
+than a seam in one tree:
+
+```bash
+git diff task/1.1/variant-webhook task/1.1/variant-cel -- api/ internal/
+git diff task/1.1/variant-webhook task/1.1/variant-cel -- config/crd/   # what the generator did
+git show task/1.1/variant-cel                                          # the trade, argued
+```
+
+Both pass the gate. Check that rather than taking it on trust:
+
+```bash
+git switch --detach task/1.1/variant-cel && make fmt vet test lint
+git switch --detach task/1.1/variant-webhook && make fmt vet test lint
+git switch -
+```
+
+## Checking a variant comparison in one tree
 
 The three `WorkloadFinder` implementations live side by side in one file rather than on three
 branches, because the contract test has to run all three against the same fixtures -- that is what
