@@ -605,8 +605,8 @@ noticed on a later reconcile, and a frozen-field edit rejected. Check they fail 
 reason.
 
 **Review answers:** _(exercise A — `ValidateUpdate` versus CEL transition rules. Both are built:
-`task/1.1/variant-webhook` and `task/1.1/variant-cel`, same six refusal cases on each side. Exercise
-D — the `Dataset` an admitted `TrainingJob` referenced is deleted mid-run.)_
+`main` and `task/1.1/variant-cel`, same six refusal cases on each side. Exercise D — the `Dataset`
+an admitted `TrainingJob` referenced is deleted mid-run.)_
 
 **Review grading:**
 
@@ -941,13 +941,13 @@ about the suite, and reads exactly like a mutation the suite failed to catch.
 the order they appeared, and the exact refusal message when the `ClusterQueue` ran out — that string
 is what your controller has to translate.
 
-**Spec review:** the proposal is at `task/1.2/spec` in `docs/product/domain.md#trainingjob-status`.
-Read it before the build. It merges nine Kueue reasons into three platform reasons. Each merge and
-each split is argued there. A rejected merge changes the implementation, so this comes first.
+**Spec review:** `git checkout task/1.2/spec`, then read `docs/product/domain.md`. Read it before
+the build. It merges nine Kueue reasons into three platform reasons. Each merge and each split is
+argued there. A rejected merge changes the implementation, so this comes first.
 
-**What was built:** `task/1.2/build`. Status conditions `Rendered`, `Accepted` and `Finished`, a
-phase derived from them, a `jobRef`, one status write per pass, an Event on a phase change, a
-`Watches` on the Workload, and three `WorkloadFinder` implementations behind one seam.
+**What was built:** on `main`, tagged `task/1.2/build`. Status conditions `Rendered`, `Accepted` and
+`Finished`, a phase derived from them, a `jobRef`, one status write per pass, an Event on a phase
+change, a `Watches` on the Workload, and three `WorkloadFinder` implementations behind one seam.
 
 **Tests I wrote:** _(yours)_ one translation case per reason the Spec beat kept distinct. The list
 is at the foot of `internal/controller/trainingjob_status_test.go`. Claude wrote the rendering cases
@@ -1024,7 +1024,7 @@ _Observations, in rough order of how early they bite:_
   extended resource name such as `nvidia.com/gpu` is task 5.1, so the field stays unlowered and a
   TrainingJob asking for an accelerator is admitted on cpu and memory alone.
 
-_All fixed at `task/1.2/build`, except the accelerator._ `make fmt vet test lint` is green there.
+_All fixed on `main`, except the accelerator._ `make fmt vet test lint` is green there.
 
 Two things the build turned up that no amount of reading would have:
 

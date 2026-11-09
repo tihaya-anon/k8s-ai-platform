@@ -441,9 +441,7 @@ the file; the point of each one is the sentence after it.
 the artifact store is unreachable but a previous observation exists, and is `Resolved=False` a
 failure or a fact?
 
-```bash
-sed -n '/^### `status`/,/^---/p' docs/product/domain.md
-```
+It is in `docs/product/domain.md`, under **`Dataset`** → **`status`**.
 
 **Build:**
 [part two](1.1-dataset-reconciler.md#part-two--drift-detection-and-the-immutability-webhook) — drift
@@ -452,9 +450,8 @@ what it found against the user's claim, which is the entire reason this CRD exis
 owner under the earlier two-beat format, where this half was the assignment._ It stays as written;
 the beats below were added in arrears.
 
-```bash
-git log --oneline -- internal/controller/dataset_controller.go internal/webhook/
-```
+It is on `main`: `internal/controller/dataset_controller.go` and
+`internal/webhook/v1alpha1/dataset_webhook.go`.
 
 **Verify:** yours — the envtest case that proves a rewritten artifact is noticed on a later
 reconcile, and the case that proves `ValidateUpdate` rejects a frozen-field edit. Both are
@@ -462,11 +459,10 @@ negatives, which is the hard kind to write well. Check they fail for the right r
 rule, watch the case go red, then put it back.
 
 ```bash
-go test ./internal/controller/ ./internal/webhook/... -count=1
-git switch -c scratch/break-drift main
+git checkout -b scratch/break-drift main
 # make detectDrift always report no drift, then:
 go test ./internal/controller/ -count=1
-git restore . && git switch - && git branch -D scratch/break-drift
+git restore . && git checkout main && git branch -D scratch/break-drift
 ```
 
 **Design notes** — two decisions the walkthrough does not make for you:
@@ -484,16 +480,23 @@ git restore . && git switch - && git branch -D scratch/break-drift
   different checksums is a signal worth keeping, not an error.
 
 **Review:** exercise A — immutability as a CEL transition rule on the type, versus the same rule in
-`ValidateUpdate`. Both are built and both pass the gate: `task/1.1/variant-webhook` and
-`task/1.1/variant-cel`, with the six refusal cases moved from the validator onto the API server so
-the two can be compared on refusals rather than on structure. The axis is narrower than "webhook
-versus CEL" in general: two of the differences are not visible until you read the generated CRD.
+`ValidateUpdate`. Both are built and both pass the gate, with the six refusal cases moved from the
+validator onto the API server so the two can be compared on refusals rather than on structure. The
+axis is narrower than "webhook versus CEL" in general: two of the differences are not visible until
+you read the generated CRD.
+
+`main` holds the webhook variant. The CEL one is one commit away:
 
 ```bash
-git diff task/1.1/variant-webhook task/1.1/variant-cel -- api/ internal/
-git diff task/1.1/variant-webhook task/1.1/variant-cel -- config/crd/   # what controller-gen did
-git show task/1.1/variant-cel                                          # the trade, argued
+git checkout task/1.1/variant-cel
+make fmt vet test lint         # it passes too; that is the point
 ```
+
+At that checkout, open `api/v1alpha1/dataset_types.go` for the three rules,
+`internal/webhook/v1alpha1/dataset_webhook.go` for what is left of `ValidateUpdate`,
+`internal/webhook/v1alpha1/dataset_webhook_test.go` for the six cases moved onto the API server, and
+`config/crd/bases/ml.aiplatform.io_datasets.yaml` for what `controller-gen` wrote. Then
+`git checkout main` and read the same four. Two of the differences only appear in the generated CRD.
 
 Then exercise D — the `Dataset` an admitted `TrainingJob` referenced is deleted mid-run.
 
@@ -540,8 +543,11 @@ question it has to answer: which of `WaitingForQuota`, `ExceedsMaxQuota` and `Mi
 distinct, and why.
 
 ```bash
-git show task/1.2/spec -- docs/product/domain.md    # the proposal, as a diff
+git checkout task/1.2/spec     # no Go exists at this point; read the proposal first
 ```
+
+Open `docs/product/domain.md` and find **`TrainingJob` status**. When you are done,
+`git checkout main`.
 
 **Build:** the `TrainingJob` API and reconciler. It renders a suspended `batch/v1` Job labelled into
 a `LocalQueue`, owner-references it, and translates Kueue `Workload` conditions into platform
@@ -551,35 +557,41 @@ reason strings to translate — is in
 [1.2-Kueue-and-jobs.md](1.2-kueue-and-jobs.md#what-kueue-hands-your-controller); looking it up is
 not the exercise, deciding what the platform says about it is.
 
-```bash
-git show task/1.2/build --stat                                   # what moved
-git diff task/1.2/spec task/1.2/build -- internal/ api/          # the code, as a diff
-git show task/1.2/build                                          # the design, argued
-```
+It is on `main`, so there is nothing to check out. Open these four:
+
+- `api/v1alpha1/trainingjob_types.go` — the status fields
+- `internal/controller/trainingjob_status.go` — the translation, and the reason map
+- `internal/controller/trainingjob_controller.go` — the reconcile, the status write, the watch
+- `internal/controller/workload_finder.go` — the lookup seam and its three implementations
 
 **Verify:** yours — the translation tests. Kueue's controller does not run in envtest, so you write
 the `Workload` by hand and assert what the `TrainingJob` says: one case per reason you decided to
-keep distinct in the Spec beat. The list is at the foot of `trainingjob_status_test.go`. Claude
-wrote the rendering tests, the finder contract, and one worked translation case.
+keep distinct in the Spec beat. Claude wrote the rendering tests, the finder contract, and one
+worked translation case.
 
 ```bash
-git switch -c mine/1.2-tests task/1.2/build
-sed -n '/^\/\/ The rest of the translation/,$p' internal/controller/trainingjob_status_test.go
-make fmt vet test
+git checkout -b mine/1.2-tests main
+make fmt vet test             # green before you start, so a red run is yours
 ```
+
+The list is the comment block at the foot of `internal/controller/trainingjob_status_test.go`.
+`TestAcceptedConditionWaitingForQuota` in the same file is the worked example to copy from.
 
 **Review:** exercise A — three ways to find the `Workload` for a Job: the owner field index, a list
 on `kueue.x-k8s.io/job-uid`, and `jobframework.FindMatchingWorkloads`. All three are implemented and
 all three agree on the answer, so the verdict turns on their properties.
 
+Read `internal/controller/workload_finder.go` on `main`. Each implementation's doc comment states
+what it costs. Then run these three:
+
 ```bash
-grep -n "^// OwnerIndexFinder" -A 7 internal/controller/workload_finder.go
-grep -n "^// JobUIDLabelFinder" -A 8 internal/controller/workload_finder.go
-grep -n "^// FrameworkFinder" -A 8 internal/controller/workload_finder.go
-go test ./internal/controller/ -run TestFinders -v     # all three agree
-go test ./internal/controller/ -run TestFramework -v   # where they do not
-go mod why -m k8s.io/kubernetes                        # what the heaviest one drags in
+go test ./internal/controller/ -run TestFinders -v      # all three agree
+go test ./internal/controller/ -run TestFramework -v    # the two places they do not
+go mod why -m k8s.io/kubernetes                         # what the heaviest one drags in
 ```
+
+`cmd/main.go` names the one in use. Change that line, run `make fmt vet test lint`, and see whether
+your verdict survives.
 
 Then exercise D — the Kueue mutating webhook is unreachable when your controller creates the Job.
 
