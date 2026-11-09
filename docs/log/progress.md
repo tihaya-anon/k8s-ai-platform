@@ -8,20 +8,29 @@ One entry per task. Keep them short; the value is in the evidence and the surpri
 
 ## Entry shape
 
-Tasks from level 1 on run in two halves, so entries have two halves too:
+Tasks run in five beats, and the entry records the two that are graded plus the evidence:
 
-- **Learn — what I saw** — the half that changes no files. What the live objects actually showed,
-  the command whose output surprised you, the error text worth recognizing later. Fill this in
-  before starting the build; it is the part you cannot reconstruct afterwards.
-- **Goal / What I changed / How I proved it** — the build half: what you set out to do, what landed
-  in the tree, and the evidence that it works. "Ran it" is not evidence; name the command and what
-  it printed.
+- **Learn — what I saw** — the beat that changes no files. What the live objects actually showed,
+  the command whose output surprised you, the error text worth recognising later. Fill this in
+  before anything is built; it is the part you cannot reconstruct afterwards.
+- **Spec review** — what you accepted, amended or rejected in Claude's proposal in `docs/product/`,
+  and what it left underspecified. Graded.
+- **What was built** — one or two lines, plus the commit. Claude's half; the entry records it so the
+  log still reads as a history of the platform.
+- **Tests I wrote** — the cases the task assigned to you, and what each one would catch. "Added a
+  test" is not evidence; name what fails if the implementation regresses.
+- **Review answers** then **Review grading** — the exercises from
+  [review-exercises.md](../curriculum/review-exercises.md). Your verdict and your reasoning first,
+  Claude's grading after. For a seeded defect review, record the score as _n_ of _m_ and keep the
+  ones you missed. Graded.
 - **What surprised me** — one line, and the most valuable line in the entry.
 - **Quiz answers** then **Quiz review** — your answers first, Claude's grading after. Keep wrong
   answers; they are the record of what to re-ask later.
 
-Level 0 entries predate this shape and have no Learn section. Entries written by Claude rather than
-by the maintainer say so at the top, so the quiz answers in them are not mistaken for recall.
+Level 0 entries predate all of this and have no Learn section. Entries from 1.1 and 1.2 were written
+under the earlier two-beat format — **Goal / What I changed / How I proved it** — and keep those
+fields; their Review beats were added in arrears. Entries written by Claude rather than by the
+maintainer say so at the top, so the answers in them are not mistaken for recall.
 
 ## Entries
 

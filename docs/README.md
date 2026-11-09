@@ -48,17 +48,19 @@ Platform-independent background, safe to read at any point and not tied to a tas
 ## Deep-taught tasks
 
 A task that needs more room than the list allows gets its own file in `curriculum/`, named for its
-task number. Each one is in two halves: a **Learn** half you read and type, and a **You build** half
-left unimplemented on purpose.
+task number. Every task runs in five beats — Learn, Spec, Build, Verify, Review — described in
+[curriculum/training-tasks.md](curriculum/training-tasks.md#how-a-task-runs-now), with the graded
+Review exercise types defined once in
+[curriculum/review-exercises.md](curriculum/review-exercises.md).
 
 - [curriculum/0.5-tls-and-admission.md](curriculum/0.5-tls-and-admission.md) — tasks 0.5a and 0.5b:
   certificates from an openssl lab to the cluster's own PKI, then the admission webhooks already
   running in it.
 - [curriculum/1.1-dataset-reconciler.md](curriculum/1.1-dataset-reconciler.md) — task 1.1: the
-  `Dataset` reconciler typed by hand, then drift detection and the immutability webhook left to
-  build.
+  `Dataset` reconciler typed by hand, then drift detection and the immutability webhook.
 - [curriculum/1.2-Kueue-and-jobs.md](curriculum/1.2-kueue-and-jobs.md) — task 1.2: how Kueue admits
-  a suspended Job, read from the live cluster, then the `TrainingJob` controller left to build.
+  a suspended Job, read from the live cluster, the Kueue Go surface the controller is written
+  against, and the `TrainingJob` controller.
 
 ## Tooling
 

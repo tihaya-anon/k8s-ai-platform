@@ -56,11 +56,14 @@ lineage, and promotion gate. See [docs/product/architecture.md](docs/product/arc
 - `docs/tooling/` — `agent-container.md` and anything else about the development environment rather
   than the platform.
 
-Every task has two halves: **Learn** (read the mechanism, inspect it running, no files change) and
-**You build** (the feature). Keep them apart when writing or reviewing a task — an unfinished
-implementation is not a reason to send the owner back to the Learn half. `docs/log/progress.md`
-mirrors that shape: its entries open with **Learn — what I saw** before the build fields, and its
-"Entry shape" section is the template to follow when adding one.
+A task has five beats — **Learn**, **Spec**, **Build**, **Verify**, **Review** — defined in the "How
+a task runs now" section of `docs/curriculum/training-tasks.md`, with the Review exercise types in
+`docs/curriculum/review-exercises.md`. Claude writes the spec proposal and the implementation; the
+owner reviews the spec, writes the tests the task assigns, and answers the Review exercises. Only
+Spec and Review are graded. Keep the beats apart when writing or reviewing a task: an incomplete
+implementation is Claude's problem to finish, never a reason to withhold the Review beat or to send
+the owner back to Learn. `docs/log/progress.md` mirrors the shape, and its "Entry shape" section is
+the template to follow when adding an entry.
 
 ## How to help here
 
@@ -69,18 +72,28 @@ that build understanding over answers that just produce code. Good analogies: `c
 is the IoC container, Kubebuilder markers are annotations, reconcilers are the service layer.
 
 - Explain the mechanism and where to see it in the running cluster, not only the code path.
-- The owner now builds the scaffold, scripts, and first implementation. Prefer guidance, review,
-  debugging, and small examples over pasting complete task solutions.
-- One exception, by the owner's decision: task 1.1 part one in
-  `docs/curriculum/1.1-dataset-reconciler.md` is a taught walkthrough. Showing and explaining that
-  code is the point. The exception stops at part two — drift detection and the immutability webhook
-  are the owner's to write, and the usual refusal applies there.
+- Claude implements the features. Explaining the code it wrote is part of the job, not a leak — the
+  owner is reviewing it, and a reviewer who cannot ask questions is not reviewing.
+- **Withhold the judgment, never the mechanism.** Do not hand over a Review verdict, enumerate the
+  seeded defects, write the tests a task assigned to the owner, or accept Claude's own spec
+  proposal. "Is this one of the bugs?" gets a question back. "Why is the informer cache stale here?"
+  gets an answer.
+- Build the variant sets honestly: every option complete, every option passing the gate, and the
+  axis they differ on named. A set where one option is obviously wrong is a defect review in
+  disguise and teaches nothing about design.
+- A product decision belongs in `docs/product/` as a written proposal, not in a task as an
+  unanswered exercise. Status vocabulary, condition types, what a field promises: propose them with
+  the reasoning, let the owner review. Asking the owner to invent an unwritten section of the
+  product doc is not pedagogy.
 - When a task involves generated files, make the owner identify which tool generated each file:
   Kubebuilder, `controller-gen`, `kustomize`, or a handwritten script.
-- When reviewing work, use the checklist at the end of `docs/curriculum/training-tasks.md`.
-- Do not move to the next task until the quiz is answered and missed answers are recorded.
-- Never hand over the answer to a patch/refine step when the task is meant to teach the mechanism.
-  Explain the mechanism, name the file, and refuse the diff.
+- When reviewing the owner's work, use the checklist at the end of
+  `docs/curriculum/training-tasks.md`.
+- Do not move to the next task until the Review exercises and the quiz are answered, and missed
+  answers are recorded.
+- The toolchain is newer than most training data. Before claiming something is not valid Go, run the
+  compiler: `new(value)` and promoted fields in composite literals are both Go 1.27 and both were
+  wrongly called errors in review once already.
 
 ## Conventions
 
