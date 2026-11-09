@@ -24,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
@@ -69,8 +70,9 @@ var _ = Describe("TrainingJob Controller", func() {
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
 			controllerReconciler := &TrainingJobReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Recorder: events.NewFakeRecorder(10),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

@@ -900,24 +900,36 @@ is what your controller has to translate.
 `Job` work as it stands in `internal/controller/trainingjob_controller.go` at the checkpoint commit.
 Mechanisms and symptoms only; the fixes are the build half and stay open.
 
-_On the question that prompted this:_ "which Kueue function creates the `Workload` from the Job?"
-There is none to call, because creating it is not yours to do. Kueue's batch/v1 integration
-(`pkg/controller/jobs/job`, on the `jobframework` reconciler) watches Jobs carrying
-`kueue.x-k8s.io/queue-name`, builds the `Workload`, sets the Job as its owner, and flips
-`spec.suspend`. Part one proved it with `kubectl` alone and no controller of ours running. The
-function half-remembered from the tutorial is `jobframework`'s `GenericJob` interface — `PodSets`,
-`Suspend`, `RunWithPodSetsInfo` — which is how a _new_ job type is registered as a thing Kueue
-manages directly. That is a real alternative design for `TrainingJob`, and it is not this task: here
-the chain is `TrainingJob` -> `Job` -> (Kueue) -> `Workload`, and writing a `Workload` by hand would
-put two admission requests behind one Job and break "never mutate another operator's resources".
+_On the question that prompted this — "which function creates the `Workload`?":_ there is a
+function, and it runs in Kueue's process rather than ours. In `sigs.k8s.io/kueue@v0.20.4` the chain
+is `jobframework.(*JobReconciler).Reconcile` → `handleJobWithNoWorkload` → `constructWorkload` →
+`jobframework.ConstructWorkload` → `NewWorkload`, then a plain `r.client.Create(ctx, wl)`;
+`ConstructWorkload` calls `ctrl.SetControllerReference(object, wl, c.Scheme())` on the way, and the
+reconciler emits a `CreatedWorkload` event on the Job afterwards. Nothing exotic — the same `Create`
+any controller makes, from a reconciler watching Jobs instead of `TrainingJob`s. "Kueue creates it
+for you" means that process is already running in `kueue-system` and already watching, which is why
+part one produced a `Workload` with no controller of ours alive at all.
+
+Three things follow from reading it. The `Workload` name is derived, not random:
+`GetWorkloadNameForOwnerWithGVK(name, uid, gvk)` in `workload_names.go` hashes the owner's UID and
+GVK into a five-character suffix, which is what keeps a Job and a JobSet of the same name apart. The
+pod shape quota is reserved for comes from `JobPodSets(ctx, job, c)` reading the Job itself, so the
+Job's own resource requests are the only input — a field that never reaches the Job cannot be
+charged against a `ClusterQueue`. And `GenericJob` — `PodSets`, `Suspend`, `RunWithPodSetsInfo`,
+`Finished` — is the interface the tutorial was really describing: implement it, register the
+integration, and Kueue manages `TrainingJob` directly with no Job in between. That is a real
+alternative design, and not this task. Here the chain is `TrainingJob` → `Job` → (Kueue) →
+`Workload`, and writing a `Workload` by hand would put two admission requests behind one Job and
+break "never mutate another operator's resources".
 
 _Observations, in rough order of how early they bite:_
 
 - The `batchv1.Job{Name: ..., Namespace: ..., Labels: ...}` literal does not compile. Those fields
   live on the embedded `metav1.ObjectMeta`, not on `Job` — the embedding is why `job.Name` reads
   fine but `Job{Name:}` does not.
-- `new(true)` does not compile either: `new` takes a type, not a value. `k8s.io/utils/ptr.To` is the
-  helper the rest of the ecosystem uses for optional scalars.
+- `new(true)` is fine, and this review first said otherwise. `new` taking a value rather than a type
+  is new in Go 1.27, which is this repo's toolchain, and `suite_test.go` already used it. It stays
+  as written, and `k8s.io/utils/ptr` is not needed for it.
 - `tj.Name + "Job"` is a legal DNS-1123 name only while `tj.Name` has no capitals to clash with —
   but the deeper issue is that the derived name is not deterministic across a rename and carries no
   separator. Kueue names its own child the same way and is worth copying.
@@ -937,6 +949,17 @@ _Observations, in rough order of how early they bite:_
 - Nothing yet reads back what Kueue decided. The refusal string recorded in the Learn half —
   `QuotaReserved: False` naming the exhausted resource — is what the `TrainingJob` status has to
   translate, and `kueuev1beta2` is imported but unused until that lands.
+- Lowering `Resources.Accelerator` onto the container fails admission outright: a container resource
+  name must be standard or fully qualified, and `AcceleratorClassPlaceholder` is neither. envtest
+  returns a 422 naming both `resources.requests` and `resources.limits`. Mapping a class to a real
+  extended resource name such as `nvidia.com/gpu` is task 5.1, so the field stays unlowered and a
+  TrainingJob asking for an accelerator is admitted on cpu and memory alone.
+
+_Applied 2026-11-09 at the owner's instruction_, against the usual rule that part two stays the
+owner's to write: everything above except the accelerator is now fixed in
+`internal/controller/trainingjob_controller.go`, and `make fmt vet test` is green. What is still
+open is the status translation of the `Workload` conditions and the immutability webhook that makes
+"a spec edit needs a new Job" true.
 
 ### 1.3 ModelVersion and the funnel — YYYY-MM-DD
 

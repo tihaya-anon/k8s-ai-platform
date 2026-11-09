@@ -201,8 +201,9 @@ func main() {
 		}
 	}
 	if err := (&controller.TrainingJobReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorder("trainingjob-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "trainingjob")
 		os.Exit(1)
