@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	kueuev1beta2 "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 
 	mlv1alpha1 "github.com/tihaya-anon/k8s-ai-platform/api/v1alpha1"
 	"github.com/tihaya-anon/k8s-ai-platform/internal/controller"
@@ -51,6 +52,9 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(mlv1alpha1.AddToScheme(scheme))
+	// The TrainingJob controller watches and lists Kueue Workloads; the manager's cache refuses a
+	// type the scheme does not know.
+	utilruntime.Must(kueuev1beta2.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -204,6 +208,9 @@ func main() {
 		Client:   mgr.GetClient(),
 		Scheme:   mgr.GetScheme(),
 		Recorder: mgr.GetEventRecorder("trainingjob-controller"),
+		// Which of the three strategies in workload_finder.go belongs here is task 1.2's Review
+		// beat. This is the lightest one: it adds nothing to the module graph.
+		Finder: controller.JobUIDLabelFinder{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "trainingjob")
 		os.Exit(1)

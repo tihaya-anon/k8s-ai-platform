@@ -195,6 +195,13 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              jobRef:
+                description: |-
+                  JobRef name of the child Job this run was rendered onto, in the same namespace. A name rather
+                  than an ObjectReference because the kind is fixed until the runtime swap, and a name is the
+                  field that survives it.
+                maxLength: 253
+                type: string
               lastResolvedTime:
                 description: LastResolvedTime timestamp of the last successful metadata
                   resolution

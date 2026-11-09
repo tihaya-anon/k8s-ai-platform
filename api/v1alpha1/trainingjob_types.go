@@ -142,6 +142,14 @@ type TrainingJobStatus struct {
 	// Phase short display summary, one of Pending, Running, Success or Failed
 	Phase TrainingJobPhase `json:"phase,omitempty"`
 
+	// +kubebuilder:validation:MaxLength=253
+	// +optional
+
+	// JobRef name of the child Job this run was rendered onto, in the same namespace. A name rather
+	// than an ObjectReference because the kind is fixed until the runtime swap, and a name is the
+	// field that survives it.
+	JobRef string `json:"jobRef,omitempty"`
+
 	// +optional
 
 	// LastResolvedTime timestamp of the last successful metadata resolution
