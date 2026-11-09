@@ -1,4 +1,12 @@
 {
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/.jj": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true
+  },
   // The Makefile's pinned, plugin-built golangci-lint -- the linter the Go extension runs on save,
   // so that the editor and `make lint` agree on version, plugins and .golangci.yml.
   //
@@ -41,10 +49,12 @@
   // contributes, so they are the one owner for anything that must agree with a `make` target.
   // Keys here are sorted by Prettier, so each comment names its own key and never a neighbour.
   "go.lintTool": "golangci-lint-v2",
+  "go.useLanguageServer": true,
   "go.vetOnSave": "off",
   // Where the Go Annotations extension reads its Kubebuilder marker definitions, so a wrong path
   // means marker hover and completion quietly describe a different controller-gen than `make
   // manifests` runs. Same path reasoning as go.alternateTools above; this extension keeps its tool
   // path in its own namespace rather than in Go's.
-  "goAnnotations.markers.controllerGenPath": "${workspaceFolder}/bin/controller-gen"
+  "goAnnotations.markers.controllerGenPath": "${workspaceFolder}/bin/controller-gen",
+  "hide-files.files": []
 }
