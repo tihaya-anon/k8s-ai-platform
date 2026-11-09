@@ -32,6 +32,11 @@ A task has five beats. They are kept apart on purpose, and only two of them are 
 Then the **quiz**, which now comes after the review rather than after a build, because it grades
 what the review surfaced. Wrong answers are the useful part; record them.
 
+Each beat is a tagged commit on the `curriculum/review-format` branch, so the Spec is readable
+before the code exists and the Build is readable as a diff. [stages.md](stages.md) has the git
+commands for standing at a stage, reading a beat as a diff, and putting your own Verify work on a
+branch off it.
+
 What Claude will not do: hand over a review verdict, name the seeded defects, write the tests the
 task assigned to you, or accept its own spec proposal. Asking "is this one of the bugs?" gets you a
 question back. Asking "why does the informer cache make this stale?" gets you an answer — the

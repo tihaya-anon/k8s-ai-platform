@@ -51,7 +51,8 @@ A task that needs more room than the list allows gets its own file in `curriculu
 task number. Every task runs in five beats — Learn, Spec, Build, Verify, Review — described in
 [curriculum/training-tasks.md](curriculum/training-tasks.md#how-a-task-runs-now), with the graded
 Review exercise types defined once in
-[curriculum/review-exercises.md](curriculum/review-exercises.md).
+[curriculum/review-exercises.md](curriculum/review-exercises.md), and the git commands for moving
+between a task's stages in [curriculum/stages.md](curriculum/stages.md).
 
 - [curriculum/0.5-tls-and-admission.md](curriculum/0.5-tls-and-admission.md) — tasks 0.5a and 0.5b:
   certificates from an openssl lab to the cluster's own PKI, then the admission webhooks already
